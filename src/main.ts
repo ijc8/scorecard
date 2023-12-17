@@ -22,3 +22,19 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 `
 
 setupCounter(document.querySelector<HTMLButtonElement>('#counter')!)
+
+const context = new AudioContext()
+
+async function setupAudio() {
+  if (context.state === "suspended") {
+    await new Promise(resolve => {
+      document.onclick = () => context.resume().then(resolve)
+    })
+    document.onclick = null
+  }
+  await context.audioWorklet.addModule("worklet.js")
+  const node = new AudioWorkletNode(context, "custom-processor")
+  node.connect(context.destination)
+}
+
+setupAudio()
