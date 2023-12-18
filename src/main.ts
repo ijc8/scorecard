@@ -1,13 +1,10 @@
-import wat from "watr"
+import { compile } from "watr"
 
 import './style.css'
-import typescriptLogo from './typescript.svg'
-import viteLogo from '/vite.svg'
-import { setupCounter } from './counter.ts'
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <div>
-        <textarea></textarea><br>
+        <textarea style="width: 80em; height: 40em"></textarea><br>
         <button>Assemble!</button>
     </div>
 `
@@ -32,7 +29,7 @@ async function setupAudio() {
 
     const assemble = () => {
         console.log("assembling", textarea.value)
-        const buffer = wat(textarea.value)
+        const buffer = compile(textarea.value)
         console.log("binary size", buffer.length)
         const module = new WebAssembly.Module(buffer)
         // const module = await WebAssembly.compileStreaming(fetch("test.wasm"))
