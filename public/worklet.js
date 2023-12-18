@@ -1,20 +1,28 @@
-class CustomProcessor extends AudioWorkletProcessor { 
+class CustomProcessor extends AudioWorkletProcessor {
     constructor() {
-      super()
-    }
-  
-    process(inputs, outputs, parameters) {
-      const speakers = outputs[0]
-  
-      for (let i = 0; i < speakers[0].length; i++) {
-        const noise = Math.random() * 2 - 1
-        for (const channel of speakers) {
-          channel[i] = noise
+        super()
+        this.port.onmessage = async e => {
+            this.wasm = await WebAssembly.instantiate(e.data)
         }
-      }
-  
-      return true
     }
-  }
 
-  registerProcessor("custom-processor", CustomProcessor)
+    process(inputs, outputs, parameters) {
+        if (this.wasm === undefined) return true
+
+        const process = this.wasm.exports.process
+        const speakers = outputs[0]
+
+        let t = 0
+        for (let i = 0; i < speakers[0].length; i++) {
+            const x = process(t)
+            t += 1/128
+            for (const channel of speakers) {
+                channel[i] = x
+            }
+        }
+
+        return true
+    }
+}
+
+registerProcessor("custom-processor", CustomProcessor)
