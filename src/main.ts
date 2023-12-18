@@ -1,11 +1,13 @@
 import { compile } from "watr"
+import QRCode from "qrcode"
 
 import './style.css'
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <div>
         <textarea style="width: 80em; height: 40em"></textarea><br>
-        <button>Assemble!</button>
+        <button>Assemble!</button><br>
+        <canvas></canvas>
     </div>
 `
 
@@ -32,9 +34,10 @@ async function setupAudio() {
         const buffer = compile(textarea.value)
         console.log("binary size", buffer.length)
         const module = new WebAssembly.Module(buffer)
-        // const module = await WebAssembly.compileStreaming(fetch("test.wasm"))
         console.log("loaded wasm", module)
         node.port.postMessage(module)
+        // Generate QR code
+        QRCode.toCanvas(document.querySelector("canvas")!, [{ data: buffer, mode: "byte" }])
     }
     document.querySelector("button")!.onclick = assemble
     assemble()
