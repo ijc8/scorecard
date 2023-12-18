@@ -1,6 +1,7 @@
 class CustomProcessor extends AudioWorkletProcessor {
     constructor() {
         super()
+        this.t = 0
         this.port.onmessage = async e => {
             this.wasm = await WebAssembly.instantiate(e.data)
         }
@@ -12,7 +13,7 @@ class CustomProcessor extends AudioWorkletProcessor {
         const process = this.wasm.exports.process
         const speakers = outputs[0]
 
-        let t = 0
+        let t = this.t
         for (let i = 0; i < speakers[0].length; i++) {
             const x = process(t)
             t += 1/128
@@ -20,6 +21,7 @@ class CustomProcessor extends AudioWorkletProcessor {
                 channel[i] = x
             }
         }
+        this.t = t
 
         return true
     }
