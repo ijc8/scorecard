@@ -1,9 +1,11 @@
 (module
+    (global $t (mut f32) (f32.const 0))
     (func (export "process") (param f32) (result f32)
+        (global.set $t (f32.add (global.get $t) (f32.const 0.0078125)))
         (f32.div
             (f32.add
-                (call $sintau (local.get 0))
-                (call $sintau (f32.mul (local.get 0) (f32.const 1.5))))
+                (call $sintau (global.get $t))
+                (call $sintau (f32.mul (global.get $t) (f32.const 1.5))))
             (f32.const 2)))
 
     ;; Math functions from https://gist.github.com/going-digital/02e46c44d89237c07bc99cd440ebfa43
