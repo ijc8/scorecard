@@ -7,13 +7,16 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <div>
         <textarea style="width: 80em; height: 40em"></textarea><br>
         <button>Assemble!</button><br>
-        <canvas></canvas>
+        <canvas></canvas><br>
+        <a id="link">Link</a><br>
+        <a id="download" download="a.wasm">Download</a>
     </div>
 `
 
 const context = new AudioContext()
 
 async function setupAudio() {
+    const base64 = new URLSearchParams(window.location.search).get("s")
     const source = await (await fetch("test.wat")).text()
     console.log("loaded WAT source:", source)
     const textarea = document.querySelector("textarea")!
@@ -29,18 +32,40 @@ async function setupAudio() {
     const node = new AudioWorkletNode(context, "custom-processor")
     node.connect(context.destination)
 
-    const assemble = () => {
-        console.log("assembling", textarea.value)
-        const buffer = compile(textarea.value)
+    const loadBinary = (buffer: Uint8Array) => {
         console.log("binary size", buffer.length)
         const module = new WebAssembly.Module(buffer)
         console.log("loaded wasm", module)
         node.port.postMessage(module)
+    }
+
+    const assemble = () => {
+        console.log("assembling", textarea.value)
+        console.log("text size", textarea.value.length)
+        const buffer = compile(textarea.value)
+        loadBinary(buffer)
         // Generate QR code
-        QRCode.toCanvas(document.querySelector("canvas")!, [{ data: buffer, mode: "byte" }])
+        const url = window.location.origin + window.location.pathname + "?s=" + btoa(String.fromCodePoint(...buffer))
+        QRCode.toCanvas(document.querySelector("canvas")!, url)
+        document.querySelector<HTMLAnchorElement>("#link")!.href = url
+        document.querySelector<HTMLAnchorElement>("#download")!.href = window.URL.createObjectURL(new Blob([buffer]))
     }
     document.querySelector("button")!.onclick = assemble
-    assemble()
+
+    document.ondrop = async e => {
+        e.preventDefault()
+        const file = e.dataTransfer!.files[0]
+        const arrayBuffer = await file.arrayBuffer()
+        loadBinary(new Uint8Array(arrayBuffer))
+        return false
+      }
+
+    if (base64 !== null) {
+        const buffer = Uint8Array.from(atob(base64), c => c.codePointAt(0)!)
+        loadBinary(buffer)
+    } else {
+        assemble()
+    }
 }
 
 setupAudio()
