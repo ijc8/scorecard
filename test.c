@@ -8,6 +8,7 @@ float dt = 1.0 / 44100.0;
 EMSCRIPTEN_KEEPALIVE
 float process() {
     float x = t * 2 - 1;
-    t = fmodf(t + 300.0 * dt, 1);
+    t += 300 * dt;
+    t = t - truncf(t);
     return x;
 }
