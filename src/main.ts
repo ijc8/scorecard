@@ -36,6 +36,13 @@ async function setupAudio() {
         console.log("binary size", buffer.length)
         const module = new WebAssembly.Module(buffer)
         console.log("loaded wasm", module)
+        const instance = new WebAssembly.Instance(module)
+        const start = performance.now()
+        for (let i = 0; i < 44100; i++) {
+            (instance.exports.process as any)()
+        }
+        const end = performance.now()
+        console.log("ms", end - start, "frac", (end - start) / 1000, "mult", 1000 / (end - start))
         node.port.postMessage(module)
     }
 
