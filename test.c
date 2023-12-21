@@ -35,16 +35,28 @@ float env(env_context *self, float dur) {
     // Let's pretend we're a (re-entrant) coroutine!
     // Boilerplate
     switch (self->state) {
-        case 0: goto env_label0;
-        case 1: goto env_label1;
+        case 0: goto label0;
+        case 1: goto label1;
     }
     // Start of function
-    env_label0:
+    label0:
     for (self->t = 0; self->t < dur; self->t += dt) {
-        self->state = 1; return 1 - (self->t / dur); env_label1:;
+        self->state = 1; return 1 - (self->t / dur); label1:;
     }
     return 0;
 }
+
+// #include "coroutine.h"
+// float env(ccrContParam, float dur) {
+//     ccrBeginContext;
+//     float t;
+//     ccrEndContext(self);
+//     ccrBegin(self);
+//     for (self->t = 0; self->t < dur; self->t += dt) {
+//         ccrReturn(1 - self->t / dur);
+//     }
+//     ccrFinish(0);
+// }
 
 float upper() {
     // Let's pretend we're a coroutine!
@@ -59,6 +71,7 @@ float upper() {
     static int i, j;
     static float t, freq, dur;
     static env_context my_env = {0};
+    // static ccrContext my_env = 0;
     // Start of function
     label0:
     for (;;) {
@@ -80,6 +93,7 @@ float upper() {
                     // sin: x = sinf(2*M_PI*x);
                     state = 1; return x * env(&my_env, dur); label1:;
                 }
+                // ccrAbort(my_env);
             }
         }
     }
@@ -99,6 +113,7 @@ float lower() {
     static int i, j;
     static float t, freq, dur;
     static env_context my_env = {0};
+    // static ccrContext my_env = 0;
     // Start of function
     label0:
     for (;;) {
@@ -120,6 +135,7 @@ float lower() {
                     // sin: x = sinf(2*M_PI*x);
                     state = 1; return x * env(&my_env, dur); label1:;
                 }
+                // ccrAbort(my_env);
             }
         }
     }
@@ -130,13 +146,16 @@ float lower() {
     EMSCRIPTEN_KEEPALIVE
 #endif
 float process() {
-    return (upper() + lower()) / 2; 
+    float x = (upper() + lower()) / 2;
+    dt *= 1.0000001; // whee
+    return x;
 }
 
 #ifndef __EMSCRIPTEN__
 int main() {
     for (;;) {
         float x = process();
+        // printf("%f\n", x);
         fwrite(&x, 4, 1, stdout);
     }
     return 0;
