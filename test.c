@@ -6,6 +6,7 @@
 #endif
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define SIZEOF(arr) (sizeof(arr) / sizeof(*arr))
 
@@ -24,6 +25,27 @@ float m2f(int pitch) {
     return freq;
 }
 
+// envelope!
+typedef struct env_context {
+    int state;
+    float t;
+} env_context;
+
+float env(env_context *self, float dur) {
+    // Let's pretend we're a (re-entrant) coroutine!
+    // Boilerplate
+    switch (self->state) {
+        case 0: goto env_label0;
+        case 1: goto env_label1;
+    }
+    // Start of function
+    env_label0:
+    for (self->t = 0; self->t < dur; self->t += dt) {
+        self->state = 1; return 1 - (self->t / dur); env_label1:;
+    }
+    return 0;
+}
+
 float upper() {
     // Let's pretend we're a coroutine!
     // Boilerplate
@@ -36,6 +58,7 @@ float upper() {
     static float notes[][2] = {{0, 0.5}, {0, 0.25}, {0, 0.25}, {0, 0.5}};
     static int i, j;
     static float t, freq, dur;
+    static env_context my_env = {0};
     // Start of function
     label0:
     for (;;) {
@@ -46,6 +69,7 @@ float upper() {
             for (i = 0; i < SIZEOF(notes); i++) {
                 freq = notes[i][0];
                 dur = notes[i][1];
+                memset(&my_env, 0, sizeof(my_env));
                 for (t = 0; t < dur; t += dt) {
                     float x = t * freq;
                     // saw: x = (x - truncf(x)) * 2 - 1;
@@ -54,7 +78,7 @@ float upper() {
                         // printf("%f %f %f\n", t, t * freq, x);
                     #endif
                     // sin: x = sinf(2*M_PI*x);
-                    state = 1; return x; label1:;
+                    state = 1; return x * env(&my_env, dur); label1:;
                 }
             }
         }
@@ -74,6 +98,7 @@ float lower() {
     static float notes[][2] = {{0, 1.0}, {0, 0.5}};
     static int i, j;
     static float t, freq, dur;
+    static env_context my_env = {0};
     // Start of function
     label0:
     for (;;) {
@@ -84,6 +109,7 @@ float lower() {
             for (i = 0; i < SIZEOF(notes); i++) {
                 freq = notes[i][0];
                 dur = notes[i][1];
+                memset(&my_env, 0, sizeof(my_env));
                 for (t = 0; t < dur; t += dt) {
                     float x = t * freq;
                     // saw: x = (x - truncf(x)) * 2 - 1;
@@ -92,7 +118,7 @@ float lower() {
                         // printf("%f %f %f\n", t, t * freq, x);
                     #endif
                     // sin: x = sinf(2*M_PI*x);
-                    state = 1; return x; label1:;
+                    state = 1; return x * env(&my_env, dur); label1:;
                 }
             }
         }
