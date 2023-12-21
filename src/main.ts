@@ -15,6 +15,15 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 
 const context = new AudioContext()
 
+function base64Encode(buffer: Uint8Array) {
+    // TODO: do we need to care about `/` in base64? URLSearchParams doesn't seem to mind.
+    return btoa(String.fromCodePoint(...buffer)).replace(/\+/g, "-")
+}
+
+function base64Decode(base64: string) {
+    return Uint8Array.from(atob(base64.replace(/-/g, "+")), c => c.codePointAt(0)!)
+}
+
 async function setupAudio() {
     const base64 = new URLSearchParams(window.location.search).get("s")
     const source = await (await fetch("test.wat")).text()
@@ -44,6 +53,11 @@ async function setupAudio() {
         const end = performance.now()
         console.log("ms", end - start, "frac", (end - start) / 1000, "mult", 1000 / (end - start))
         node.port.postMessage(module)
+        // Generate QR code
+        const url = window.location.origin + window.location.pathname + "?s=" + base64Encode(buffer)
+        QRCode.toCanvas(document.querySelector("canvas")!, url)
+        document.querySelector<HTMLAnchorElement>("#link")!.href = url
+        document.querySelector<HTMLAnchorElement>("#download")!.href = window.URL.createObjectURL(new Blob([buffer]))
     }
 
     const assemble = () => {
@@ -51,11 +65,6 @@ async function setupAudio() {
         console.log("text size", textarea.value.length)
         const buffer = compile(textarea.value)
         loadBinary(buffer)
-        // Generate QR code
-        const url = window.location.origin + window.location.pathname + "?s=" + btoa(String.fromCodePoint(...buffer))
-        QRCode.toCanvas(document.querySelector("canvas")!, url)
-        document.querySelector<HTMLAnchorElement>("#link")!.href = url
-        document.querySelector<HTMLAnchorElement>("#download")!.href = window.URL.createObjectURL(new Blob([buffer]))
     }
     document.querySelector("button")!.onclick = assemble
 
@@ -68,7 +77,7 @@ async function setupAudio() {
       }
 
     if (base64 !== null) {
-        const buffer = Uint8Array.from(atob(base64), c => c.codePointAt(0)!)
+        const buffer = base64Decode(base64)
         loadBinary(buffer)
     } else {
         assemble()
