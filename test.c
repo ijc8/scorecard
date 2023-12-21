@@ -11,8 +11,6 @@
 
 float dt = 1.0 / 44100.0;
 
-float notes[][2] = {{0, 0.5}, {0, 0.25}, {0, 0.25}, {0, 0.5}};
-
 // inline float m2f(float pitch) {
 //     return powf(2, (pitch - 69) / 12) * 440;
 // }
@@ -26,10 +24,7 @@ float m2f(int pitch) {
     return freq;
 }
 
-#ifdef __EMSCRIPTEN__
-    EMSCRIPTEN_KEEPALIVE
-#endif
-float process() {
+float upper() {
     // Let's pretend we're a coroutine!
     // Boilerplate
     static int state = 0;
@@ -38,6 +33,7 @@ float process() {
         case 1: goto label1;
     }
     // Persistent locals
+    static float notes[][2] = {{0, 0.5}, {0, 0.25}, {0, 0.25}, {0, 0.5}};
     static int i, j;
     static float t, freq, dur;
     // Start of function
@@ -64,6 +60,51 @@ float process() {
         }
     }
     return 0;
+}
+
+float lower() {
+    // Let's pretend we're a coroutine!
+    // Boilerplate
+    static int state = 0;
+    switch (state) {
+        case 0: goto label0;
+        case 1: goto label1;
+    }
+    // Persistent locals
+    static float notes[][2] = {{0, 1.0}, {0, 0.5}};
+    static int i, j;
+    static float t, freq, dur;
+    // Start of function
+    label0:
+    for (;;) {
+        for (int k = 0; k < SIZEOF(notes); k++) {
+            notes[k][0] = m2f(rand() % 13 + 36);
+        }
+        for (j = 0; j < 2; j++) {
+            for (i = 0; i < SIZEOF(notes); i++) {
+                freq = notes[i][0];
+                dur = notes[i][1];
+                for (t = 0; t < dur; t += dt) {
+                    float x = t * freq;
+                    // saw: x = (x - truncf(x)) * 2 - 1;
+                    x = (x - truncf(x)) < 0.5 ? -1 : 1; // square
+                    #ifndef __EMSCRIPTEN__
+                        // printf("%f %f %f\n", t, t * freq, x);
+                    #endif
+                    // sin: x = sinf(2*M_PI*x);
+                    state = 1; return x; label1:;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+#ifdef __EMSCRIPTEN__
+    EMSCRIPTEN_KEEPALIVE
+#endif
+float process() {
+    return (upper() + lower()) / 2; 
 }
 
 #ifndef __EMSCRIPTEN__
