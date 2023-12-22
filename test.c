@@ -37,39 +37,31 @@ float sqr(sqr_state *self, float freq) {
     return x;
 }
 
+#define cr_begin switch (cr->line_number) { case 0:;
+#define cr_end(x) } cr->line_number = -1; return x
+
+#define cr_yield(x)     \
+        do {\
+            cr->line_number = __LINE__;\
+            return (x); case __LINE__:;\
+        } while (0)
+
 // envelope!
-typedef struct env_state {
-    int state;
-    float t;
-} env_state;
+/* typedef struct env_state { */
+/*     int lineNumber; */
+/*     float t; */
+/* } env_state; */
 
-float env(env_state *self, float dur) {
-    // Let's pretend we're a (re-entrant) coroutine!
-    // Boilerplate
-    switch (self->state) {
-        case 0: goto label0;
-        case 1: goto label1;
+#define cr_vars(a, b) typedef struct a##_state { int line_number; b; } a##_state;
+
+cr_vars(env, float t);
+float env(env_state *cr, float dur) {
+    cr_begin;
+    for (cr->t = 0; cr->t < dur; cr->t += dt) {
+        cr_yield(1 - cr->t / dur);
     }
-    // Start of function
-    label0:
-    for (self->t = 0; self->t < dur; self->t += dt) {
-        self->state = 1; return 1 - (self->t / dur); label1:;
-    }
-    // TODO: think of a nice way to signal that a coroutine has finished. (state = -1?)
-    return 0;
+    cr_end(0);
 }
-
-// #include "coroutine.h"
-// float env(ccrContParam, float dur) {
-//     ccrBeginContext;
-//     float t;
-//     ccrEndContext(self);
-//     ccrBegin(self);
-//     for (self->t = 0; self->t < dur; self->t += dt) {
-//         ccrReturn(1 - self->t / dur);
-//     }
-//     ccrFinish(0);
-// }
 
 #define reset(x) (memset(&x, 0, sizeof(x)))
 
