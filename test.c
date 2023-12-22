@@ -6,7 +6,6 @@
 #endif
 #include <math.h>
 #include <stdlib.h>
-#include <string.h>
 
 #define SIZEOF(arr) (sizeof(arr) / sizeof(*arr))
 
@@ -25,34 +24,34 @@ float m2f(int pitch) {
     return freq;
 }
 
-// simple "coroutines" don't need the `switch`
-typedef struct sqr_state {
-    float t;
-} sqr_state;
-
-float sqr(sqr_state *self, float freq) {
-    float x = self->t * freq;
-    x = (x - truncf(x)) < 0.5 ? -1 : 1;
-    self->t += dt;
-    return x;
-}
-
 #define cr_begin switch (cr->line_number) { case 0:;
 #define cr_end(x) } cr->line_number = -1; return x
 
-#define cr_yield(x)     \
-        do {\
-            cr->line_number = __LINE__;\
-            return (x); case __LINE__:;\
-        } while (0)
+#define cr_yield(x)                             \
+    do {                                        \
+        cr->line_number = __LINE__;             \
+        return (x); case __LINE__:;             \
+    } while (0)
 
-// envelope!
-/* typedef struct env_state { */
-/*     int lineNumber; */
-/*     float t; */
-/* } env_state; */
+#define cr_yield_from(coroutine, state, ...)                            \
+    do {                                                                \
+        cr->line_number = __LINE__;                                     \
+        typeof(coroutine(&state, __VA_ARGS__)) x = coroutine(&state, __VA_ARGS__); \
+        if (state.line_number == -1) break;                             \
+        return x; case __LINE__:;                                       \
+    } while (state.line_number != -1)
 
 #define cr_vars(a, b) typedef struct a##_state { int line_number; b; } a##_state;
+
+cr_vars(sqr, float t);
+float sqr(sqr_state *cr, float freq) {
+    cr_begin;
+    for (cr->t = 0;; cr->t += dt) {
+        float x = cr->t * freq;
+        cr_yield((x - truncf(x)) < 0.5 ? -1 : 1);
+    }
+    cr_end(0);
+}
 
 cr_vars(env, float t);
 float env(env_state *cr, float dur) {
@@ -63,16 +62,36 @@ float env(env_state *cr, float dur) {
     cr_end(0);
 }
 
-#define reset(x) (memset(&x, 0, sizeof(x)))
+cr_vars(sleep, float t);
+float sleep(sleep_state *cr, float dur) {
+    cr_begin;
+    for (cr->t = 0; cr->t < dur; cr->t += dt) {
+        cr_yield(0);
+    }
+    cr_end(0);
+}
+
+#define scr_begin static int scr_line_number = 0; switch (scr_line_number) { case 0:;
+#define scr_end(x) } scr_line_number = -1; return x
+
+#define scr_yield(x)                            \
+    do {                                        \
+        scr_line_number = __LINE__;             \
+        return (x); case __LINE__:;             \
+    } while (0)
+
+#define scr_yield_from(coroutine, state, ...)            \
+    do {                                                 \
+        scr_line_number = __LINE__;                      \
+        typeof(coroutine(&state, __VA_ARGS__)) x = coroutine(&state, __VA_ARGS__); \
+        if (state.line_number == -1) break;              \
+        return x; case __LINE__:;                        \
+    } while (state.line_number != -1)
+
+#define reset(cr_state) (cr_state.line_number = 0)
 
 float upper() {
     // Let's pretend we're a coroutine!
-    // Boilerplate
-    static int state = 0;
-    switch (state) {
-        case 0: goto label0;
-        case 1: goto label1;
-    }
     // Persistent locals
     static struct {
         int freq;
@@ -82,14 +101,21 @@ float upper() {
     } notes[] = {{0, 0.5}, {0, 0.25}, {0, 0.25}, {0, 0.5}};
     static int i, j;
     static float t;
+    static sleep_state sleep_state;
     const float dur = 0.25;
     // Start of function
-    label0:
+    scr_begin;
     for (;;) {
         for (int k = 0; k < SIZEOF(notes); k++) {
             notes[k].freq = m2f(rand() % 13 + 60);
         }
         for (j = 0; j < 6; j++) {
+            if (rand() % 2 == 0) { // like `degrade`
+                // Sit this one out.
+                reset(sleep_state);
+                scr_yield_from(sleep, sleep_state, dur);
+                continue;
+            }
             for (int k = 0; k < SIZEOF(notes); k++) {
                 reset(notes[k].sqr);
                 reset(notes[k].env);
@@ -99,11 +125,11 @@ float upper() {
                 for (i = 0; i < SIZEOF(notes); i++) {
                     x += sqr(&notes[i].sqr, notes[i].freq) * env(&notes[i].env, dur);
                 }
-                state = 1; return x / SIZEOF(notes); label1:;
+                scr_yield(x / SIZEOF(notes));
             }
         }
     }
-    return 0;
+    scr_end(0);
 }
 
 float lower() {
@@ -130,8 +156,8 @@ float lower() {
             for (i = 0; i < SIZEOF(notes); i++) {
                 freq = notes[i][0];
                 dur = notes[i][1];
-                memset(&my_sqr, 0, sizeof(my_sqr));
-                memset(&my_env, 0, sizeof(my_env));
+                reset(my_sqr);
+                reset(my_env);
                 for (t = 0; t < dur; t += dt) {
                     state = 1; return sqr(&my_sqr, freq) * env(&my_env, dur); label1:;
                 }
