@@ -25,13 +25,25 @@ float m2f(int pitch) {
     return freq;
 }
 
+// simple "coroutines" don't need the `switch`
+typedef struct sqr_state {
+    float t;
+} sqr_state;
+
+float sqr(sqr_state *self, float freq) {
+    float x = self->t * freq;
+    x = (x - truncf(x)) < 0.5 ? -1 : 1;
+    self->t += dt;
+    return x;
+}
+
 // envelope!
-typedef struct env_context {
+typedef struct env_state {
     int state;
     float t;
-} env_context;
+} env_state;
 
-float env(env_context *self, float dur) {
+float env(env_state *self, float dur) {
     // Let's pretend we're a (re-entrant) coroutine!
     // Boilerplate
     switch (self->state) {
@@ -43,6 +55,7 @@ float env(env_context *self, float dur) {
     for (self->t = 0; self->t < dur; self->t += dt) {
         self->state = 1; return 1 - (self->t / dur); label1:;
     }
+    // TODO: think of a nice way to signal that a coroutine has finished. (state = -1?)
     return 0;
 }
 
@@ -58,6 +71,8 @@ float env(env_context *self, float dur) {
 //     ccrFinish(0);
 // }
 
+#define reset(x) (memset(&x, 0, sizeof(x)))
+
 float upper() {
     // Let's pretend we're a coroutine!
     // Boilerplate
@@ -67,33 +82,32 @@ float upper() {
         case 1: goto label1;
     }
     // Persistent locals
-    static float notes[][2] = {{0, 0.5}, {0, 0.25}, {0, 0.25}, {0, 0.5}};
+    static struct {
+        int freq;
+        float dur;
+        sqr_state sqr;
+        env_state env;
+    } notes[] = {{0, 0.5}, {0, 0.25}, {0, 0.25}, {0, 0.5}};
     static int i, j;
-    static float t, freq, dur;
-    static env_context my_env = {0};
-    // static ccrContext my_env = 0;
+    static float t;
+    const float dur = 0.25;
     // Start of function
     label0:
     for (;;) {
         for (int k = 0; k < SIZEOF(notes); k++) {
-            notes[k][0] = m2f(rand() % 13 + 60);
+            notes[k].freq = m2f(rand() % 13 + 60);
         }
-        for (j = 0; j < 2; j++) {
-            for (i = 0; i < SIZEOF(notes); i++) {
-                freq = notes[i][0];
-                dur = notes[i][1];
-                memset(&my_env, 0, sizeof(my_env));
-                for (t = 0; t < dur; t += dt) {
-                    float x = t * freq;
-                    // saw: x = (x - truncf(x)) * 2 - 1;
-                    x = (x - truncf(x)) < 0.5 ? -1 : 1; // square
-                    #ifndef __EMSCRIPTEN__
-                        // printf("%f %f %f\n", t, t * freq, x);
-                    #endif
-                    // sin: x = sinf(2*M_PI*x);
-                    state = 1; return x * env(&my_env, dur); label1:;
+        for (j = 0; j < 6; j++) {
+            for (int k = 0; k < SIZEOF(notes); k++) {
+                reset(notes[k].sqr);
+                reset(notes[k].env);
+            }
+            for (t = 0; t < dur; t += dt) {
+                float x = 0;
+                for (i = 0; i < SIZEOF(notes); i++) {
+                    x += sqr(&notes[i].sqr, notes[i].freq) * env(&notes[i].env, dur);
                 }
-                // ccrAbort(my_env);
+                state = 1; return x / SIZEOF(notes); label1:;
             }
         }
     }
@@ -112,8 +126,8 @@ float lower() {
     static float notes[][2] = {{0, 1.0}, {0, 0.5}};
     static int i, j;
     static float t, freq, dur;
-    static env_context my_env = {0};
-    // static ccrContext my_env = 0;
+    static sqr_state my_sqr = {0};
+    static env_state my_env = {0};
     // Start of function
     label0:
     for (;;) {
@@ -124,18 +138,11 @@ float lower() {
             for (i = 0; i < SIZEOF(notes); i++) {
                 freq = notes[i][0];
                 dur = notes[i][1];
+                memset(&my_sqr, 0, sizeof(my_sqr));
                 memset(&my_env, 0, sizeof(my_env));
                 for (t = 0; t < dur; t += dt) {
-                    float x = t * freq;
-                    // saw: x = (x - truncf(x)) * 2 - 1;
-                    x = (x - truncf(x)) < 0.5 ? -1 : 1; // square
-                    #ifndef __EMSCRIPTEN__
-                        // printf("%f %f %f\n", t, t * freq, x);
-                    #endif
-                    // sin: x = sinf(2*M_PI*x);
-                    state = 1; return x * env(&my_env, dur); label1:;
+                    state = 1; return sqr(&my_sqr, freq) * env(&my_env, dur); label1:;
                 }
-                // ccrAbort(my_env);
             }
         }
     }
@@ -146,7 +153,7 @@ float lower() {
     EMSCRIPTEN_KEEPALIVE
 #endif
 float process() {
-    float x = (upper() + lower()) / 2;
+    float x = upper()*3/4 + lower()/4;
     dt *= 1.0000001; // whee
     return x;
 }
