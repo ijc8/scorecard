@@ -42,7 +42,7 @@ float m2f(int pitch) {
         return x; case __LINE__:;                                       \
     } while (state.line_number != -1)
 
-#define cr_vars(a, b) typedef struct a##_state { int line_number; b; } a##_state;
+#define cr_vars(a, ...) typedef struct a##_state { int line_number; __VA_ARGS__; } a##_state;
 
 cr_vars(sqr, float t);
 float sqr(sqr_state *cr, float freq) {
@@ -82,7 +82,15 @@ float sleep(sleep_state *cr, float dur) {
         return (x); case __LINE__:;             \
     } while (0)
 
-#define scr_yield_from(coroutine, state, ...)            \
+#define scr_yield_from(coroutine, state)                 \
+    do {                                                 \
+        scr_line_number = __LINE__;                      \
+        typeof(coroutine(&state)) x = coroutine(&state); \
+        if (state.line_number == -1) break;              \
+        return x; case __LINE__:;                        \
+    } while (state.line_number != -1)
+
+#define scr_yield_from_args(coroutine, state, ...)       \
     do {                                                 \
         scr_line_number = __LINE__;                      \
         typeof(coroutine(&state, __VA_ARGS__)) x = coroutine(&state, __VA_ARGS__); \
@@ -117,7 +125,7 @@ float upper() {
             if (j > 0 && rand() % 2 == 0) { // like `degrade`
                 // Sit this one out.
                 reset(sleep_state);
-                scr_yield_from(sleep, sleep_state, dur);
+                scr_yield_from_args(sleep, sleep_state, dur);
                 continue;
             }
             for (int k = 0; k < SIZEOF(notes); k++) {
@@ -140,7 +148,7 @@ float lower() {
     // Let's pretend we're a coroutine!
     // Persistent locals
     static float notes[][2] = {{0, 1.0}, {0, 0.5}};
-    static int c, i, j;
+    static int c, i;
     static float t, freq, dur;
     static sqr_state my_sqr = {0};
     static env_state my_env = {0};
@@ -162,11 +170,84 @@ float lower() {
     scr_end(0);
 }
 
+float noise() {
+    return rand() / (float)RAND_MAX * 2 - 1;
+}
+
+float perc() {
+    const float dur = 0.125;
+    static float t;
+    static env_state my_env;
+    static sleep_state my_sleep;
+    scr_begin;
+    for (;;) {
+        if (rand() % 4) {
+            reset(my_sleep);
+            scr_yield_from_args(sleep, my_sleep, dur);
+            continue;
+        }
+        reset(my_env);
+        for (t = 0; t < dur; t += dt) {
+            scr_yield(noise() * env(&my_env, dur));
+        }
+    }
+    scr_end(0);
+}
+
+float uniform(float a, float b) {
+    return rand() / (float)RAND_MAX * (b - a) + a;
+}
+
+#define choice(arr) (arr[rand() % SIZEOF(arr)])
+
+/* cr_vars(ramp, float t); */
+/* float ramp(ramp_state *cr, float start, float end, float dur) { */
+/*     cr_begin; */
+/*     for (cr->t = 0; cr->t < dur; cr->t += dt) { */
+/*         cr_yield(cr->t / dur * (end - start) + start); */
+/*     } */
+/*     cr_end(0); */
+/* } */
+
+/* #define cr_foreach(var, coroutine_expr, state, ...) \ */
+/*     do {                                            \ */
+/*         typeof(coroutine_expr) var = coroutine_expr;\ */
+/*         if (state.line_number == -1) break;         \ */
+/*         __VA_ARGS__                                 \ */
+/*     } while (state.line_number != -1) */
+
+cr_vars(thing, float freq_start, freq_end, dur, mod_ratio, mod_depth, t; sqr_state carrier, modulator);
+float thing(thing_state *cr) {
+    const float options[] = {0.25, 0.5, 0.75, 1.0};
+    cr_begin;
+    cr->freq_start = uniform(0, 1000);
+    cr->freq_end = uniform(0, 1000);
+    cr->dur = choice(options);
+    cr->mod_ratio = uniform(1, 100);
+    cr->mod_depth = uniform(0, 1);
+    for (cr->t = 0; cr->t < cr->dur; cr->t += dt) {
+        float freq = cr->t / cr->dur * (cr->freq_end - cr->freq_start) + cr->freq_start;
+        float mod_freq = freq / cr->mod_ratio;
+        cr_yield(sqr(&cr->carrier, freq + freq * cr->mod_depth * sqr(&cr->modulator, mod_freq)));
+    }
+    cr_end(0);
+}
+
+float things() {
+    static thing_state my_thing;
+    scr_begin;
+    for (;;) {
+        reset(my_thing);
+        scr_yield_from(thing, my_thing);
+    }
+    scr_end(0);
+}
+
 #ifdef __EMSCRIPTEN__
     EMSCRIPTEN_KEEPALIVE
 #endif
 float process() {
-    float x = upper()*3/4 + lower()/4;
+    float x = upper()*3/8 + lower()/8 + perc()/4 + things()/8;
     dt *= 1.0000001; // whee
     return x;
 }

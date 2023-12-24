@@ -55,6 +55,7 @@ async function setupAudio() {
         node.port.postMessage(module)
         // Generate QR code
         const url = window.location.origin + window.location.pathname + "?s=" + base64Encode(buffer)
+        console.log("URL length:", url.length)
         QRCode.toCanvas(document.querySelector("canvas")!, url)
         document.querySelector<HTMLAnchorElement>("#link")!.href = url
         document.querySelector<HTMLAnchorElement>("#download")!.href = window.URL.createObjectURL(new Blob([buffer]))
