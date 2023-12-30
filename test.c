@@ -46,6 +46,14 @@ float m2f(int pitch) {
         return x; case __LINE__:;                                       \
     } while (state.line_number != -1)
 
+#define cr_yield_from_args(coroutine, state, ...)        \
+    do {                                                 \
+        cr->line_number = __LINE__;                      \
+        typeof(coroutine(&state, __VA_ARGS__)) x = coroutine(&state, __VA_ARGS__); \
+        if (state.line_number == -1) break;              \
+        return x; case __LINE__:;                        \
+    } while (state.line_number != -1)
+
 #define cr_vars(a, ...) typedef struct a##_state { int line_number; __VA_ARGS__; } a##_state;
 
 cr_vars(sqr, float phase);
@@ -53,6 +61,27 @@ float sqr(sqr_state *cr, float freq) {
     cr_begin;
     for (cr->phase = 0;;) {
         cr_yield(cr->phase < 0.5 ? -1 : 1);
+        cr->phase += freq * dt;
+        cr->phase -= truncf(cr->phase);
+    }
+    cr_end(0);
+}
+
+cr_vars(saw, float phase);
+float saw(sqr_state *cr, float freq) {
+    cr_begin;
+    for (cr->phase = 0;;) {
+        cr_yield(cr->phase * 2 - 1);
+        cr->phase += freq * dt;
+        cr->phase -= truncf(cr->phase);
+    }
+    cr_end(0);
+}
+
+float tri(sqr_state *cr, float freq) {
+    cr_begin;
+    for (cr->phase = 0;;) {
+        cr_yield((cr->phase < 0.5 ? cr->phase : 1 - cr->phase) * 2 - 1);
         cr->phase += freq * dt;
         cr->phase -= truncf(cr->phase);
     }
@@ -268,37 +297,48 @@ float play_pulse() {
     scr_end(0);
 }
 
-float play_score() {
-    const float grace_note_frac = 0.05f;
-    const float amplitudes[] = {0.5f, 0.75f, 1.0f};
-    static int i;
-    static float freq, dur, amp, t;
-    static env_state my_env;
-    static sqr_state my_sqr;
-    static sleep_state my_sleep;
-    scr_begin;
-    for (i = 0; i < SIZEOF(score); i++) {
-        dur = score[i].duration / 4.0f;
-        if (score[i].pitch == 0) {
-            scr_yield_from_args(sleep, my_sleep, dur);
-            continue;
-        }
-        reset(my_env);
-        reset(my_sqr);
-        freq = m2f(score[i].pitch);
-        if (dur == 0) {
-            // Grace note
-            dur = (score[i + 1].duration / 4.0f) * grace_note_frac;
-        } else if (i > 0 && score[i - 1].duration == 0) {
-            // Last note was a grace note
-            dur *= (1 - grace_note_frac);
-        }
-        amp = amplitudes[score[i].velocity - 1];
-        for (t = 0; t < dur; t += dt) {
-            scr_yield(env(&my_env, dur) * sqr(&my_sqr, freq) * amp);
+typedef float (*osc_func)(void *state, float freq);
+
+cr_vars(play_score,
+        uint16_t num_reps, rep, fragment_index, fragment_start, fragment_end, note_index;
+        float freq, dur, amp, t;
+        env_state my_env;
+        sqr_state my_sqr;
+        sleep_state my_sleep;
+);
+float play_score(play_score_state *cr, osc_func osc) {
+    static const float grace_note_frac = 0.05f;
+    static const float amplitudes[] = {0.5f, 0.75f, 1.0f};
+    cr_begin;
+    for (cr->fragment_index = 0; cr->fragment_index < SIZEOF(fragments); cr->fragment_index++) {
+        cr->fragment_start = fragments[cr->fragment_index][0];
+        cr->fragment_end = fragments[cr->fragment_index][1];
+        cr->num_reps = rand() % 4 + 3;
+        for (cr->rep = 0; cr->rep < cr->num_reps; cr->rep++) {
+            for (cr->note_index = cr->fragment_start; cr->note_index < cr->fragment_end; cr->note_index++) {
+                cr->dur = score[cr->note_index].duration / 4.0f;
+                if (score[cr->note_index].pitch == 0) {
+                    cr_yield_from_args(sleep, cr->my_sleep, cr->dur);
+                    continue;
+                }
+                reset(cr->my_env);
+                reset(cr->my_sqr);
+                cr->freq = m2f(score[cr->note_index].pitch);
+                if (cr->dur == 0) {
+                    // Grace note
+                    cr->dur = (score[cr->note_index + 1].duration / 4.0f) * grace_note_frac;
+                } else if (cr->note_index > 0 && score[cr->note_index - 1].duration == 0) {
+                    // Last note was a grace note
+                    cr->dur *= (1 - grace_note_frac);
+                }
+                cr->amp = amplitudes[score[cr->note_index].velocity - 1];
+                for (cr->t = 0; cr->t < cr->dur; cr->t += dt) {
+                    cr_yield(env(&cr->my_env, cr->dur) * osc(&cr->my_sqr, cr->freq) * cr->amp);
+                }
+            }
         }
     }
-    scr_end(0);
+    cr_end(0);
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -306,7 +346,13 @@ float process() {
     // float x = upper()*3/8 + lower()/8 + perc()/4 + things()/8;
     // dt *= 1.0000001f; // whee
     // return x;
-    return play_pulse()*1/4 + play_score()*3/4;
+    static play_score_state a = {0}, b = {0}, c = {0};
+    return (
+        play_pulse()*1/16 +
+        play_score(&a, (osc_func)saw)*5/16 +
+        play_score(&b, (osc_func)sqr)*5/16 +
+        play_score(&c, (osc_func)tri)*5/16
+    );
 }
 
 #ifndef __EMSCRIPTEN__
