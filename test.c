@@ -268,6 +268,7 @@ float play_pulse() {
 }
 
 float play_score() {
+    const float grace_note_frac = 0.05;
     static int i;
     static float freq, dur, t;
     static env_state my_env;
@@ -283,6 +284,13 @@ float play_score() {
         reset(my_env);
         reset(my_sqr);
         freq = m2f(score[i].pitch);
+        if (dur == 0) {
+            // Grace note
+            dur = (score[i + 1].duration / 4.0f) * grace_note_frac;
+        } else if (i > 0 && score[i - 1].duration == 0) {
+            // Last note was a grace note
+            dur *= (1 - grace_note_frac);
+        }
         for (t = 0; t < dur; t += dt) {
             scr_yield(env(&my_env, dur) * sqr(&my_sqr, freq));
         }
