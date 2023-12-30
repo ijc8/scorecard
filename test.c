@@ -2,12 +2,16 @@
 #ifdef __EMSCRIPTEN__
     #include <emscripten.h>
 #else
+    #define EMSCRIPTEN_KEEPALIVE
     #include <stdio.h>
 #endif
 #include <math.h>
 #include <stdlib.h>
 
 #define SIZEOF(arr) (sizeof(arr) / sizeof(*arr))
+
+EMSCRIPTEN_KEEPALIVE
+const char title[] = "test";
 
 float dt = 1.0 / 44100.0;
 
@@ -243,9 +247,7 @@ float things() {
     scr_end(0);
 }
 
-#ifdef __EMSCRIPTEN__
-    EMSCRIPTEN_KEEPALIVE
-#endif
+EMSCRIPTEN_KEEPALIVE
 float process() {
     float x = upper()*3/8 + lower()/8 + perc()/4 + things()/8;
     dt *= 1.0000001; // whee

@@ -3,9 +3,16 @@ class CustomProcessor extends AudioWorkletProcessor {
         super()
         this.port.onmessage = async e => {
             console.log("received", e.data)
-            console.log(WebAssembly.Module.exports(e.data))
-            console.log(WebAssembly.Module.imports(e.data))
-            this.wasm = await WebAssembly.instantiate(e.data)
+            if (e.data === "reset") {
+                if (this.module) {
+                    this.wasm = await WebAssembly.instantiate(this.module)
+                }
+            } else {
+                console.log(WebAssembly.Module.exports(e.data))
+                console.log(WebAssembly.Module.imports(e.data))
+                this.module = e.data
+                this.wasm = await WebAssembly.instantiate(e.data)
+            }
         }
     }
 

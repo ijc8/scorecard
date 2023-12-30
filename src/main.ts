@@ -5,8 +5,10 @@ import './style.css'
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <div>
+        <h1 id="title">untitled</h1>
         <textarea style="width: 80em; height: 40em"></textarea><br>
-        <button>Assemble!</button><br>
+        <button id="assemble">Assemble!</button><br>
+        <button id="reset">Reset</button><br>
         <canvas></canvas><br>
         <a id="link">Link</a><br>
         <a id="download" download="a.wasm">Download</a>
@@ -41,6 +43,10 @@ async function setupAudio() {
     const node = new AudioWorkletNode(context, "custom-processor")
     node.connect(context.destination)
 
+    document.querySelector<HTMLButtonElement>("#reset")!.onclick = () => {
+        node.port.postMessage("reset")
+    }
+
     const loadBinary = (buffer: Uint8Array) => {
         console.log("binary size", buffer.length)
         const module = new WebAssembly.Module(buffer)
@@ -52,6 +58,18 @@ async function setupAudio() {
         }
         const end = performance.now()
         console.log("ms", end - start, "frac", (end - start) / 1000, "mult", 1000 / (end - start))
+        // Load program title
+        if (instance.exports.title) {
+            const startPtr: number = (instance.exports.title as WebAssembly.Global).value
+            const mem = (instance.exports.memory as WebAssembly.Memory).buffer
+            const heap = new Uint8Array(mem)
+            let endPtr = startPtr;
+            while (heap[endPtr] != 0 && endPtr < heap.length) endPtr++
+            const title = (new TextDecoder()).decode(new Uint8Array(mem, startPtr, endPtr - startPtr))
+            console.log(title)
+            document.querySelector("#title")!.textContent = title
+        }
+        // Send to AudioWorklet
         node.port.postMessage(module)
         // Generate QR code
         const url = window.location.origin + window.location.pathname + "?s=" + base64Encode(buffer)
@@ -67,7 +85,7 @@ async function setupAudio() {
         const buffer = compile(textarea.value)
         loadBinary(buffer)
     }
-    document.querySelector("button")!.onclick = assemble
+    document.querySelector<HTMLButtonElement>("#assemble")!.onclick = assemble
 
     document.ondrop = async e => {
         e.preventDefault()
