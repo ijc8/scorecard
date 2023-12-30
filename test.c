@@ -48,12 +48,13 @@ float m2f(int pitch) {
 
 #define cr_vars(a, ...) typedef struct a##_state { int line_number; __VA_ARGS__; } a##_state;
 
-cr_vars(sqr, float t);
+cr_vars(sqr, float phase);
 float sqr(sqr_state *cr, float freq) {
     cr_begin;
-    for (cr->t = 0;; cr->t += dt) {
-        float x = cr->t * freq;
-        cr_yield((x - truncf(x)) < 0.5 ? -1 : 1);
+    for (cr->phase = 0;;) {
+        cr_yield(cr->phase < 0.5 ? -1 : 1);
+        cr->phase += freq * dt;
+        cr->phase -= truncf(cr->phase);
     }
     cr_end(0);
 }
@@ -268,9 +269,10 @@ float play_pulse() {
 }
 
 float play_score() {
-    const float grace_note_frac = 0.05;
+    const float grace_note_frac = 0.05f;
+    const float amplitudes[] = {0.5f, 0.75f, 1.0f};
     static int i;
-    static float freq, dur, t;
+    static float freq, dur, amp, t;
     static env_state my_env;
     static sqr_state my_sqr;
     static sleep_state my_sleep;
@@ -291,8 +293,9 @@ float play_score() {
             // Last note was a grace note
             dur *= (1 - grace_note_frac);
         }
+        amp = amplitudes[score[i].velocity - 1];
         for (t = 0; t < dur; t += dt) {
-            scr_yield(env(&my_env, dur) * sqr(&my_sqr, freq));
+            scr_yield(env(&my_env, dur) * sqr(&my_sqr, freq) * amp);
         }
     }
     scr_end(0);
