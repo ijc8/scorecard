@@ -247,11 +247,55 @@ float things() {
     scr_end(0);
 }
 
+#include "score.h"
+
+float play_pulse() {
+    const int freq = m2f(84);
+    const float dur = 0.25f;
+    static float t;
+    static env_state my_env;
+    static sqr_state my_sqr;
+    scr_begin;
+    for (;;) {
+        // TODO: improve scheduling
+        reset(my_env);
+        reset(my_sqr);
+        for (t = 0; t < dur; t += dt) {
+            scr_yield(env(&my_env, dur) * sqr(&my_sqr, freq));
+        }
+    }
+    scr_end(0);
+}
+
+float play_score() {
+    static int i;
+    static float freq, dur, t;
+    static env_state my_env;
+    static sqr_state my_sqr;
+    static sleep_state my_sleep;
+    scr_begin;
+    for (i = 0; i < SIZEOF(score); i++) {
+        dur = score[i].duration / 4.0f;
+        if (score[i].pitch == 0) {
+            scr_yield_from_args(sleep, my_sleep, dur);
+            continue;
+        }
+        reset(my_env);
+        reset(my_sqr);
+        freq = m2f(score[i].pitch);
+        for (t = 0; t < dur; t += dt) {
+            scr_yield(env(&my_env, dur) * sqr(&my_sqr, freq));
+        }
+    }
+    scr_end(0);
+}
+
 EMSCRIPTEN_KEEPALIVE
 float process() {
-    float x = upper()*3/8 + lower()/8 + perc()/4 + things()/8;
-    dt *= 1.0000001; // whee
-    return x;
+    // float x = upper()*3/8 + lower()/8 + perc()/4 + things()/8;
+    // dt *= 1.0000001f; // whee
+    // return x;
+    return play_pulse()*1/4 + play_score()*3/4;
 }
 
 #ifndef __EMSCRIPTEN__
