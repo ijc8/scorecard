@@ -1,7 +1,11 @@
 import { compile } from "watr"
 import QRCode from "qrcode"
+import base32 from "base32"
+import { baseEncode, baseDecode } from "./baseEncoder"
 
 import './style.css'
+
+Object.assign(window as any, { baseEncode, baseDecode })
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <div>
@@ -26,8 +30,31 @@ function base64Decode(base64: string) {
     return Uint8Array.from(atob(base64.replace(/-/g, "+")), c => c.codePointAt(0)!)
 }
 
+function base32Encode(buffer: Uint8Array) {
+    return base32.encode(buffer).toUpperCase()
+}
+
+function base32Decode(base32_: string) {
+    return base32.decode(base32_)
+}
+
+function hexEncode(buffer: Uint8Array) { // buffer is an ArrayBuffer
+    return [...buffer]
+        .map(x => x.toString(16).padStart(2, '0'))
+        .join('')
+}
+
+function hexDecode(hex: string) {
+    const bytes = []
+    for (let c = 0; c < hex.length; c += 2)
+        bytes.push(parseInt(hex.slice(c, 2), 16))
+    return Uint8Array.from(bytes)
+}
+
+const [encode, decode] = [(d: Uint8Array) => baseEncode(d, 10), (a: string) => baseDecode(a, 10)]
+
 async function setupAudio() {
-    const base64 = new URLSearchParams(window.location.search).get("s")
+    const encoded = new URLSearchParams(window.location.search).get("s")
     const source = await (await fetch("test.wat")).text()
     console.log("loaded WAT source:", source)
     const textarea = document.querySelector("textarea")!
@@ -72,9 +99,12 @@ async function setupAudio() {
         // Send to AudioWorklet
         node.port.postMessage(module)
         // Generate QR code
-        const url = window.location.origin + window.location.pathname + "?s=" + base64Encode(buffer)
+        // const url = window.location.origin + window.location.pathname + "?s=" + base64Encode(buffer)
+        const url = window.location.origin + window.location.pathname + "?s=" + encode(buffer)
+        console.log(url)
         console.log("URL length:", url.length)
-        QRCode.toCanvas(document.querySelector("canvas")!, url)
+        ;(window as any).QRCode = QRCode
+        QRCode.toCanvas(document.querySelector("canvas")!, url, { errorCorrectionLevel: "L" })
         document.querySelector<HTMLAnchorElement>("#link")!.href = url
         document.querySelector<HTMLAnchorElement>("#download")!.href = window.URL.createObjectURL(new Blob([buffer]))
     }
@@ -95,8 +125,8 @@ async function setupAudio() {
         return false
       }
 
-    if (base64 !== null) {
-        const buffer = base64Decode(base64)
+    if (encoded !== null) {
+        const buffer = decode(encoded)
         loadBinary(buffer)
     } else {
         assemble()
