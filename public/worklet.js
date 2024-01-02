@@ -8,10 +8,11 @@ class CustomProcessor extends AudioWorkletProcessor {
                     this.wasm = await WebAssembly.instantiate(this.module)
                 }
             } else {
-                console.log(WebAssembly.Module.exports(e.data))
-                console.log(WebAssembly.Module.imports(e.data))
-                this.module = e.data
-                this.wasm = await WebAssembly.instantiate(e.data)
+                const module = new WebAssembly.Module(e.data)
+                console.log(WebAssembly.Module.exports(module))
+                console.log(WebAssembly.Module.imports(module))
+                this.module = module
+                this.wasm = await WebAssembly.instantiate(module)
             }
         }
     }
