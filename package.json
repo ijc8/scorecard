@@ -14,7 +14,6 @@
     "vite": "^5.0.8"
   },
   "dependencies": {
-    "qrcode": "^1.5.3",
-    "watr": "^2.2.5"
+    "qrcode": "^1.5.3"
   }
 }

@@ -1,6 +1,6 @@
-import { compile } from "watr"
 import QRCode from "qrcode"
 import { encode, decode } from "./base43Encoder"
+import loadWabt from "../wabt"
 
 import './style.css'
 
@@ -47,6 +47,12 @@ async function setupAudio() {
     }
 
     const loadBinary = (buffer: Uint8Array) => {
+        console.log("disassembling")
+        const disassembled = wabt.readWasm(buffer, { readDebugNames: true })
+        disassembled.applyNames()
+        const wast = disassembled.toText({ foldExprs: false, inlineExport: true })
+        textarea.value = wast
+
         console.log("binary size", buffer.length)
         const module = new WebAssembly.Module(buffer)
         console.log("loaded wasm", module)
@@ -82,11 +88,15 @@ async function setupAudio() {
         document.querySelector<HTMLAnchorElement>("#download")!.href = window.URL.createObjectURL(new Blob([buffer]))
     }
 
+    const wabt = await loadWabt()
+
     const assemble = () => {
         console.log("assembling", textarea.value)
         console.log("text size", textarea.value.length)
-        const buffer = compile(textarea.value)
-        loadBinary(buffer)
+        // const buffer = compile(textarea.value)
+        const result = wabt.parseWat("main.wasm", textarea.value).toBinary({})
+        console.log(result.log)
+        loadBinary(result.buffer)
     }
     document.querySelector<HTMLButtonElement>("#assemble")!.onclick = assemble
 
