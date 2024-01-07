@@ -1,11 +1,18 @@
 (module
-    (global $t (mut f32) (f32.const 0))
-    (func (export "process") (param f32) (result f32)
-        (global.set $t (f32.add (global.get $t) (f32.const 0.0078125)))
+    (global $t (mut f64) (f64.const 0))
+    (global $f (mut f64) (f64.const 0))
+    (func (export "setup") (param $seed i32)
+        (global.set $f
+            (f64.div
+                (f64.convert_i32_u (local.get $seed))
+                (f64.const 42949672960))))
+    (func (export "process") (result f32) (local $t f32)
+        (global.set $t (f64.add (global.get $t) (global.get $f)))
+        (local.set $t (f32.demote_f64 (global.get $t)))
         (f32.div
             (f32.add
-                (call $sintau (global.get $t))
-                (call $sintau (f32.mul (global.get $t) (f32.const 1.5))))
+                (call $sintau (local.get $t))
+                (call $sintau (f32.mul (local.get $t) (f32.const 1.5))))
             (f32.const 2)))
 
     ;; Math functions from https://gist.github.com/going-digital/02e46c44d89237c07bc99cd440ebfa43

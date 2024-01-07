@@ -9,14 +9,37 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <h1 id="title">untitled</h1>
         <textarea style="width: 80em; height: 40em"></textarea><br>
         <button id="assemble">Assemble!</button><br>
-        <button id="reset">Reset</button><br>
+        <button id="start">Start</button><br>
         <canvas></canvas><br>
         <a id="link">Link</a><br>
         <a id="download" download="a.wasm">Download</a>
     </div>
 `
 
-const context = new AudioContext()
+const context = new AudioContext({ sampleRate: 44100 })
+console.log(context.sampleRate)
+
+function generateSeed() {
+    return Math.floor(Math.random() * Math.pow(2, 32))
+}
+
+function profile(instance: WebAssembly.Instance) {
+    if (instance.exports.setup) {
+        const seed = generateSeed()
+        const setup = instance.exports.setup as ((s: number) => void)
+        const start = performance.now()
+        setup(seed)
+        const end = performance.now()
+        console.log("setup:", end - start, "ms")
+    }
+    const process = instance.exports.process as (() => number)
+    const start = performance.now()
+    for (let i = 0; i < 44100; i++) {
+        process()
+    }
+    const end = performance.now()
+    console.log("process:", end - start, "ms", (end - start) / 1000, "frac", 1000 / (end - start), "mult")
+}
 
 async function setupAudio() {
     const encoded = new URLSearchParams(window.location.search).get("s")?.replace(/ /g, "+")
@@ -42,8 +65,8 @@ async function setupAudio() {
     const node = new AudioWorkletNode(context, "custom-processor")
     node.connect(context.destination)
 
-    document.querySelector<HTMLButtonElement>("#reset")!.onclick = () => {
-        node.port.postMessage("reset")
+    document.querySelector<HTMLButtonElement>("#start")!.onclick = () => {
+        node.port.postMessage({ cmd: "start", seed: generateSeed() })
     }
 
     const loadBinary = (buffer: Uint8Array) => {
@@ -57,12 +80,7 @@ async function setupAudio() {
         const module = new WebAssembly.Module(buffer)
         console.log("loaded wasm", module)
         const instance = new WebAssembly.Instance(module)
-        const start = performance.now()
-        for (let i = 0; i < 44100; i++) {
-            (instance.exports.process as any)()
-        }
-        const end = performance.now()
-        console.log("ms", end - start, "frac", (end - start) / 1000, "mult", 1000 / (end - start))
+        profile(instance)
         // Load program title
         if (instance.exports.title) {
             const startPtr: number = (instance.exports.title as WebAssembly.Global).value
@@ -77,7 +95,7 @@ async function setupAudio() {
         // Send to AudioWorklet
         // Doesn't work in iOS Safari...
         // node.port.postMessage(module)
-        node.port.postMessage(buffer)
+        node.port.postMessage({ cmd: "loadModule", buffer })
         // Generate QR code
         const url = window.location.origin + window.location.pathname + "?s=" + encode(buffer)
         console.log(url)

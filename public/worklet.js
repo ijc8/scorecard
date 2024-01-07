@@ -3,16 +3,13 @@ class CustomProcessor extends AudioWorkletProcessor {
         super()
         this.port.onmessage = async e => {
             console.log("received", e.data)
-            if (e.data === "reset") {
-                if (this.module) {
-                    this.wasm = await WebAssembly.instantiate(this.module)
+            if (e.data.cmd === "loadModule") {
+                this.module = new WebAssembly.Module(e.data.buffer)
+            } else if (e.data.cmd === "start") {
+                this.wasm = await WebAssembly.instantiate(this.module)
+                if (this.wasm.exports.setup) {
+                    this.wasm.exports.setup(e.data.seed)
                 }
-            } else {
-                const module = new WebAssembly.Module(e.data)
-                console.log(WebAssembly.Module.exports(module))
-                console.log(WebAssembly.Module.imports(module))
-                this.module = module
-                this.wasm = await WebAssembly.instantiate(module)
             }
         }
     }
