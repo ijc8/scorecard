@@ -46,6 +46,8 @@ const wabt = await loadWabt()
 
 function App() {
     const [title, setTitle] = useState("untitled")
+    const [size, setSize] = useState(0)
+    const [seed, setSeed] = useState("")
     const [wat, setWAT] = useState("")
     const [link, setLink] = useState("")
     const [download, setDownload] = useState("")
@@ -66,7 +68,7 @@ function App() {
         disassembled.applyNames()
         setWAT(disassembled.toText({ foldExprs: false, inlineExport: true }))
 
-        console.log("binary size", buffer.length)
+        setSize(buffer.length)
         const module = new WebAssembly.Module(buffer)
         console.log("loaded wasm", module)
         const instance = new WebAssembly.Instance(module)
@@ -92,13 +94,16 @@ function App() {
         console.log("URL length:", url.length)
         console.log("QR version:", QRCode.create(url, { errorCorrectionLevel: "L" }).version)
         QRCode.toCanvas(qrCanvas.current, url, { errorCorrectionLevel: "L" })
+        // TODO: update URL in address bar as well?
         setLink(url)
         setDownload(window.URL.createObjectURL(new Blob([buffer])))
     }
 
     const start = () => {
         if (context.state === "suspended") context.resume()
-        node.port.postMessage({ cmd: "start", seed: generateSeed() })
+        const seed = generateSeed()
+        node.port.postMessage({ cmd: "start", seed })
+        setSeed(seed + "") // TODO: show in nicer form (hex? b64? tiny QR code??)
     }
 
     const onDrop = async (e: DragEvent) => {
@@ -122,20 +127,24 @@ function App() {
         return () => document.removeEventListener("drop", onDrop)
     }, [])
 
-    useEffect(() => {
-        (async () => {
-            const source = await (await fetch("test.wat")).text()
-            console.log("loaded WAT source:", source)
-            setWAT(source)
-        })();
-    } , [])
+    // TODO: "load example" link
+    // useEffect(() => {
+    //     (async () => {
+    //         const source = await (await fetch("test.wat")).text()
+    //         console.log("loaded WAT source:", source)
+    //         setWAT(source)
+    //     })();
+    // } , [])
 
+    // TODO: show welcome info if there's no QR code in the URL
     return <div>
-        <h1 id="title">{title}</h1>
-        <textarea style={{ width: "80em", height: "40em" }} value={wat} onChange={e => setWAT(e.target.value)}></textarea><br />
-        <button id="assemble" onClick={assemble}>Assemble!</button><br />
+        <h1>SCORECARD</h1> {/* TODO: cool QRish logo */}
+        <canvas ref={qrCanvas}></canvas><br /> {/* probably want this to be a constant size regardless of QR code version, for mobile UI */}
+        <h2>{title} | {size} bytes</h2>
         <button id="start" onClick={start}>Start</button><br />
-        <canvas ref={qrCanvas}></canvas><br />
+        <input type="text" value={seed} readOnly={true} /><br />{/* TODO: allow user to specify seed, possibly share somehow */}
+        <textarea style={{ width: "40em", height: "40em" }} value={wat} onChange={e => setWAT(e.target.value)}></textarea><br />
+        <button id="assemble" onClick={assemble}>Assemble!</button><br />
         <a href={link}>Link</a><br />
         <a download="a.wasm" href={download}>Download</a>
     </div>
