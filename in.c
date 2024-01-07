@@ -591,6 +591,11 @@ float play_score(play_score_state *cr, osc_func osc) {
 }
 
 EMSCRIPTEN_KEEPALIVE
+void setup(unsigned int seed) {
+    srand(seed);
+}
+
+EMSCRIPTEN_KEEPALIVE
 float process() {
     static play_score_state a = {0}, b = {0}, c = {0};
     return (
