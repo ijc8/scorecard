@@ -2,19 +2,28 @@ import QRCode from "qrcode"
 import { encode, decode } from "./base43Encoder"
 import loadWabt from "../wabt"
 
-import './style.css'
+// document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
+//     <div>
+//         <h1 id="title">untitled</h1>
+//         <textarea style="width: 80em; height: 40em"></textarea><br>
+//         <button id="assemble">Assemble!</button><br>
+//         <button id="start">Start</button><br>
+//         <canvas></canvas><br>
+//         <a id="link">Link</a><br>
+//         <a id="download" download="a.wasm">Download</a>
+//     </div>
+// `
 
-document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-    <div>
-        <h1 id="title">untitled</h1>
-        <textarea style="width: 80em; height: 40em"></textarea><br>
-        <button id="assemble">Assemble!</button><br>
-        <button id="start">Start</button><br>
-        <canvas></canvas><br>
-        <a id="link">Link</a><br>
-        <a id="download" download="a.wasm">Download</a>
-    </div>
-`
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App'
+import './index.css'
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+)
 
 const context = new AudioContext({ sampleRate: 44100 })
 console.log(context.sampleRate)
