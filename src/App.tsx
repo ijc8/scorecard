@@ -8,6 +8,10 @@ function generateSeed() {
     return Math.floor(Math.random() * Math.pow(2, 32))
 }
 
+function formatSeed(seed: number) {
+    return seed.toString(16).padStart(8, "0")
+}
+
 const context = new AudioContext({ sampleRate: 44100 })
 console.log(context.sampleRate)
 
@@ -47,7 +51,7 @@ const wabt = await loadWabt()
 function App() {
     const [title, setTitle] = useState("untitled")
     const [size, setSize] = useState(0)
-    const [seed, setSeed] = useState("")
+    const [seed, setSeed] = useState(0)
     const [wat, setWAT] = useState("")
     const [link, setLink] = useState("")
     const [download, setDownload] = useState("")
@@ -93,8 +97,11 @@ function App() {
         console.log(url)
         console.log("URL length:", url.length)
         console.log("QR version:", QRCode.create(url, { errorCorrectionLevel: "L" }).version)
-        QRCode.toCanvas(qrCanvas.current, url, { errorCorrectionLevel: "L" })
-        // TODO: update URL in address bar as well?
+        // Workaround: don't let `QRCode.toCanvas` mangle our styles.
+        const style = qrCanvas.current!.style.cssText
+        QRCode.toCanvas(qrCanvas.current, url, { errorCorrectionLevel: "L", scale: 1, margin: 0 })
+        qrCanvas.current!.style.cssText = style
+        window.history.pushState(null, "", url)
         setLink(url)
         setDownload(window.URL.createObjectURL(new Blob([buffer])))
     }
@@ -103,7 +110,7 @@ function App() {
         if (context.state === "suspended") context.resume()
         const seed = generateSeed()
         node.port.postMessage({ cmd: "start", seed })
-        setSeed(seed + "") // TODO: show in nicer form (hex? b64? tiny QR code??)
+        setSeed(seed)
     }
 
     const onDrop = async (e: DragEvent) => {
@@ -137,13 +144,19 @@ function App() {
     // } , [])
 
     // TODO: show welcome info if there's no QR code in the URL
-    return <div>
-        <h1>SCORECARD</h1> {/* TODO: cool QRish logo */}
-        <canvas ref={qrCanvas}></canvas><br /> {/* probably want this to be a constant size regardless of QR code version, for mobile UI */}
-        <h2>{title} | {size} bytes</h2>
-        <button id="start" onClick={start}>Start</button><br />
-        <input type="text" value={seed} readOnly={true} /><br />{/* TODO: allow user to specify seed, possibly share somehow */}
-        <textarea style={{ width: "40em", height: "40em" }} value={wat} onChange={e => setWAT(e.target.value)}></textarea><br />
+    return <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", maxWidth: "500px", margin: "auto" }}>
+        {/* <h1><a href="/" style={{ color: "black", fontFamily: "sysfont" }}>ScoreCard</a></h1> TODO: cool QRish logo */}
+        <h1><a href="/"><img src="logo.png" style={{ imageRendering: "pixelated", width: "100%" }} /></a></h1>
+        <canvas ref={qrCanvas} style={{ imageRendering: "pixelated" }}></canvas><br /> {/* probably want this to be a constant size regardless of QR code version, for mobile UI */}
+        <h2 style={{ fontFamily: "sysfont" }}>{title} | {size} bytes</h2>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid black" }}>
+            <button>Reset</button>
+            <button id="start" onClick={start}>Play</button>
+            <span>Time: 0:00</span>
+            {/* <input type="text" value={seed} readOnly={true} /><br />TODO: allow user to specify seed, possibly share somehow */}
+            <span>Seed: <span contentEditable>{formatSeed(seed)}</span></span>
+        </div>
+        <textarea style={{ width: "40em", height: "40em", maxWidth: "100%" }} value={wat} onChange={e => setWAT(e.target.value)}></textarea><br />
         <button id="assemble" onClick={assemble}>Assemble!</button><br />
         <a href={link}>Link</a><br />
         <a download="a.wasm" href={download}>Download</a>
