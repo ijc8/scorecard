@@ -48,6 +48,29 @@ function profile(instance: WebAssembly.Instance) {
 
 const wabt = await loadWabt()
 
+function Listen({ qrCanvas, title, size, start, seed }) {
+    return <>
+        <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", padding: "0 20px" }}></canvas><br /> {/* probably want this to be a constant size regardless of QR code version, for mobile UI */}
+        <h2 style={{ fontFamily: "sysfont" }}>{title} | {size} bytes</h2>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid black", marginBottom: "1em" }}>
+            <button>Reset</button>
+            <button id="start" onClick={start}>Play</button>
+            <span>Time: 0:00</span>
+            {/* TODO: allow user to specify seed, possibly share somehow */}
+            <span>Seed: <span>{formatSeed(seed)}</span></span>
+        </div>
+    </>
+}
+const Scan = () => "TODO"
+const About = () => "It's ScoreCard! (TODO)"
+
+function Create({ assemble, wat, setWAT }) {
+    return <>
+        <textarea style={{ width: "40em", height: "40em", maxWidth: "100%" }} value={wat} onChange={e => setWAT(e.target.value)}></textarea><br />
+        <button id="assemble" onClick={assemble}>Assemble!</button><br />
+    </>
+}
+
 function App() {
     const [title, setTitle] = useState("untitled")
     const [size, setSize] = useState(0)
@@ -143,21 +166,32 @@ function App() {
     //     })();
     // } , [])
 
+    const tabs = [
+        { name: "Listen", component: <Listen {...{qrCanvas, title, size, start, seed}} /> },
+        { name: "Scan", component: <Scan /> },
+        { name: "Create", component: <Create {...{assemble, wat, setWAT}} /> },
+        { name: "About", component: <About /> },
+    ]
+
+    const [tab, setTab] = useState(0)
+
     // TODO: show welcome info if there's no QR code in the URL
-    return <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", maxWidth: "500px", margin: "auto" }}>
+    return <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", maxWidth: "520px", margin: "auto", border: "1px solid black" }}>
         {/* <h1><a href="/" style={{ color: "black", fontFamily: "sysfont" }}>ScoreCard</a></h1> TODO: cool QRish logo */}
-        <h1><a href="/"><img src="logo.png" style={{ imageRendering: "pixelated", width: "100%" }} /></a></h1>
-        <canvas ref={qrCanvas} style={{ imageRendering: "pixelated" }}></canvas><br /> {/* probably want this to be a constant size regardless of QR code version, for mobile UI */}
-        <h2 style={{ fontFamily: "sysfont" }}>{title} | {size} bytes</h2>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid black" }}>
-            <button>Reset</button>
-            <button id="start" onClick={start}>Play</button>
-            <span>Time: 0:00</span>
-            {/* <input type="text" value={seed} readOnly={true} /><br />TODO: allow user to specify seed, possibly share somehow */}
-            <span>Seed: <span contentEditable>{formatSeed(seed)}</span></span>
+        <h1><a href="/"><img src="logo.png" style={{ imageRendering: "pixelated", width: "100%", padding: "0 20px" }} /></a></h1>
+        <div style={{ display: "flex" }}>
+            {tabs.map(({ component }, index) =>
+                <div style={{ display: "flex", flexDirection: "column", visibility: index === tab ? "visible" : "hidden", width: "100%", marginRight: "-100%" }}>{component}</div>
+            )}
         </div>
-        <textarea style={{ width: "40em", height: "40em", maxWidth: "100%" }} value={wat} onChange={e => setWAT(e.target.value)}></textarea><br />
-        <button id="assemble" onClick={assemble}>Assemble!</button><br />
+        {/* {tabs[tab].component} */}
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+            <div style={{ borderTop: "1px solid black", flexGrow: "1", alignSelf: "stretch" }}></div>
+            {tabs.map(({ name }, index) =>
+                <button style={index === tab ?  { borderTop: "1px solid white" } : { background: "#ddd" }} onClick={() => setTab(index)}>{name}</button>
+            )}
+            <div style={{ borderTop: "1px solid black", flexGrow: "1", alignSelf: "stretch" }}></div>
+        </div>
         <a href={link}>Link</a><br />
         <a download="a.wasm" href={download}>Download</a>
     </div>
