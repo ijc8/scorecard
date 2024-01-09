@@ -90,8 +90,10 @@ function Create({ assemble, wat, setWAT }) {
     </>
 }
 
+const NO_TITLE = "untitled"
+
 function App() {
-    const [title, setTitle] = useState("untitled")
+    const [title, setTitle] = useState(NO_TITLE)
     const [size, setSize] = useState(0)
     const [seed, setSeed] = useState(0)
     const [wat, setWAT] = useState("")
@@ -133,13 +135,15 @@ function App() {
             const title = (new TextDecoder()).decode(new Uint8Array(mem, startPtr, endPtr - startPtr))
             console.log(title)
             setTitle(title)
+        } else {
+            setTitle(NO_TITLE)
         }
         // Send to AudioWorklet
         // Doesn't work in iOS Safari...
         // node.port.postMessage(module)
         node.port.postMessage({ cmd: "loadModule", buffer })
         // Generate QR code
-        const url = window.location.origin + window.location.pathname + "?s=" + encode(buffer)
+        const url = window.location.origin + window.location.pathname + "?c=" + encode(buffer)
         console.log(url)
         console.log("URL length:", url.length)
         console.log("QR version:", QRCode.create(url, { errorCorrectionLevel: "L" }).version)
