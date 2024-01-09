@@ -40,3 +40,33 @@
 .read-the-docs {
   color: #888;
 }
+
+.play-controls > * {
+    border: none;
+    /* border-left: 1px solid black; */
+    padding: 0 6px;
+}
+
+.play-controls > *:first-child {
+    border-left: none;
+}
+
+.tabs {
+    background-color: #ccf;
+}
+
+.tabs > button {
+    padding: 4px 0;
+    width: 96px;
+    border: none;
+    border-top: 1px solid black;
+    background-color: inherit;
+    background-image: url("tab-inactive.png");
+    background-size: 100% 100%;
+    image-rendering: pixelated;
+}
+
+.tabs > button.active {
+    border-top: 1px solid white;
+    background-image: url("tab.png");
+}

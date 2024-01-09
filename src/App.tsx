@@ -3,6 +3,11 @@ import './App.css'
 import QRCode from "qrcode"
 import { encode, decode } from "./base43Encoder"
 import loadWabt from "../wabt"
+import Play from "pixelarticons/svg/play.svg?react"
+import Pause from "pixelarticons/svg/pause.svg?react"
+import Prev from "pixelarticons/svg/prev.svg?react"
+import Clock from "pixelarticons/svg/clock.svg?react"
+import Dice from "pixelarticons/svg/dice.svg?react"
 
 function generateSeed() {
     return Math.floor(Math.random() * Math.pow(2, 32))
@@ -10,6 +15,18 @@ function generateSeed() {
 
 function formatSeed(seed: number) {
     return seed.toString(16).padStart(8, "0")
+}
+
+function formatTime(seconds: number) {
+    seconds = Math.floor(seconds)
+    let minutes = Math.floor(seconds / 60)
+    seconds -= minutes * 60
+    const hours = Math.floor(minutes / 60)
+    if (hours === 0) {
+        return `${minutes}:${seconds.toString().padStart(2, "0")}`
+    }
+    minutes -= hours * 60
+    return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
 }
 
 const context = new AudioContext({ sampleRate: 44100 })
@@ -48,16 +65,18 @@ function profile(instance: WebAssembly.Instance) {
 
 const wabt = await loadWabt()
 
-function Listen({ qrCanvas, title, size, start, seed }) {
+function Listen({ qrCanvas, title, size, seed, state, setState, time, reset }) {
+    const bigIconStyle = { height: "48px", verticalAlign: "middle" }
+    const smallIconStyle = { height: "24px", verticalAlign: "middle" }
     return <>
         <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", padding: "0 20px" }}></canvas><br /> {/* probably want this to be a constant size regardless of QR code version, for mobile UI */}
         <h2 style={{ fontFamily: "sysfont" }}>{title} | {size} bytes</h2>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid black", marginBottom: "1em" }}>
-            <button>Reset</button>
-            <button id="start" onClick={start}>Play</button>
-            <span>Time: 0:00</span>
+        <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", marginBottom: "1em", fontSize: "24px" }}>
+            <div><Clock style={smallIconStyle} /> <span style={{ verticalAlign: "middle", display: "inline-block", width: "2.3em" }}>{formatTime(time)}</span></div>
+            <button onClick={reset}><Prev style={bigIconStyle} /></button>
+            <button id="start" onClick={() => setState(state === "playing" ? "paused" : "playing")}>{state === "playing" ? <Pause style={bigIconStyle} /> : <Play style={bigIconStyle} />}</button>
             {/* TODO: allow user to specify seed, possibly share somehow */}
-            <span>Seed: <span>{formatSeed(seed)}</span></span>
+            <span><Dice style={smallIconStyle} /> <span style={{ verticalAlign: "middle", textAlign: "left", display: "inline-block", width: "4.6em" }}>{formatSeed(seed)}</span></span>
         </div>
     </>
 }
@@ -78,6 +97,10 @@ function App() {
     const [wat, setWAT] = useState("")
     const [link, setLink] = useState("")
     const [download, setDownload] = useState("")
+    const [state, _setState] = useState("stopped")
+    const [time, setTime] = useState(0)
+    const encoded = new URLSearchParams(window.location.search).get("c")
+    const [tab, setTab] = useState(encoded ? 0 : 3)
     const qrCanvas = useRef<HTMLCanvasElement>(null)
 
     const assemble = () => {
@@ -127,13 +150,27 @@ function App() {
         window.history.pushState(null, "", url)
         setLink(url)
         setDownload(window.URL.createObjectURL(new Blob([buffer])))
+        setTab(0)
     }
 
-    const start = () => {
-        if (context.state === "suspended") context.resume()
-        const seed = generateSeed()
-        node.port.postMessage({ cmd: "start", seed })
-        setSeed(seed)
+    const reset = () => {
+        node.port.postMessage({ cmd: "reset", seed })
+    }
+
+    const setState = (_state: "playing" | "paused") => {
+        console.log("hey", _state)
+        if (_state === "playing") {
+            if (context.state === "suspended") context.resume()
+            let _seed = seed
+            if (state === "stopped") {
+                _seed = generateSeed()
+                setSeed(_seed)
+            }
+            node.port.postMessage({ cmd: "play", seed: _seed })
+        } else if (_state === "paused") {
+            node.port.postMessage({ cmd: "pause" })
+        }
+        _setState(_state)
     }
 
     const onDrop = async (e: DragEvent) => {
@@ -145,7 +182,6 @@ function App() {
     }
 
     useEffect(() => {
-        const encoded = new URLSearchParams(window.location.search).get("s")
         if (encoded) {
             const buffer = decode(encoded.replace(/ /g, "+"))
             loadBinary(buffer)
@@ -155,6 +191,11 @@ function App() {
     useEffect(() => {
         document.addEventListener("drop", onDrop)
         return () => document.removeEventListener("drop", onDrop)
+    }, [])
+
+    useEffect(() => {
+        node.port.onmessage = e => setTime(e.data / 44100)
+        return () => { node.port.onmessage = () => {} }
     }, [])
 
     // TODO: "load example" link
@@ -167,33 +208,33 @@ function App() {
     // } , [])
 
     const tabs = [
-        { name: "Listen", component: <Listen {...{qrCanvas, title, size, start, seed}} /> },
+        { name: "Listen", component: <Listen {...{qrCanvas, title, size, seed, state, setState, time, reset}} /> },
         { name: "Scan", component: <Scan /> },
         { name: "Create", component: <Create {...{assemble, wat, setWAT}} /> },
         { name: "About", component: <About /> },
     ]
 
-    const [tab, setTab] = useState(0)
-
     // TODO: show welcome info if there's no QR code in the URL
-    return <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", maxWidth: "520px", margin: "auto", border: "1px solid black" }}>
+    return <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", maxWidth: "520px", margin: "auto", backgroundColor: "white", borderTop: "1px solid black" }}>
         {/* <h1><a href="/" style={{ color: "black", fontFamily: "sysfont" }}>ScoreCard</a></h1> TODO: cool QRish logo */}
-        <h1><a href="/"><img src="logo.png" style={{ imageRendering: "pixelated", width: "100%", padding: "0 20px" }} /></a></h1>
-        <div style={{ display: "flex" }}>
-            {tabs.map(({ component }, index) =>
-                <div style={{ display: "flex", flexDirection: "column", visibility: index === tab ? "visible" : "hidden", width: "100%", marginRight: "-100%" }}>{component}</div>
-            )}
+        <div style={{ borderLeft: "1px solid black", borderRight: "1px solid black", margin: "0 -1px" }}>
+            <h1 style={{ margin: "24px 20px" }}><a href="/"><img src="logo.png" style={{ imageRendering: "pixelated", width: "100%" }} /></a></h1>
+            <div style={{ display: "flex" }}>
+                {tabs.map(({ component }, index) =>
+                    <div style={{ display: "flex", flexDirection: "column", visibility: index === tab ? "visible" : "hidden", width: "100%", marginRight: "-100%" }}>{component}</div>
+                )}
+            </div>
         </div>
         {/* {tabs[tab].component} */}
-        <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+        <div className="tabs" style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
             <div style={{ borderTop: "1px solid black", flexGrow: "1", alignSelf: "stretch" }}></div>
             {tabs.map(({ name }, index) =>
-                <button style={index === tab ?  { borderTop: "1px solid white" } : { background: "#ddd" }} onClick={() => setTab(index)}>{name}</button>
+                <button className={index === tab ? "active" : ""} onClick={() => setTab(index)}>{name}</button>
             )}
             <div style={{ borderTop: "1px solid black", flexGrow: "1", alignSelf: "stretch" }}></div>
         </div>
-        <a href={link}>Link</a><br />
-        <a download="a.wasm" href={download}>Download</a>
+        {/* <a href={link}>Link</a><br /> */}
+        {/* <a download="a.wasm" href={download}>Download</a> */}
     </div>
 }
 
