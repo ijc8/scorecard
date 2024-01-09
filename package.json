@@ -22,6 +22,7 @@
     "vite": "^5.0.8"
   },
   "dependencies": {
+    "html5-qrcode": "^2.3.8",
     "pixelarticons": "^1.7.0",
     "qrcode": "^1.5.3",
     "react": "^18.2.0",

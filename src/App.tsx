@@ -8,6 +8,7 @@ import Pause from "pixelarticons/svg/pause.svg?react"
 import Prev from "pixelarticons/svg/prev.svg?react"
 import Clock from "pixelarticons/svg/clock.svg?react"
 import Dice from "pixelarticons/svg/dice.svg?react"
+import { Html5QrcodePlugin } from "./Html5QrcodePlugin"
 
 function generateSeed() {
     return Math.floor(Math.random() * Math.pow(2, 32))
@@ -70,7 +71,7 @@ function Listen({ qrCanvas, title, size, seed, state, setState, time, reset }) {
     const smallIconStyle = { height: "24px", verticalAlign: "middle" }
     return <>
         <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", padding: "0 20px" }}></canvas><br /> {/* probably want this to be a constant size regardless of QR code version, for mobile UI */}
-        <h2 style={{ fontFamily: "sysfont" }}>{title} | {size} bytes</h2>
+        <h2 style={{ fontFamily: "sysfont" }}>{title} | {size} bytes {/* TODO: add link and perhaps download buttons with icons */}</h2>
         <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", marginBottom: "1em", fontSize: "24px" }}>
             <div><Clock style={smallIconStyle} /> <span style={{ verticalAlign: "middle", display: "inline-block", width: "2.3em" }}>{formatTime(time)}</span></div>
             <button onClick={reset}><Prev style={bigIconStyle} /></button>
@@ -80,7 +81,24 @@ function Listen({ qrCanvas, title, size, seed, state, setState, time, reset }) {
         </div>
     </>
 }
-const Scan = () => "TODO"
+
+function Scan({ onScan }) {
+    const qrCodeSuccessCallback = (data: string) => {
+        console.log("scanned", data)
+        if (!onScan(data)) {
+            console.log("not a valid scorecard URL") // TODO: show error somewhere
+        }
+    }
+    // TODO: make UI size/position more consistent
+    // TODO: stop scanning upon tab switch
+    return <Html5QrcodePlugin
+        fps={10}
+        qrbox={250}
+        disableFlip={false}
+        qrCodeSuccessCallback={qrCodeSuccessCallback}
+    />
+}
+
 const About = () => "It's ScoreCard! (TODO)"
 
 function Create({ assemble, wat, setWAT }) {
@@ -101,8 +119,8 @@ function App() {
     const [download, setDownload] = useState("")
     const [state, _setState] = useState("stopped")
     const [time, setTime] = useState(0)
-    const encoded = new URLSearchParams(window.location.search).get("c")
-    const [tab, setTab] = useState(encoded ? 0 : 3)
+    // const encoded = new URLSearchParams(window.location.search).get("c")
+    const [tab, setTab] = useState(3)
     const qrCanvas = useRef<HTMLCanvasElement>(null)
 
     const assemble = () => {
@@ -185,11 +203,23 @@ function App() {
         return false
     }
 
-    useEffect(() => {
+    const onScan = (data: string) => {
+        let encoded
+        try {
+            encoded = new URL(data).searchParams.get("c")
+        } catch {
+            return false
+        }
         if (encoded) {
             const buffer = decode(encoded.replace(/ /g, "+"))
             loadBinary(buffer)
+            return true
         }
+        return false
+    }
+
+    useEffect(() => {
+        onScan(window.location.href)
     }, [])
 
     useEffect(() => {
@@ -213,7 +243,7 @@ function App() {
 
     const tabs = [
         { name: "Listen", component: <Listen {...{qrCanvas, title, size, seed, state, setState, time, reset}} /> },
-        { name: "Scan", component: <Scan /> },
+        { name: "Scan", component: <Scan {...{onScan}} /> },
         { name: "Create", component: <Create {...{assemble, wat, setWAT}} /> },
         { name: "About", component: <About /> },
     ]
