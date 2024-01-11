@@ -115,7 +115,8 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
             <button id="start" onClick={() => setState(state === "playing" ? "paused" : "playing")}>{state === "playing" ? <Pause style={bigIconStyle} /> : <Play style={bigIconStyle} />}</button>
             {/* TODO: allow user to specify seed, possibly share somehow */}
             <span>
-                <button><DiceIcon style={smallIconStyle} onClick={() => setSeedLock(!seedLock)} /></button>{" "}
+                <button><DiceIcon style={smallIconStyle} onClick={() => setSeedLock(!seedLock)} /></button>
+                <span style={{ userSelect: "none" }}>{" "}</span>
                 <SeedInput {...{seed, setSeed}} />
             </span>
         </div>
@@ -225,6 +226,7 @@ function App() {
             _seed = generateSeed()
             setSeed(_seed)
         }
+        setTime(0)
         node.port.postMessage({ cmd: "reset", seed: _seed })
     }
 

@@ -59,6 +59,7 @@ button {
   /* background-color: #1a1a1a; */
   background-color: white;
   cursor: pointer;
+  color: black; /* for iOS Safari */
   /* transition: border-color 0.25s; */
 }
 button:hover {
