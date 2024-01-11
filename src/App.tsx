@@ -8,6 +8,7 @@ import Pause from "pixelarticons/svg/pause.svg?react"
 import Prev from "pixelarticons/svg/prev.svg?react"
 import Clock from "pixelarticons/svg/clock.svg?react"
 import Dice from "pixelarticons/svg/dice.svg?react"
+import CloseBox from "pixelarticons/svg/close-box.svg?react"
 import { Html5QrcodePlugin } from "./Html5QrcodePlugin"
 
 function generateSeed() {
@@ -66,18 +67,22 @@ function profile(instance: WebAssembly.Instance) {
 
 const wabt = await loadWabt()
 
-function Listen({ qrCanvas, title, size, seed, state, setState, time, reset }) {
+function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset }) {
     const bigIconStyle = { height: "48px", verticalAlign: "middle" }
     const smallIconStyle = { height: "24px", verticalAlign: "middle" }
+    const DiceIcon = seedLock ? CloseBox : Dice
     return <>
         <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", padding: "0 20px" }}></canvas><br /> {/* probably want this to be a constant size regardless of QR code version, for mobile UI */}
-        <h2 style={{ fontFamily: "sysfont" }}>{title} | {size} bytes {/* TODO: add link and perhaps download buttons with icons */}</h2>
+        <h2 style={{ userSelect: "none" }}>{title} | {size} bytes {/* TODO: add link and perhaps download buttons with icons */}</h2>
         <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", marginBottom: "1em", fontSize: "24px" }}>
-            <div><Clock style={smallIconStyle} /> <span style={{ verticalAlign: "middle", display: "inline-block", width: "2.3em" }}>{formatTime(time)}</span></div>
+            <div style={{ userSelect: "none" }}><Clock style={smallIconStyle} /> <span style={{ verticalAlign: "middle", display: "inline-block", width: "2.3em" }}>{formatTime(time)}</span></div>
             <button onClick={reset}><Prev style={bigIconStyle} /></button>
             <button id="start" onClick={() => setState(state === "playing" ? "paused" : "playing")}>{state === "playing" ? <Pause style={bigIconStyle} /> : <Play style={bigIconStyle} />}</button>
             {/* TODO: allow user to specify seed, possibly share somehow */}
-            <span><Dice style={smallIconStyle} /> <span style={{ verticalAlign: "middle", textAlign: "left", display: "inline-block", width: "4.6em" }}>{formatSeed(seed)}</span></span>
+            <span>
+                <button><DiceIcon style={smallIconStyle} onClick={() => setSeedLock(!seedLock)} /></button>{" "}
+                <span style={{ verticalAlign: "middle", textAlign: "left", display: "inline-block", width: "4.6em" }}>{formatSeed(seed)}</span>
+            </span>
         </div>
     </>
 }
@@ -114,6 +119,7 @@ function App() {
     const [title, setTitle] = useState(NO_TITLE)
     const [size, setSize] = useState(0)
     const [seed, setSeed] = useState(0)
+    const [seedLock, setSeedLock] = useState(false)
     const [wat, setWAT] = useState("")
     const [link, setLink] = useState("")
     const [download, setDownload] = useState("")
@@ -161,7 +167,8 @@ function App() {
         // node.port.postMessage(module)
         node.port.postMessage({ cmd: "loadModule", buffer })
         // Generate QR code
-        const url = window.location.origin + window.location.pathname + "?c=" + encode(buffer)
+        const prefix = window.location.origin + window.location.pathname
+        const url = prefix + "?c=" + encode(buffer)
         console.log(url)
         console.log("URL length:", url.length)
         console.log("QR version:", QRCode.create(url, { errorCorrectionLevel: "L" }).version)
@@ -169,14 +176,19 @@ function App() {
         const style = qrCanvas.current!.style.cssText
         QRCode.toCanvas(qrCanvas.current, url, { errorCorrectionLevel: "L", scale: 1, margin: 0 })
         qrCanvas.current!.style.cssText = style
-        window.history.pushState(null, "", url)
+        // window.history.pushState(null, "", url)
         setLink(url)
         setDownload(window.URL.createObjectURL(new Blob([buffer])))
         setTab(0)
     }
 
     const reset = () => {
-        node.port.postMessage({ cmd: "reset", seed })
+        let _seed = seed
+        if (!seedLock) {
+            _seed = generateSeed()
+            setSeed(_seed)
+        }
+        node.port.postMessage({ cmd: "reset", seed: _seed })
     }
 
     const setState = (_state: "playing" | "paused") => {
@@ -184,7 +196,7 @@ function App() {
         if (_state === "playing") {
             if (context.state === "suspended") context.resume()
             let _seed = seed
-            if (state === "stopped") {
+            if (state === "stopped" && !seedLock) {
                 _seed = generateSeed()
                 setSeed(_seed)
             }
@@ -242,7 +254,7 @@ function App() {
     // } , [])
 
     const tabs = [
-        { name: "Listen", component: <Listen {...{qrCanvas, title, size, seed, state, setState, time, reset}} /> },
+        { name: "Listen", component: <Listen {...{qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset}} /> },
         { name: "Scan", component: <Scan {...{onScan}} /> },
         { name: "Create", component: <Create {...{assemble, wat, setWAT}} /> },
         { name: "About", component: <About /> },

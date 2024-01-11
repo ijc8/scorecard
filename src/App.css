@@ -58,7 +58,6 @@
 .tabs > button {
     padding: 4px 0;
     width: 96px;
-    border: none;
     border-top: 1px solid black;
     background-color: inherit;
     background-image: url("tab-inactive.png");
