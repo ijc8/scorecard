@@ -67,6 +67,41 @@ function profile(instance: WebAssembly.Instance) {
 
 const wabt = await loadWabt()
 
+function SeedInput({ seed, setSeed }) {
+    const [contents, setContents] = useState("")
+    useEffect(() => {
+        setContents(formatSeed(seed))
+    }, [seed])
+
+    const submit = () => {
+        if (/^[0-9A-Fa-f]+$/.test(contents) && contents.length <= 8) {
+            setSeed(parseInt(contents, 16))
+        } else {
+            setContents(formatSeed(seed))
+        }
+    }
+
+    return <input type="text" value={contents} style={{
+            border: "none",
+            display: "inline-block",
+            fontFamily: "inherit",
+            fontSize: "inherit",
+            padding: "none",
+            width: "4.6em",
+            verticalAlign: "middle",
+            textAlign: "left",
+        }} 
+        onChange={e => setContents(e.target.value)}
+        onKeyUp={e => {
+            if (e.key === "Enter") {
+                submit()
+                ;(e.target as HTMLElement).blur()
+            }
+        }}
+        onBlur={submit}
+    />
+}
+
 function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset }) {
     const bigIconStyle = { height: "48px", verticalAlign: "middle" }
     const smallIconStyle = { height: "24px", verticalAlign: "middle" }
@@ -81,7 +116,7 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
             {/* TODO: allow user to specify seed, possibly share somehow */}
             <span>
                 <button><DiceIcon style={smallIconStyle} onClick={() => setSeedLock(!seedLock)} /></button>{" "}
-                <span style={{ verticalAlign: "middle", textAlign: "left", display: "inline-block", width: "4.6em" }}>{formatSeed(seed)}</span>
+                <SeedInput {...{seed, setSeed}} />
             </span>
         </div>
     </>

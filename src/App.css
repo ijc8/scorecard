@@ -43,6 +43,7 @@
 
 .play-controls * {
     border: none;
+    padding: 0;
 }
 
 .play-controls > * {
