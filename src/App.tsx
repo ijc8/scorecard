@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import QRCode from "qrcode"
-import { encode, decode } from "./base43Encoder"
+import { encodeBlob, decodeBlob, encode, decode } from "./base43Encoder"
 import loadWabt from "../wabt"
 import Play from "pixelarticons/svg/play.svg?react"
 import Pause from "pixelarticons/svg/pause.svg?react"
@@ -168,7 +168,9 @@ function App() {
         node.port.postMessage({ cmd: "loadModule", buffer })
         // Generate QR code
         const prefix = window.location.origin + window.location.pathname
-        const url = prefix + "?c=" + encode(buffer)
+        const seedParam = seedLock ? `s=${encode(BigInt(seed))}&` : ""
+        console.log(seedLock, seedParam)
+        const url = `${prefix}?${seedParam}c=${encodeBlob(buffer)}`
         console.log(url)
         console.log("URL length:", url.length)
         console.log("QR version:", QRCode.create(url, { errorCorrectionLevel: "L" }).version)
@@ -176,7 +178,7 @@ function App() {
         const style = qrCanvas.current!.style.cssText
         QRCode.toCanvas(qrCanvas.current, url, { errorCorrectionLevel: "L", scale: 1, margin: 0 })
         qrCanvas.current!.style.cssText = style
-        // window.history.pushState(null, "", url)
+        window.history.pushState(null, "", url)
         setLink(url)
         setDownload(window.URL.createObjectURL(new Blob([buffer])))
         setTab(0)
@@ -216,14 +218,24 @@ function App() {
     }
 
     const onScan = (data: string) => {
-        let encoded
+        // Return value indicates whether the string contains a valid ScoreCard URL.
+        // TODO: More validity checks (does the param contain valid base43? do the bytes contain valid wasm?)
+        let url
         try {
-            encoded = new URL(data).searchParams.get("c")
+            url = new URL(data)
         } catch {
             return false
         }
-        if (encoded) {
-            const buffer = decode(encoded.replace(/ /g, "+"))
+        const encodedBlob = url.searchParams.get("c")
+        if (!encodedBlob) return false
+
+        const encodedSeed = url.searchParams.get("s")
+        if (encodedSeed) {
+            setSeed(Number(decode(encodedSeed)))
+            setSeedLock(true)
+        }
+        if (encodedBlob) {
+            const buffer = decodeBlob(encodedBlob.replace(/ /g, "+"))
             loadBinary(buffer)
             return true
         }
@@ -237,7 +249,7 @@ function App() {
     useEffect(() => {
         document.addEventListener("drop", onDrop)
         return () => document.removeEventListener("drop", onDrop)
-    }, [])
+    }, [onDrop])
 
     useEffect(() => {
         node.port.onmessage = e => setTime(e.data / 44100)

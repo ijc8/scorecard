@@ -29,23 +29,34 @@ const base = 43n
 const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ$*+-./:"
 const invChars = Object.fromEntries([...chars].map((c, i) => [c, i]))
 
-export function encode(data: Uint8Array) {
-    let { num, offset } = arrayToBigInt(data)
+export function encode(num: bigint) {
     const out = []
     while (num) {
         out.unshift(chars[Number(num % base)])
         num /= base
     }
-    return chars[0].repeat(offset) + out.join("")
+    return out.join("")
 }
 
 export function decode(encoded: string) {
-    let offset = [...encoded].findIndex(c => c !== chars[0])
-    if (offset === -1) offset = encoded.length
     let num = 0n
-    for (const char of encoded.slice(offset)) {
+    for (const char of encoded) {
         num *= base
         num += BigInt(invChars[char])
     }
+    return num
+}
+
+export function encodeBlob(data: Uint8Array) {
+    let { num, offset } = arrayToBigInt(data)
+    return chars[0].repeat(offset) + encode(num)
+}
+
+export function decodeBlob(encoded: string) {
+    let offset = [...encoded].findIndex(c => c !== chars[0])
+    if (offset === -1) offset = encoded.length
+    const num = decode(encoded.slice(offset))
     return bigIntToArray(num, offset)
 }
+
+Object.assign(window, { encode: encodeBlob, decode: decodeBlob }) // TODO TEMP
