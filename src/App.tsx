@@ -9,7 +9,14 @@ import Prev from "pixelarticons/svg/prev.svg?react"
 import Clock from "pixelarticons/svg/clock.svg?react"
 import Dice from "pixelarticons/svg/dice.svg?react"
 import CloseBox from "pixelarticons/svg/close-box.svg?react"
+import Downasaur from "pixelarticons/svg/downasaur.svg?react"
+import Flatten from "pixelarticons/svg/flatten.svg?react"
+// Alternative icons for "TOO BIG":
+// import Alert from "pixelarticons/svg/alert.svg?react"
+// import Loader from "pixelarticons/svg/loader.svg?react"
+import Subscriptions from "pixelarticons/svg/subscriptions.svg?react"
 import { Html5QrcodePlugin } from "./Html5QrcodePlugin"
+
 
 function generateSeed() {
     return Math.floor(Math.random() * Math.pow(2, 32))
@@ -102,12 +109,21 @@ function SeedInput({ seed, setSeed }) {
     />
 }
 
-function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset }) {
+function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error }) {
     const bigIconStyle = { height: "48px", verticalAlign: "middle" }
     const smallIconStyle = { height: "24px", verticalAlign: "middle" }
     const DiceIcon = seedLock ? CloseBox : Dice
     return <>
-        <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", padding: "0 20px" }}></canvas><br /> {/* probably want this to be a constant size regardless of QR code version, for mobile UI */}
+        <div style={{ position: "relative" }}>
+            {error && <div style={{ position: "absolute", padding: "0 20px", fontSize: "48px", height: "100%", width: "100%" }}>
+                <div style={{ border: "16px solid black", height: "100%", lineHeight: 1, display: "flex", flexDirection: "column", justifyContent: "space-evenly" }}>
+                    <div><span style={{ fontSize: "96px", verticalAlign: "top" }}>TOO BIG</span> <Subscriptions style={{ height: "96px" }} /><br/></div>
+                    <div><span style={{ fontSize: "56px", verticalAlign: "top" }}>Can't encode!</span> <Downasaur style={{ height: "56px" }} /></div>
+                    <div><span style={{ fontSize: "52px", verticalAlign: "top" }}>Shrink binary.</span> <Flatten style={{ height: "56px" }} /></div>
+                </div>
+                </div>}
+            <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", padding: "0 20px", visibility: error ? "hidden" : "visible", width: "100%" }} width="1" height="1"></canvas>
+        </div>
         <h2 style={{ userSelect: "none" }}>{title} | {size} bytes {/* TODO: add link and perhaps download buttons with icons */}</h2>
         <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", marginBottom: "1em", fontSize: "24px" }}>
             <div style={{ userSelect: "none" }}><Clock style={smallIconStyle} /> <span style={{ verticalAlign: "middle", display: "inline-block", width: "2.3em" }}>{formatTime(time)}</span></div>
@@ -161,6 +177,7 @@ function App() {
     const [download, setDownload] = useState("")
     const [state, _setState] = useState("stopped")
     const [time, setTime] = useState(0)
+    const [error, setError] = useState(false)
     // const encoded = new URLSearchParams(window.location.search).get("c")
     const [tab, setTab] = useState(3)
     const qrCanvas = useRef<HTMLCanvasElement>(null)
@@ -193,7 +210,7 @@ function App() {
             let endPtr = startPtr;
             while (heap[endPtr] != 0 && endPtr < heap.length) endPtr++
             const title = (new TextDecoder()).decode(new Uint8Array(mem, startPtr, endPtr - startPtr))
-            console.log(title)
+            console.log("Loaded title", title, "from", startPtr, "to", endPtr)
             setTitle(title)
         } else {
             setTitle(NO_TITLE)
@@ -209,11 +226,17 @@ function App() {
         const url = `${prefix}?${seedParam}c=${encodeBlob(buffer)}`
         console.log(url)
         console.log("URL length:", url.length)
-        console.log("QR version:", QRCode.create(url, { errorCorrectionLevel: "L" }).version)
+        const canvas = qrCanvas.current!
         // Workaround: don't let `QRCode.toCanvas` mangle our styles.
-        const style = qrCanvas.current!.style.cssText
-        QRCode.toCanvas(qrCanvas.current, url, { errorCorrectionLevel: "L", scale: 1, margin: 0 })
-        qrCanvas.current!.style.cssText = style
+        const style = canvas.style.cssText
+        try {
+            console.log("QR version:", QRCode.create(url, { errorCorrectionLevel: "L" }).version)
+            QRCode.toCanvas(canvas, url, { errorCorrectionLevel: "L", scale: 1, margin: 0 })
+            setError(false)
+        } catch {
+            setError(true)
+        }
+        canvas.style.cssText = style
         window.history.pushState(null, "", url)
         setLink(url)
         setDownload(window.URL.createObjectURL(new Blob([buffer])))
@@ -303,7 +326,7 @@ function App() {
     // } , [])
 
     const tabs = [
-        { name: "Listen", component: <Listen {...{qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset}} /> },
+        { name: "Listen", component: <Listen {...{qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error}} /> },
         { name: "Scan", component: <Scan {...{onScan}} /> },
         { name: "Create", component: <Create {...{assemble, wat, setWAT}} /> },
         { name: "About", component: <About /> },
