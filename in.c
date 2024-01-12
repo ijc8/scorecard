@@ -31,12 +31,11 @@ osc_func osc_funcs[] = {sqr, saw, tri};
 float play_score() {
     static osc_func osc;
     static int num_reps, rep, fragment_index, fragment_start, fragment_end, note_index;
-    static float freq, dur, amp, t;
+    static float freq, dur, amp, t = 0;
     static float env_time, osc_phase;
     static const float grace_note_frac = 0.05f;
     static const float amplitudes[] = {0.44f, 0.66f, 1.0f};
     gen_begin;
-    t = 0;
     osc = choice(osc_funcs);
     for (fragment_index = 0; fragment_index < SIZEOF(fragments); fragment_index++) {
         fragment_start = fragments[fragment_index][0];
