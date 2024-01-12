@@ -158,11 +158,11 @@ function Scan({ onScan }) {
 
 function About() {
     return <div style={{ fontSize: "18px", textAlign: "left", padding: "0 32px" }}>
-            <span style={{ fontSize: "20px" }}><img src="logo.png" height="16" style={{ paddingRight: "0.12em" }} /> is a player for "score cards": QR codes containing tiny generative music programs.</span> A score card looks like this:
+            <span style={{ fontSize: "20px" }}><img src="logo.png" height="14" style={{ paddingRight: "0.12em" }} /> is a player for "score cards": QR codes containing tiny generative music programs.</span> A score card looks like this:
             <p>TODO embed demos</p>
             Each QR code contains a valid URL (linking to this web app, the score card player) and an entire audio-generating WebAssembly program. Because the QR code contains the piece itself, even if the link breaks, the code can still be read and played back by an instance of the ScoreCard player hosted somewhere else, or by a player that runs outside of the browser.
             <p>This also implies that piece must fit in a QR code, implying an max executable size of just 2,953 bytes (more like 2,900 bytes after encoding it in a URL).</p>
-            <p>To get started, <a href="#TODO" style={{ textDecoration: "underline" }}>Scan</a> a score card or <a href="#TODO" style={{ textDecoration: "underline" }}>Create</a> one.</p>
+            <p>To get started, <a href="#TODO" style={{ textDecoration: "underline" }}>Scan</a> a score card or <a href="#TODO" style={{ textDecoration: "underline" }}>Create</a> one. For more information, check out the <a href="#TODO" style={{ textDecoration: "underline" }}>README</a>.</p>
             <p>Happy hacking & joyful jamming!<br/>- ijc</p>
     </div>
 }
