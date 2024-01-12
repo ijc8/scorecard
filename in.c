@@ -1,13 +1,5 @@
 // emcc -Oz in.c -Wall --no-entry -s SUPPORT_ERRNO=0 -s SUPPORT_LONGJMP=0 -o in.wasm
-#ifdef __EMSCRIPTEN__
-    #include <emscripten.h>
-#else
-    #define EMSCRIPTEN_KEEPALIVE
-    #include <stdio.h>
-#endif
-#include <math.h>
 #include <stdlib.h>
-#include <inttypes.h>
 #include "generator.h"
 #include "in.h"
 #include "deck.h"
@@ -21,62 +13,61 @@ float play_pulse() {
     static float t = 0;
     static float env_time;
     static float sqr_phase;
-    scr_begin;
+    gen_begin;
     for (;;) {
         env_time = 0;
         for (; t < dur; t += dt) {
-            scr_yield(env(&env_time, dur) * sqr(&sqr_phase, freq));
+            yield(env(&env_time, dur) * sqr(&sqr_phase, freq));
         }
         // Subtract `dur` (rather than resetting `t` to 0 before the loop)
         // in order to avoid accumulating rounding error from truncating dur/dt.
         t -= dur;
     }
-    scr_end(0);
+    gen_end(0);
 }
 
-cr_vars(play_score,
-    uint16_t num_reps, rep, fragment_index, fragment_start, fragment_end, note_index;
-    float freq, dur, amp, t;
-    float env_time;
-    float osc_phase;
-);
-float play_score(play_score_state *self, osc_func osc) {
+osc_func osc_funcs[] = {sqr, saw, tri};
+
+float play_score() {
+    static osc_func osc;
+    static int num_reps, rep, fragment_index, fragment_start, fragment_end, note_index;
+    static float freq, dur, amp, t;
+    static float env_time, osc_phase;
     static const float grace_note_frac = 0.05f;
     static const float amplitudes[] = {0.44f, 0.66f, 1.0f};
-    cr_begin;
-    self->t = 0;
-    for (self->fragment_index = 0; self->fragment_index < SIZEOF(fragments); self->fragment_index++) {
-        self->fragment_start = fragments[self->fragment_index][0];
-        self->fragment_end = fragments[self->fragment_index][1];
-        self->num_reps = rand() % 4 + 3;
-        for (self->rep = 0; self->rep < self->num_reps; self->rep++) {
-            for (self->note_index = self->fragment_start; self->note_index < self->fragment_end; self->note_index++) {
-                self->dur = score[self->note_index].duration / 4.0f;
-                if (score[self->note_index].pitch == 0) {
-                    for (; self->t < self->dur; self->t += dt) {
-                        cr_yield(0);
-                    }
-                    self->t -= self->dur;
+    gen_begin;
+    t = 0;
+    osc = choice(osc_funcs);
+    for (fragment_index = 0; fragment_index < SIZEOF(fragments); fragment_index++) {
+        fragment_start = fragments[fragment_index][0];
+        fragment_end = fragments[fragment_index][1];
+        num_reps = rand() % 4 + 3;
+        for (rep = 0; rep < num_reps; rep++) {
+            for (note_index = fragment_start; note_index < fragment_end; note_index++) {
+                dur = score[note_index].duration / 4.0f;
+                if (score[note_index].pitch == 0) {
+                    for (; t < dur; t += dt) yield(0);
+                    t -= dur;
                     continue;
                 }
-                self->env_time = 0;
-                self->freq = m2f(score[self->note_index].pitch);
-                if (self->dur == 0) {
+                env_time = 0;
+                freq = m2f(score[note_index].pitch);
+                if (dur == 0) {
                     // Grace note
-                    self->dur = (score[self->note_index + 1].duration / 4.0f) * grace_note_frac;
-                } else if (self->note_index > 0 && score[self->note_index - 1].duration == 0) {
+                    dur = (score[note_index + 1].duration / 4.0f) * grace_note_frac;
+                } else if (note_index > 0 && score[note_index - 1].duration == 0) {
                     // Last note was a grace note
-                    self->dur *= (1 - grace_note_frac);
+                    dur *= (1 - grace_note_frac);
                 }
-                self->amp = amplitudes[score[self->note_index].velocity - 1];
-                for (; self->t < self->dur; self->t += dt) {
-                    cr_yield(env(&self->env_time, self->dur) * osc(&self->osc_phase, self->freq) * self->amp);
+                amp = amplitudes[score[note_index].velocity - 1];
+                for (; t < dur; t += dt) {
+                    yield(env(&env_time, dur) * osc(&osc_phase, freq) * amp);
                 }
-                self->t -= self->dur;
+                t -= dur;
             }
         }
     }
-    cr_end(0);
+    gen_end(0);
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -86,21 +77,5 @@ void setup(unsigned int seed) {
 
 EMSCRIPTEN_KEEPALIVE
 float process() {
-    static play_score_state a = {0}, b = {0}, c = {0};
-    return (
-        play_pulse() +
-        play_score(&a, (osc_func)saw)*5 +
-        play_score(&b, (osc_func)sqr)*5 +
-        play_score(&c, (osc_func)tri)*5
-    ) / 16;
+    return (play_pulse() + play_score()*3)/4;
 }
-
-#ifndef __EMSCRIPTEN__
-int main() {
-    for (;;) {
-        float x = process();
-        fwrite(&x, 4, 1, stdout);
-    }
-    return 0;
-}
-#endif

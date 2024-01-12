@@ -1,6 +1,35 @@
+// deck: a utility library for writing score cards
+
+#ifdef __EMSCRIPTEN__
+    #include <emscripten.h>
+#else
+    // This supports debugging by running natively.
+    // To use this, just do an ordinary (non-Emscripten) build,
+    // and run the program with the output piped into `sox -tf32 -r 44.1k - -d`.
+    // (To generate debug output, just print to stderr instead of stdout.)
+    #define EMSCRIPTEN_KEEPALIVE
+    #include <stdio.h>
+    #include <time.h>
+
+    void setup(unsigned int seed) __attribute__((weak));
+    float process();
+
+    int main() {
+        if (setup) {
+            setup(time(NULL));
+        }
+        for (;;) {
+            float x = process();
+            fwrite(&x, 4, 1, stdout);
+        }
+        return 0;
+    }
+#endif
+
 #include <math.h>
 
 #define SIZEOF(arr) (sizeof(arr) / sizeof(*arr))
+#define choice(arr) (arr[rand() % SIZEOF(arr)])
 
 const float dt = 1.0 / 44100.0;
 
@@ -15,7 +44,7 @@ float m2f(int pitch) {
 }
 
 // Oscillators
-typedef float (*osc_func)(void *state, float freq);
+typedef float (*osc_func)(float *state, float freq);
 
 #define define_osc(name, expression) \
     float name(float *pphase, float freq) { \
