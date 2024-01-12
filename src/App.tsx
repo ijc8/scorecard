@@ -122,7 +122,7 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
                     <div><span style={{ fontSize: "52px", verticalAlign: "top" }}>Shrink binary.</span> <Flatten style={{ height: "56px" }} /></div>
                 </div>
                 </div>}
-            <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", padding: "0 20px", visibility: error ? "hidden" : "visible", width: "100%" }} width="1" height="1"></canvas>
+            <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", padding: "0 20px", visibility: error ? "hidden" : "inherit", width: "100%" }} width="1" height="1"></canvas>
         </div>
         <h2 style={{ userSelect: "none" }}>{title} | {size} bytes {/* TODO: add link and perhaps download buttons with icons */}</h2>
         <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", marginBottom: "1em", fontSize: "24px" }}>
@@ -156,7 +156,16 @@ function Scan({ onScan }) {
     />
 }
 
-const About = () => "It's ScoreCard! (TODO)"
+function About() {
+    return <div style={{ fontSize: "18px", textAlign: "left", padding: "0 32px" }}>
+            <span style={{ fontSize: "20px" }}><img src="logo.png" height="16" style={{ paddingRight: "0.12em" }} /> is a player for "score cards": QR codes containing tiny generative music programs.</span> A score card looks like this:
+            <p>TODO embed demos</p>
+            Each QR code contains a valid URL (linking to this web app, the score card player) and an entire audio-generating WebAssembly program. Because the QR code contains the piece itself, even if the link breaks, the code can still be read and played back by an instance of the ScoreCard player hosted somewhere else, or by a player that runs outside of the browser.
+            <p>This also implies that piece must fit in a QR code, implying an max executable size of just 2,953 bytes (more like 2,900 bytes after encoding it in a URL).</p>
+            <p>To get started, <a href="#TODO" style={{ textDecoration: "underline" }}>Scan</a> a score card or <a href="#TODO" style={{ textDecoration: "underline" }}>Create</a> one.</p>
+            <p>Happy hacking & joyful jamming!<br/>- ijc</p>
+    </div>
+}
 
 function Create({ assemble, wat, setWAT }) {
     return <>
@@ -178,8 +187,8 @@ function App() {
     const [state, _setState] = useState("stopped")
     const [time, setTime] = useState(0)
     const [error, setError] = useState(false)
-    // const encoded = new URLSearchParams(window.location.search).get("c")
-    const [tab, setTab] = useState(3)
+    const encoded = new URLSearchParams(window.location.search).get("c")
+    const [tab, setTab] = useState(encoded ? 1 : 3)
     const qrCanvas = useRef<HTMLCanvasElement>(null)
 
     const assemble = () => {
@@ -334,7 +343,6 @@ function App() {
 
     // TODO: show welcome info if there's no QR code in the URL
     return <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", maxWidth: "520px", margin: "auto", backgroundColor: "white", borderTop: "1px solid black" }}>
-        {/* <h1><a href="/" style={{ color: "black", fontFamily: "sysfont" }}>ScoreCard</a></h1> TODO: cool QRish logo */}
         <div style={{ borderLeft: "1px solid black", borderRight: "1px solid black", margin: "0 -1px" }}>
             <h1 style={{ margin: "24px 20px" }}><a href="/"><img src="logo.png" style={{ imageRendering: "pixelated", width: "100%" }} /></a></h1>
             <div style={{ display: "flex" }}>
@@ -343,7 +351,6 @@ function App() {
                 )}
             </div>
         </div>
-        {/* {tabs[tab].component} */}
         <div className="tabs" style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
             <div style={{ borderTop: "1px solid black", flexGrow: "1", alignSelf: "stretch" }}></div>
             {tabs.map(({ name }, index) =>
