@@ -17,6 +17,7 @@ import Flatten from "pixelarticons/svg/flatten.svg?react"
 import Subscriptions from "pixelarticons/svg/subscriptions.svg?react"
 import { Html5QrcodePlugin } from "./Html5QrcodePlugin"
 import logoUrl from "./assets/logo.png"
+import exampleCardUrl from "./assets/example-card.png"
 
 function generateSeed() {
     return Math.floor(Math.random() * Math.pow(2, 32))
@@ -168,7 +169,7 @@ function Scan({ onScan }: any) {
 function About() {
     return <div style={{ fontSize: "18px", textAlign: "left", padding: "0 32px" }}>
             <span style={{ fontSize: "20px" }}><img src={logoUrl} height="14" style={{ paddingRight: "0.12em" }} /> is a player for "score cards": QR codes containing tiny generative music programs.</span> A score card looks like this:
-            <p>TODO embed demos</p>
+            <img src={exampleCardUrl} style={{ display: "block", margin: "auto", padding: "12px" }} />
             Each QR code contains a valid URL (linking to this web app, the score card player) and an entire audio-generating WebAssembly program. Because the QR code contains the piece itself, even if the link breaks, the code can still be read and played back by an instance of the ScoreCard player hosted somewhere else, or by a player that runs outside of the browser.
             <p>This also implies that piece must fit in a QR code, implying an max executable size of just 2,953 bytes (more like 2,900 bytes after encoding it in a URL).</p>
             <p>To get started, <a href="#TODO" style={{ textDecoration: "underline" }}>Scan</a> a score card or <a href="#TODO" style={{ textDecoration: "underline" }}>Create</a> one. For more information, check out the <a href="#TODO" style={{ textDecoration: "underline" }}>README</a>.</p>
