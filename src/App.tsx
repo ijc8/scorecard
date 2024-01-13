@@ -184,7 +184,18 @@ function About({ setTab }: any) {
     </div>
 }
 
-function Create({ assemble, wat, setWAT }: any) {
+function Create({ loadBinary, wat, setWAT }: any) {
+    const assemble = async () => {
+        console.log("assembling", wat)
+        console.log("text size", wat.length)
+        // const buffer = compile(textarea.value)
+        const wabt = await wabtPromise
+        // TODO: Show errors.
+        const result = wabt.parseWat("main.wasm", wat).toBinary({})
+        console.log(result.log)
+        loadBinary(result.buffer)
+    }
+
     return <>
         <textarea style={{ width: "100%", flexGrow: "1" }} value={wat} onChange={e => setWAT(e.target.value)}></textarea><br />
         <button id="assemble" onClick={assemble}>Assemble!</button><br />
@@ -207,16 +218,6 @@ function App() {
     const encoded = new URLSearchParams(window.location.search).get("c")
     const [tab, setTab] = useState(encoded ? 1 : 3)
     const qrCanvas = useRef<HTMLCanvasElement>(null)
-
-    const assemble = async () => {
-        console.log("assembling", wat)
-        console.log("text size", wat.length)
-        // const buffer = compile(textarea.value)
-        const wabt = await wabtPromise
-        const result = wabt.parseWat("main.wasm", wat).toBinary({})
-        console.log(result.log)
-        loadBinary(result.buffer)
-    }
 
     const loadBinary = async (buffer: Uint8Array) => {
         setSize(buffer.length)
@@ -363,7 +364,7 @@ function App() {
     const tabs = [
         { name: "Listen", component: <Listen {...{qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error}} /> },
         { name: "Scan", component: <Scan {...{onScan, tab}} /> },
-        { name: "Create", component: <Create {...{assemble, wat, setWAT}} /> },
+        { name: "Create", component: <Create {...{loadBinary, wat, setWAT}} /> },
         { name: "About", component: <About {...{setTab}} /> },
     ]
 
