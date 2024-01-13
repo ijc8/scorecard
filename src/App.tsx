@@ -242,7 +242,7 @@ function App() {
         // node.port.postMessage(module)
         sendToWorklet({ cmd: "loadModule", buffer })
         // Generate QR code
-        const prefix = window.location.origin + window.location.pathname
+        const prefix = window.location.origin + window.location.pathname.replace(/\/$/, "") // trim trailing slash
         const seedParam = seedLock ? `s=${encode(BigInt(seed))}&` : ""
         console.log(seedLock, seedParam)
         const url = `${prefix}?${seedParam}c=${encodeBlob(buffer)}`
