@@ -144,8 +144,8 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
                 </div>}
             <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", visibility: showMessage ? "hidden" : "inherit", width: "100%" }} width="1" height="1"></canvas>
         </div>
-        <h2 style={{ userSelect: "none" }}>{title} | {size} bytes {/* TODO: add link and perhaps download buttons with icons */}</h2>
-        <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", marginBottom: "1em", fontSize: "24px" }}>
+        <h2 style={{ userSelect: "none", margin: "20px" }}>{title} | {size} bytes {/* TODO: add link and perhaps download buttons with icons */}</h2>
+        <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", fontSize: "24px" }}>
             <div style={{ userSelect: "none" }}><Clock style={smallIconStyle} /> <span style={{ verticalAlign: "middle", display: "inline-block", width: "2.3em" }}>{formatTime(time)}</span></div>
             <button onClick={reset}><Prev style={bigIconStyle} /></button>
             <button id="start" onClick={() => setState(state === "playing" ? "paused" : "playing")}>{state === "playing" ? <Pause style={bigIconStyle} /> : <Play style={bigIconStyle} />}</button>
@@ -159,16 +159,14 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
     </>
 }
 
-function Scan({ onScan }: any) {
+function Scan({ onScan, tab }: any) {
     const qrCodeSuccessCallback = (data: string) => {
         console.log("scanned", data)
         if (!onScan(data)) {
             console.log("not a valid scorecard URL") // TODO: show error somewhere
         }
     }
-    // TODO: make UI size/position more consistent
-    // TODO: stop scanning upon tab switch
-    return <Html5QrcodePlugin
+    return tab === 1 && <Html5QrcodePlugin
         fps={10}
         qrbox={250}
         disableFlip={false}
@@ -183,13 +181,13 @@ function About({ setTab }: any) {
             Each QR code contains a valid URL (linking to this web app, the score card player) and an entire audio-generating WebAssembly program. Because the QR code contains the piece itself, even if the link breaks, the code can still be read and played back by an instance of the ScoreCard player hosted somewhere else, or by a player that runs outside of the browser.
             <p>This also implies that piece must fit in a QR code, implying an max executable size of just 2,953 bytes (more like 2,900 bytes after encoding it in a URL).</p>
             <p>To get started, <a href="#" onClick={() => setTab(1)} style={{ textDecoration: "underline" }}>Scan</a> a score card or <a href="#" onClick={() => setTab(2)} style={{ textDecoration: "underline" }}>Create</a> one. For more information, check out the <a href="https://github.com/ijc8/scorecard" style={{ textDecoration: "underline" }}>README</a>.</p>
-            <p>Happy hacking & joyful jamming!<br/>- ijc</p>
+            <p style={{ marginBottom: 0 }}>Happy hacking & joyful jamming!<br/>- ijc</p>
     </div>
 }
 
 function Create({ assemble, wat, setWAT }: any) {
     return <>
-        <textarea style={{ width: "40em", height: "40em", maxWidth: "100%" }} value={wat} onChange={e => setWAT(e.target.value)}></textarea><br />
+        <textarea style={{ width: "100%", flexGrow: "1" }} value={wat} onChange={e => setWAT(e.target.value)}></textarea><br />
         <button id="assemble" onClick={assemble}>Assemble!</button><br />
     </>
 }
@@ -365,7 +363,7 @@ function App() {
 
     const tabs = [
         { name: "Listen", component: <Listen {...{qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error}} /> },
-        { name: "Scan", component: <Scan {...{onScan}} /> },
+        { name: "Scan", component: <Scan {...{onScan, tab}} /> },
         { name: "Create", component: <Create {...{assemble, wat, setWAT}} /> },
         { name: "About", component: <About {...{setTab}} /> },
     ]
@@ -373,8 +371,8 @@ function App() {
     // TODO: show welcome info if there's no QR code in the URL
     return <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", maxWidth: "520px", margin: "auto", backgroundColor: "white", borderTop: "1px solid black" }}>
         <div style={{ borderLeft: "1px solid black", borderRight: "1px solid black", margin: "0 -1px" }}>
-            <div style={{ margin: "0 20px "}} >
-                <h1 style={{ margin: "24px 0" }}><a href="/"><img src={logoUrl} style={{ imageRendering: "pixelated", width: "100%" }} /></a></h1>
+            <div style={{ margin: "20px"}} >
+                <h1 style={{ margin: "0 0 20px 0" }}><a href="/"><img src={logoUrl} style={{ imageRendering: "pixelated", width: "100%" }} /></a></h1>
                 <div style={{ display: "flex" }}>
                     {tabs.map(({ component }, index) =>
                         <div style={{ display: "flex", flexDirection: "column", visibility: index === tab ? "visible" : "hidden", width: "100%", marginRight: "-100%" }}>{component}</div>
