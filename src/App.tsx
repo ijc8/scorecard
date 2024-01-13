@@ -125,14 +125,14 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
     const DiceIcon = seedLock ? CloseBox : Dice
     return <>
         <div style={{ position: "relative" }}>
-            {error && <div style={{ position: "absolute", padding: "0 20px", fontSize: "48px", height: "100%", width: "100%" }}>
+            {error && <div style={{ position: "absolute", fontSize: "48px", height: "100%", width: "100%" }}>
                 <div style={{ border: "16px solid black", height: "100%", lineHeight: 1, display: "flex", flexDirection: "column", justifyContent: "space-evenly" }}>
                     <div><span style={{ fontSize: "96px", verticalAlign: "top" }}>TOO BIG</span> <Subscriptions style={{ height: "96px" }} /><br/></div>
                     <div><span style={{ fontSize: "56px", verticalAlign: "top" }}>Can't encode!</span> <Downasaur style={{ height: "56px" }} /></div>
                     <div><span style={{ fontSize: "52px", verticalAlign: "top" }}>Shrink binary.</span> <Flatten style={{ height: "56px" }} /></div>
                 </div>
                 </div>}
-            <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", padding: "0 20px", visibility: error ? "hidden" : "inherit", width: "100%" }} width="1" height="1"></canvas>
+            <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", visibility: error ? "hidden" : "inherit", width: "100%" }} width="1" height="1"></canvas>
         </div>
         <h2 style={{ userSelect: "none" }}>{title} | {size} bytes {/* TODO: add link and perhaps download buttons with icons */}</h2>
         <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", marginBottom: "1em", fontSize: "24px" }}>
@@ -166,13 +166,13 @@ function Scan({ onScan }: any) {
     />
 }
 
-function About() {
-    return <div style={{ fontSize: "18px", textAlign: "left", padding: "0 32px" }}>
+function About({ setTab }: any) {
+    return <div style={{ fontSize: "18px", textAlign: "left", padding: "0 12px" }}>
             <span style={{ fontSize: "20px" }}><img src={logoUrl} height="14" style={{ paddingRight: "0.12em" }} /> is a player for "score cards": QR codes containing tiny generative music programs.</span> A score card looks like this:
             <img src={exampleCardUrl} style={{ display: "block", margin: "auto", padding: "12px" }} />
             Each QR code contains a valid URL (linking to this web app, the score card player) and an entire audio-generating WebAssembly program. Because the QR code contains the piece itself, even if the link breaks, the code can still be read and played back by an instance of the ScoreCard player hosted somewhere else, or by a player that runs outside of the browser.
             <p>This also implies that piece must fit in a QR code, implying an max executable size of just 2,953 bytes (more like 2,900 bytes after encoding it in a URL).</p>
-            <p>To get started, <a href="#TODO" style={{ textDecoration: "underline" }}>Scan</a> a score card or <a href="#TODO" style={{ textDecoration: "underline" }}>Create</a> one. For more information, check out the <a href="#TODO" style={{ textDecoration: "underline" }}>README</a>.</p>
+            <p>To get started, <a href="#" onClick={() => setTab(1)} style={{ textDecoration: "underline" }}>Scan</a> a score card or <a href="#" onClick={() => setTab(2)} style={{ textDecoration: "underline" }}>Create</a> one. For more information, check out the <a href="https://github.com/ijc8/scorecard" style={{ textDecoration: "underline" }}>README</a>.</p>
             <p>Happy hacking & joyful jamming!<br/>- ijc</p>
     </div>
 }
@@ -357,17 +357,19 @@ function App() {
         { name: "Listen", component: <Listen {...{qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error}} /> },
         { name: "Scan", component: <Scan {...{onScan}} /> },
         { name: "Create", component: <Create {...{assemble, wat, setWAT}} /> },
-        { name: "About", component: <About /> },
+        { name: "About", component: <About {...{setTab}} /> },
     ]
 
     // TODO: show welcome info if there's no QR code in the URL
     return <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", maxWidth: "520px", margin: "auto", backgroundColor: "white", borderTop: "1px solid black" }}>
         <div style={{ borderLeft: "1px solid black", borderRight: "1px solid black", margin: "0 -1px" }}>
-            <h1 style={{ margin: "24px 20px" }}><a href="/"><img src={logoUrl} style={{ imageRendering: "pixelated", width: "100%" }} /></a></h1>
-            <div style={{ display: "flex" }}>
-                {tabs.map(({ component }, index) =>
-                    <div style={{ display: "flex", flexDirection: "column", visibility: index === tab ? "visible" : "hidden", width: "100%", marginRight: "-100%" }}>{component}</div>
-                )}
+            <div style={{ margin: "0 20px "}} >
+                <h1 style={{ margin: "24px 0" }}><a href="/"><img src={logoUrl} style={{ imageRendering: "pixelated", width: "100%" }} /></a></h1>
+                <div style={{ display: "flex" }}>
+                    {tabs.map(({ component }, index) =>
+                        <div style={{ display: "flex", flexDirection: "column", visibility: index === tab ? "visible" : "hidden", width: "100%", marginRight: "-100%" }}>{component}</div>
+                    )}
+                </div>
             </div>
         </div>
         <div className="tabs" style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
