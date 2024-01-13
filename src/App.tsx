@@ -58,7 +58,7 @@ async function sendToWorklet(message: any) {
     node.port.postMessage(message)
 }
 
-// For iOS screen-lock, (TODO: Consider NoSleep.js.)
+// For iOS screen-lock:
 context.onstatechange = () => {
     if (context.state === "suspended") {
         context.resume()
@@ -149,7 +149,6 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
             <div style={{ userSelect: "none" }}><Clock style={smallIconStyle} /> <span style={{ verticalAlign: "middle", display: "inline-block", width: "2.3em" }}>{formatTime(time)}</span></div>
             <button onClick={reset}><Prev style={bigIconStyle} /></button>
             <button id="start" onClick={() => setState(state === "playing" ? "paused" : "playing")}>{state === "playing" ? <Pause style={bigIconStyle} /> : <Play style={bigIconStyle} />}</button>
-            {/* TODO: allow user to specify seed, possibly share somehow */}
             <span>
                 <button><DiceIcon style={smallIconStyle} onClick={() => setSeedLock(!seedLock)} /></button>
                 <span style={{ userSelect: "none" }}>{" "}</span>
@@ -368,7 +367,6 @@ function App() {
         { name: "About", component: <About {...{setTab}} /> },
     ]
 
-    // TODO: show welcome info if there's no QR code in the URL
     return <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", maxWidth: "520px", margin: "auto", backgroundColor: "white", borderTop: "1px solid black" }}>
         <div style={{ borderLeft: "1px solid black", borderRight: "1px solid black", margin: "0 -1px" }}>
             <div style={{ margin: "20px"}} >
