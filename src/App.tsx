@@ -17,7 +17,6 @@ import Flatten from "pixelarticons/svg/flatten.svg?react"
 import Subscriptions from "pixelarticons/svg/subscriptions.svg?react"
 import { Html5QrcodePlugin } from "./Html5QrcodePlugin"
 
-
 function generateSeed() {
     return Math.floor(Math.random() * Math.pow(2, 32))
 }
@@ -41,11 +40,18 @@ function formatTime(seconds: number) {
 const context = new AudioContext({ sampleRate: 44100 })
 console.log(context.sampleRate)
 
-await context.audioWorklet.addModule("worklet.js")
-console.log("added module")
-const node = new AudioWorkletNode(context, "custom-processor")
-node.connect(context.destination)
-console.log("created and connected node")
+const nodePromise = context.audioWorklet.addModule("worklet.js").then(() => {
+    console.log("added module")
+    const node = new AudioWorkletNode(context, "custom-processor")
+    node.connect(context.destination)
+    console.log("created and connected node")
+    return node
+})
+
+async function sendToWorklet(message: any) {
+    const node = await nodePromise
+    node.port.postMessage(message)
+}
 
 // For iOS screen-lock, (TODO: Consider NoSleep.js.)
 context.onstatechange = () => {
@@ -72,9 +78,10 @@ function profile(instance: WebAssembly.Instance) {
     console.log("process:", end - start, "ms", (end - start) / 1000, "frac", 1000 / (end - start), "mult")
 }
 
-const wabt = await loadWabt()
+// TODO: Maybe don't do this until the user switches to the "Create" tab
+const wabtPromise = loadWabt()
 
-function SeedInput({ seed, setSeed }) {
+function SeedInput({ seed, setSeed }: any) {
     const [contents, setContents] = useState("")
     useEffect(() => {
         setContents(formatSeed(seed))
@@ -109,7 +116,8 @@ function SeedInput({ seed, setSeed }) {
     />
 }
 
-function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error }) {
+// TODO: Specify types
+function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error }: any) {
     const bigIconStyle = { height: "48px", verticalAlign: "middle" }
     const smallIconStyle = { height: "24px", verticalAlign: "middle" }
     const DiceIcon = seedLock ? CloseBox : Dice
@@ -139,7 +147,7 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
     </>
 }
 
-function Scan({ onScan }) {
+function Scan({ onScan }: any) {
     const qrCodeSuccessCallback = (data: string) => {
         console.log("scanned", data)
         if (!onScan(data)) {
@@ -167,7 +175,7 @@ function About() {
     </div>
 }
 
-function Create({ assemble, wat, setWAT }) {
+function Create({ assemble, wat, setWAT }: any) {
     return <>
         <textarea style={{ width: "40em", height: "40em", maxWidth: "100%" }} value={wat} onChange={e => setWAT(e.target.value)}></textarea><br />
         <button id="assemble" onClick={assemble}>Assemble!</button><br />
@@ -182,8 +190,8 @@ function App() {
     const [seed, setSeed] = useState(0)
     const [seedLock, setSeedLock] = useState(false)
     const [wat, setWAT] = useState("")
-    const [link, setLink] = useState("")
-    const [download, setDownload] = useState("")
+    // const [link, setLink] = useState("")
+    // const [download, setDownload] = useState("")
     const [state, _setState] = useState("stopped")
     const [time, setTime] = useState(0)
     const [error, setError] = useState(false)
@@ -191,21 +199,17 @@ function App() {
     const [tab, setTab] = useState(encoded ? 1 : 3)
     const qrCanvas = useRef<HTMLCanvasElement>(null)
 
-    const assemble = () => {
+    const assemble = async () => {
         console.log("assembling", wat)
         console.log("text size", wat.length)
         // const buffer = compile(textarea.value)
+        const wabt = await wabtPromise
         const result = wabt.parseWat("main.wasm", wat).toBinary({})
         console.log(result.log)
         loadBinary(result.buffer)
     }
 
-    const loadBinary = (buffer: Uint8Array) => {
-        console.log("disassembling")
-        const disassembled = wabt.readWasm(buffer, { readDebugNames: true })
-        disassembled.applyNames()
-        setWAT(disassembled.toText({ foldExprs: false, inlineExport: true }))
-
+    const loadBinary = async (buffer: Uint8Array) => {
         setSize(buffer.length)
         const module = new WebAssembly.Module(buffer)
         console.log("loaded wasm", module)
@@ -227,7 +231,7 @@ function App() {
         // Send to AudioWorklet
         // Doesn't work in iOS Safari...
         // node.port.postMessage(module)
-        node.port.postMessage({ cmd: "loadModule", buffer })
+        sendToWorklet({ cmd: "loadModule", buffer })
         // Generate QR code
         const prefix = window.location.origin + window.location.pathname
         const seedParam = seedLock ? `s=${encode(BigInt(seed))}&` : ""
@@ -247,9 +251,16 @@ function App() {
         }
         canvas.style.cssText = style
         window.history.pushState(null, "", url)
-        setLink(url)
-        setDownload(window.URL.createObjectURL(new Blob([buffer])))
+        // setLink(url)
+        // setDownload(window.URL.createObjectURL(new Blob([buffer])))
         setTab(0)
+
+        // TODO: Maybe only do this on demand/if this user is on the "Create" tab.
+        console.log("disassembling")
+        const wabt = await wabtPromise
+        const disassembled = wabt.readWasm(buffer, { readDebugNames: true })
+        disassembled.applyNames()
+        setWAT(disassembled.toText({ foldExprs: false, inlineExport: true }))
     }
 
     const reset = () => {
@@ -259,7 +270,7 @@ function App() {
             setSeed(_seed)
         }
         setTime(0)
-        node.port.postMessage({ cmd: "reset", seed: _seed })
+        sendToWorklet({ cmd: "reset", seed: _seed })
     }
 
     const setState = (_state: "playing" | "paused") => {
@@ -271,9 +282,9 @@ function App() {
                 _seed = generateSeed()
                 setSeed(_seed)
             }
-            node.port.postMessage({ cmd: "play", seed: _seed })
+            sendToWorklet({ cmd: "play", seed: _seed })
         } else if (_state === "paused") {
-            node.port.postMessage({ cmd: "pause" })
+            sendToWorklet({ cmd: "pause" })
         }
         _setState(_state)
     }
@@ -321,8 +332,14 @@ function App() {
     }, [onDrop])
 
     useEffect(() => {
-        node.port.onmessage = e => setTime(e.data / 44100)
-        return () => { node.port.onmessage = () => {} }
+        (async () => {
+            const node = await nodePromise
+            node.port.onmessage = e => setTime(e.data / 44100)
+        })()
+        return () => { (async () => {
+            const node = await nodePromise
+            node.port.onmessage = () => {}
+        })() }
     }, [])
 
     // TODO: "load example" link
