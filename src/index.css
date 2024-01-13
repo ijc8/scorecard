@@ -83,11 +83,11 @@ button:focus-visible {
   }
 }
 
-/* Source: https://fontsarena.com/sysfont-by-alina-sava/ (SIL OpenFont license) */
+/* Source: https://sysfont.com/ (SIL OpenFont license) */
 @font-face {
   font-family: 'Sysfont';
-  src: url('sysfont.woff2') format('woff2'),
-  url('sysfont.woff') format('woff');
+  src: url('assets/sysfont.woff2') format('woff2'),
+  url('assets/sysfont.woff') format('woff');
   font-weight: normal;
   font-style: normal;
 }

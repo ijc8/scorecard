@@ -16,6 +16,7 @@ import Flatten from "pixelarticons/svg/flatten.svg?react"
 // import Loader from "pixelarticons/svg/loader.svg?react"
 import Subscriptions from "pixelarticons/svg/subscriptions.svg?react"
 import { Html5QrcodePlugin } from "./Html5QrcodePlugin"
+import logoUrl from "./assets/logo.png"
 
 function generateSeed() {
     return Math.floor(Math.random() * Math.pow(2, 32))
@@ -166,7 +167,7 @@ function Scan({ onScan }: any) {
 
 function About() {
     return <div style={{ fontSize: "18px", textAlign: "left", padding: "0 32px" }}>
-            <span style={{ fontSize: "20px" }}><img src="logo.png" height="14" style={{ paddingRight: "0.12em" }} /> is a player for "score cards": QR codes containing tiny generative music programs.</span> A score card looks like this:
+            <span style={{ fontSize: "20px" }}><img src={logoUrl} height="14" style={{ paddingRight: "0.12em" }} /> is a player for "score cards": QR codes containing tiny generative music programs.</span> A score card looks like this:
             <p>TODO embed demos</p>
             Each QR code contains a valid URL (linking to this web app, the score card player) and an entire audio-generating WebAssembly program. Because the QR code contains the piece itself, even if the link breaks, the code can still be read and played back by an instance of the ScoreCard player hosted somewhere else, or by a player that runs outside of the browser.
             <p>This also implies that piece must fit in a QR code, implying an max executable size of just 2,953 bytes (more like 2,900 bytes after encoding it in a URL).</p>
@@ -361,7 +362,7 @@ function App() {
     // TODO: show welcome info if there's no QR code in the URL
     return <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", maxWidth: "520px", margin: "auto", backgroundColor: "white", borderTop: "1px solid black" }}>
         <div style={{ borderLeft: "1px solid black", borderRight: "1px solid black", margin: "0 -1px" }}>
-            <h1 style={{ margin: "24px 20px" }}><a href="/"><img src="logo.png" style={{ imageRendering: "pixelated", width: "100%" }} /></a></h1>
+            <h1 style={{ margin: "24px 20px" }}><a href="/"><img src={logoUrl} style={{ imageRendering: "pixelated", width: "100%" }} /></a></h1>
             <div style={{ display: "flex" }}>
                 {tabs.map(({ component }, index) =>
                     <div style={{ display: "flex", flexDirection: "column", visibility: index === tab ? "visible" : "hidden", width: "100%", marginRight: "-100%" }}>{component}</div>

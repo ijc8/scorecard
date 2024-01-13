@@ -64,12 +64,12 @@
     border: none;
     border-top: 1px solid black;
     background-color: inherit;
-    background-image: url("tab-inactive.png");
+    background-image: url("assets/tab-inactive.png");
     background-size: 100% 100%;
     image-rendering: pixelated;
 }
 
 .tabs > button.active {
     border-top: 1px solid white;
-    background-image: url("tab.png");
+    background-image: url("assets/tab.png");
 }
