@@ -4,8 +4,7 @@
 #include "in.h"
 #include "deck.h"
 
-EMSCRIPTEN_KEEPALIVE
-const char title[] = "in.c (three voices)";
+define_title("in.c (three voices)");
 
 float play_pulse() {
     const int freq = m2f(84);
@@ -26,7 +25,7 @@ float play_pulse() {
     gen_end(0);
 }
 
-rgen_vars(play_score,
+regen_vars(play_score,
     int num_reps, rep, fragment_index, fragment_start, fragment_end, note_index;
     float freq, dur, amp, t;
     float env_time;
@@ -35,7 +34,7 @@ rgen_vars(play_score,
 float play_score(play_score_state *self, osc_func osc) {
     static const float grace_note_frac = 0.05f;
     static const float amplitudes[] = {0.44f, 0.66f, 1.0f};
-    rgen_begin;
+    regen_begin;
     self->t = 0;
     for (self->fragment_index = 0; self->fragment_index < SIZEOF(fragments); self->fragment_index++) {
         self->fragment_start = fragments[self->fragment_index][0];
@@ -45,10 +44,7 @@ float play_score(play_score_state *self, osc_func osc) {
             for (self->note_index = self->fragment_start; self->note_index < self->fragment_end; self->note_index++) {
                 self->dur = score[self->note_index].duration / 4.0f;
                 if (score[self->note_index].pitch == 0) {
-                    for (; self->t < self->dur; self->t += dt) {
-                        ryield(0);
-                    }
-                    self->t -= self->dur;
+                    resleep(self->t, self->dur);
                     continue;
                 }
                 self->env_time = 0;
@@ -62,13 +58,13 @@ float play_score(play_score_state *self, osc_func osc) {
                 }
                 self->amp = amplitudes[score[self->note_index].velocity - 1];
                 for (; self->t < self->dur; self->t += dt) {
-                    ryield(env(&self->env_time, self->dur) * osc(&self->osc_phase, self->freq) * self->amp);
+                    reyield(env(&self->env_time, self->dur) * osc(&self->osc_phase, self->freq) * self->amp);
                 }
                 self->t -= self->dur;
             }
         }
     }
-    rgen_end(0);
+    regen_end(0);
 }
 
 EMSCRIPTEN_KEEPALIVE

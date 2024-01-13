@@ -2,6 +2,9 @@
 
 #ifdef __EMSCRIPTEN__
     #include <emscripten.h>
+
+    EMSCRIPTEN_KEEPALIVE void setup(unsigned int seed);
+    EMSCRIPTEN_KEEPALIVE float process();
 #else
     // This supports debugging by running natively.
     // To use this, just do an ordinary (non-Emscripten) build,
@@ -27,11 +30,14 @@
 #endif
 
 #include <math.h>
+#include "generator.h"
+
+#define define_title(s) EMSCRIPTEN_KEEPALIVE char title[] = s
 
 #define SIZEOF(arr) (sizeof(arr) / sizeof(*arr))
 #define choice(arr) (arr[rand() % SIZEOF(arr)])
 
-const float dt = 1.0 / 44100.0;
+float dt = 1.0 / 44100.0;
 
 float m2f(int pitch) {
     // This approach saves 458 bytes compared to using powf(),
@@ -42,6 +48,9 @@ float m2f(int pitch) {
     while (pitch++ < 0) freq *= 0.9438743126816935;
     return freq;
 }
+
+#define sleep(t, dur) for (; t < dur; t += dt) yield(0); t -= dur
+#define resleep(t, dur) for (; t < dur; t += dt) reyield(0); t -= dur
 
 // Oscillators
 typedef float (*osc_func)(float *state, float freq);
@@ -58,6 +67,11 @@ typedef float (*osc_func)(float *state, float freq);
 define_osc(sqr, phase < 0.5 ? -1 : 1)
 define_osc(saw, phase * 2 - 1)
 define_osc(tri, (phase < 0.5 ? phase : 1 - phase) * 2 - 1)
+
+// Other sources
+float noise() {
+    return rand() / (float)RAND_MAX * 2 - 1;
+}
 
 // Envelopes
 float env(float *t, float dur) {

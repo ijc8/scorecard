@@ -1,11 +1,8 @@
 // emcc -Oz in.c -Wall --no-entry -s SUPPORT_ERRNO=0 -s SUPPORT_LONGJMP=0 -o in.wasm
-#include <stdlib.h>
-#include "generator.h"
-#include "in.h"
 #include "deck.h"
+#include "in.h"
 
-EMSCRIPTEN_KEEPALIVE
-const char title[] = "in.c";
+define_title("in.c");
 
 float play_pulse() {
     const int freq = m2f(84);
@@ -45,8 +42,7 @@ float play_score() {
             for (note_index = fragment_start; note_index < fragment_end; note_index++) {
                 dur = score[note_index].duration / 4.0f;
                 if (score[note_index].pitch == 0) {
-                    for (; t < dur; t += dt) yield(0);
-                    t -= dur;
+                    sleep(t, dur);
                     continue;
                 }
                 env_time = 0;
@@ -69,12 +65,10 @@ float play_score() {
     gen_end(0);
 }
 
-EMSCRIPTEN_KEEPALIVE
 void setup(unsigned int seed) {
     srand(seed);
 }
 
-EMSCRIPTEN_KEEPALIVE
 float process() {
     return (play_pulse() + play_score()*3)/4;
 }
