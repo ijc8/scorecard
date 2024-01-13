@@ -15,6 +15,9 @@ import Flatten from "pixelarticons/svg/flatten.svg?react"
 // import Alert from "pixelarticons/svg/alert.svg?react"
 // import Loader from "pixelarticons/svg/loader.svg?react"
 import Subscriptions from "pixelarticons/svg/subscriptions.svg?react"
+import Camera from "pixelarticons/svg/camera.svg?react"
+import EditBox from "pixelarticons/svg/edit-box.svg?react"
+import DragAndDrop from "pixelarticons/svg/drag-and-drop.svg?react"
 import { Html5QrcodePlugin } from "./Html5QrcodePlugin"
 import logoUrl from "./assets/logo.png"
 import exampleCardUrl from "./assets/example-card.png"
@@ -122,17 +125,24 @@ function SeedInput({ seed, setSeed }: any) {
 function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error }: any) {
     const bigIconStyle = { height: "48px", verticalAlign: "middle" }
     const smallIconStyle = { height: "24px", verticalAlign: "middle" }
+    const inlineIconStyle = { height: "48px", verticalAlign: "bottom" }
     const DiceIcon = seedLock ? CloseBox : Dice
+    const showMessage = error || (size === 0)
     return <>
         <div style={{ position: "relative" }}>
-            {error && <div style={{ position: "absolute", fontSize: "48px", height: "100%", width: "100%" }}>
+            {showMessage && <div style={{ position: "absolute", fontSize: "48px", height: "100%", width: "100%", userSelect: "none" }}>
                 <div style={{ border: "16px solid black", height: "100%", lineHeight: 1, display: "flex", flexDirection: "column", justifyContent: "space-evenly" }}>
-                    <div><span style={{ fontSize: "96px", verticalAlign: "top" }}>TOO BIG</span> <Subscriptions style={{ height: "96px" }} /><br/></div>
-                    <div><span style={{ fontSize: "56px", verticalAlign: "top" }}>Can't encode!</span> <Downasaur style={{ height: "56px" }} /></div>
-                    <div><span style={{ fontSize: "52px", verticalAlign: "top" }}>Shrink binary.</span> <Flatten style={{ height: "56px" }} /></div>
+                    {error ? <>
+                        <div><span style={{ fontSize: "96px", verticalAlign: "top" }}>TOO BIG</span> <Subscriptions style={{ height: "96px" }} /></div>
+                        <div><span style={{ fontSize: "56px", verticalAlign: "top" }}>Can't encode!</span> <Downasaur style={{ height: "56px" }} /></div>
+                        <div><span style={{ fontSize: "52px", verticalAlign: "top" }}>Shrink binary.</span> <Flatten style={{ height: "56px" }} /></div>
+                    </> : <>
+                        <div><span style={{ fontSize: "96px" }}>No card!</span></div>
+                        <div><span style={{ fontSize: "48px" }}>Scan <Camera style={inlineIconStyle} />, create <EditBox style={inlineIconStyle} />, or drag & drop <DragAndDrop style={inlineIconStyle} />.</span></div>
+                    </>}
                 </div>
                 </div>}
-            <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", visibility: error ? "hidden" : "inherit", width: "100%" }} width="1" height="1"></canvas>
+            <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", visibility: showMessage ? "hidden" : "inherit", width: "100%" }} width="1" height="1"></canvas>
         </div>
         <h2 style={{ userSelect: "none" }}>{title} | {size} bytes {/* TODO: add link and perhaps download buttons with icons */}</h2>
         <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", marginBottom: "1em", fontSize: "24px" }}>
