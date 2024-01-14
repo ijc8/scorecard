@@ -41,7 +41,7 @@ float play_score(play_score_state *self, osc_func osc) {
         self->num_reps = rand() % 4 + 3;
         for (self->rep = 0; self->rep < self->num_reps; self->rep++) {
             for (self->note_index = self->fragment_start; self->note_index < self->fragment_end; self->note_index++) {
-                self->dur = score[self->note_index].duration / 4.0f;
+                self->dur = score[self->note_index].dur / 4.0f;
                 if (score[self->note_index].pitch == 0) {
                     resleep(self->t, self->dur);
                     continue;
@@ -49,8 +49,8 @@ float play_score(play_score_state *self, osc_func osc) {
                 self->freq = m2f(score[self->note_index].pitch);
                 if (self->dur == 0) {
                     // Grace note
-                    self->dur = (score[self->note_index + 1].duration / 4.0f) * grace_note_frac;
-                } else if (self->note_index > 0 && score[self->note_index - 1].duration == 0) {
+                    self->dur = (score[self->note_index + 1].dur / 4.0f) * grace_note_frac;
+                } else if (self->note_index > 0 && score[self->note_index - 1].dur == 0) {
                     // Last note was a grace note
                     self->dur *= (1 - grace_note_frac);
                 }

@@ -79,6 +79,10 @@ float env_gen(float *t, float dur) {
     return x * x;
 }
 
+float ad(float t, float attack, float decay) {
+    return t < attack ? (t / attack) : (1 - (t - attack) / decay);
+}
+
 float ramp(float t, float dur, float start, float end) {
     return t / dur * (end - start) + start;
 }
