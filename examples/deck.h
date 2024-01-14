@@ -5,6 +5,8 @@
 
     EMSCRIPTEN_KEEPALIVE void setup(unsigned int seed);
     EMSCRIPTEN_KEEPALIVE float process();
+
+    #define debug(...)
 #else
     // This supports debugging by running natively.
     // To use this, just do an ordinary (non-Emscripten) build,
@@ -13,6 +15,8 @@
     #define EMSCRIPTEN_KEEPALIVE
     #include <stdio.h>
     #include <time.h>
+
+    #define debug(...) fprintf(stderr, __VA_ARGS__)
 
     void setup(unsigned int seed) __attribute__((weak));
     float process();
