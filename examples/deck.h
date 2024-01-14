@@ -29,28 +29,27 @@
     }
 #endif
 
+#include <stdlib.h>
 #include <math.h>
 #include "generator.h"
 
-#define define_title(s) EMSCRIPTEN_KEEPALIVE char title[] = s
+#define card_title(s) EMSCRIPTEN_KEEPALIVE char title[] = s
+#define setup_rand void setup(unsigned int seed) { srand(seed); }
 
 #define SIZEOF(arr) (sizeof(arr) / sizeof(*arr))
-#define choice(arr) (arr[rand() % SIZEOF(arr)])
 
 float dt = 1.0 / 44100.0;
 
-float m2f(int pitch) {
-    // This approach saves 458 bytes compared to using powf(),
-    // with the downside that it only handles 12TET.
-    float freq = 440;
-    pitch -= 69;
-    while (pitch-- > 1) freq *= 1.0594630943592953;
-    while (pitch++ < 0) freq *= 0.9438743126816935;
-    return freq;
+// Randomness
+#define choice(arr) (arr[rand() % SIZEOF(arr)])
+
+float uniform(float a, float b) {
+    return rand() / (float)RAND_MAX * (b - a) + a;
 }
 
-#define sleep(t, dur) for (; t < dur; t += dt) yield(0); t -= dur
-#define resleep(t, dur) for (; t < dur; t += dt) reyield(0); t -= dur
+float noise() {
+    return rand() / (float)RAND_MAX * 2 - 1;
+}
 
 // Oscillators
 typedef float (*osc_func)(float *state, float freq);
@@ -68,14 +67,32 @@ define_osc(sqr, phase < 0.5 ? -1 : 1)
 define_osc(saw, phase * 2 - 1)
 define_osc(tri, (phase < 0.5 ? phase : 1 - phase) * 2 - 1)
 
-// Other sources
-float noise() {
-    return rand() / (float)RAND_MAX * 2 - 1;
+// Envelopes
+float env(float t, float dur) {
+    float x = 1 - t / dur;
+    return x * x;
 }
 
-// Envelopes
-float env(float *t, float dur) {
+float env_gen(float *t, float dur) {
     float x = 1 - *t / dur;
     *t += dt;
     return x * x;
 }
+
+float ramp(float t, float dur, float start, float end) {
+    return t / dur * (end - start) + start;
+}
+
+// Misc
+float m2f(int pitch) {
+    // This approach saves 458 bytes compared to using powf(),
+    // with the downside that it only handles 12TET.
+    float freq = 440;
+    pitch -= 69;
+    while (pitch-- > 1) freq *= 1.0594630943592953;
+    while (pitch++ < 0) freq *= 0.9438743126816935;
+    return freq;
+}
+
+#define sleep(t, dur) for (; t < dur; t += dt) yield(0); t -= dur
+#define resleep(t, dur) for (; t < dur; t += dt) reyield(0); t -= dur

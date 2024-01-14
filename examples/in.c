@@ -2,19 +2,17 @@
 #include "deck.h"
 #include "in.h"
 
-define_title("in.c");
+card_title("in.c");
 
 float play_pulse() {
     const int freq = m2f(84);
     const float dur = 0.25f;
     static float t = 0;
-    static float env_time;
     static float sqr_phase;
     gen_begin;
     for (;;) {
-        env_time = 0;
         for (; t < dur; t += dt) {
-            yield(env(&env_time, dur) * sqr(&sqr_phase, freq));
+            yield(env(t, dur) * sqr(&sqr_phase, freq));
         }
         // Subtract `dur` (rather than resetting `t` to 0 before the loop)
         // in order to avoid accumulating rounding error from truncating dur/dt.
@@ -28,8 +26,7 @@ osc_func osc_funcs[] = {sqr, saw, tri};
 float play_score() {
     static osc_func osc;
     static int num_reps, rep, fragment_index, fragment_start, fragment_end, note_index;
-    static float freq, dur, amp, t = 0;
-    static float env_time, osc_phase;
+    static float osc_phase, freq, dur, amp, t = 0;
     static const float grace_note_frac = 0.05f;
     static const float amplitudes[] = {0.44f, 0.66f, 1.0f};
     gen_begin;
@@ -45,7 +42,6 @@ float play_score() {
                     sleep(t, dur);
                     continue;
                 }
-                env_time = 0;
                 freq = m2f(score[note_index].pitch);
                 if (dur == 0) {
                     // Grace note
@@ -56,7 +52,7 @@ float play_score() {
                 }
                 amp = amplitudes[score[note_index].velocity - 1];
                 for (; t < dur; t += dt) {
-                    yield(env(&env_time, dur) * osc(&osc_phase, freq) * amp);
+                    yield(env(t, dur) * osc(&osc_phase, freq) * amp);
                 }
                 t -= dur;
             }

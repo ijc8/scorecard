@@ -5,7 +5,7 @@
 
 #define SIZEOF(arr) (sizeof(arr) / sizeof(*arr))
 
-define_title("test");
+card_title("test");
 
 const int chords[][3] = {{0, 3, 5}, {1, 2, 5}, {2, 4, 5}, {1, 4, 6}};
 const int scale[] = {0, 2, 4, 5, 7, 9, 11};
@@ -40,7 +40,7 @@ float upper() {
             for (; t < dur; t += dt) {
                 float x = 0;
                 for (i = 0; i < SIZEOF(notes); i++) {
-                    x += sqr(&notes[i].sqr_phase, notes[i].freq) * env(&notes[i].env_time, dur);
+                    x += sqr(&notes[i].sqr_phase, notes[i].freq) * env_gen(&notes[i].env_time, dur);
                 }
                 yield(x / SIZEOF(notes));
             }
@@ -67,9 +67,8 @@ float lower() {
             freq = notes[i][0];
             dur = notes[i][1];
             sqr_phase = 0;
-            env_time = 0;
             for (t = 0; t < dur; t += dt) {
-                yield(sqr(&sqr_phase, freq) * env(&env_time, dur));
+                yield(sqr(&sqr_phase, freq) * env(t, dur));
             }
         }
     }
@@ -79,24 +78,18 @@ float lower() {
 float perc() {
     const float dur = 0.125;
     static float t = 0;
-    static float env_time;
     gen_begin;
     for (;;) {
         if (rand() % 4) {
             sleep(t, dur);
             continue;
         }
-        env_time = 0;
         for (; t < dur; t += dt) {
-            yield(noise() * env(&env_time, dur));
+            yield(noise() * env(t, dur));
         }
         t -= dur;
     }
     gen_end(0);
-}
-
-float uniform(float a, float b) {
-    return rand() / (float)RAND_MAX * (b - a) + a;
 }
 
 regen_vars(thing,

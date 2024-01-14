@@ -4,7 +4,7 @@
 #include "in.h"
 #include "deck.h"
 
-define_title("in.c (three voices)");
+card_title("in.c (three voices)");
 
 float play_pulse() {
     const int freq = m2f(84);
@@ -16,7 +16,7 @@ float play_pulse() {
     for (;;) {
         env_time = 0;
         for (; t < dur; t += dt) {
-            yield(env(&env_time, dur) * sqr(&sqr_phase, freq));
+            yield(env(t, dur) * sqr(&sqr_phase, freq));
         }
         // Subtract `dur` (rather than resetting `t` to 0 before the loop)
         // in order to avoid accumulating rounding error from truncating dur/dt.
@@ -28,7 +28,6 @@ float play_pulse() {
 regen_vars(play_score,
     int num_reps, rep, fragment_index, fragment_start, fragment_end, note_index;
     float freq, dur, amp, t;
-    float env_time;
     float osc_phase;
 );
 float play_score(play_score_state *self, osc_func osc) {
@@ -47,7 +46,6 @@ float play_score(play_score_state *self, osc_func osc) {
                     resleep(self->t, self->dur);
                     continue;
                 }
-                self->env_time = 0;
                 self->freq = m2f(score[self->note_index].pitch);
                 if (self->dur == 0) {
                     // Grace note
@@ -58,7 +56,7 @@ float play_score(play_score_state *self, osc_func osc) {
                 }
                 self->amp = amplitudes[score[self->note_index].velocity - 1];
                 for (; self->t < self->dur; self->t += dt) {
-                    reyield(env(&self->env_time, self->dur) * osc(&self->osc_phase, self->freq) * self->amp);
+                    reyield(env(self->t, self->dur) * osc(&self->osc_phase, self->freq) * self->amp);
                 }
                 self->t -= self->dur;
             }
