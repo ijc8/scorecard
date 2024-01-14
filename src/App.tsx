@@ -166,8 +166,8 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
         <h2 style={{ userSelect: "none", margin: "20px" }}>{title} | {size} bytes {/* TODO: add link and perhaps download buttons with icons */}</h2>
         <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", fontSize: "24px" }}>
             <div style={{ userSelect: "none" }}><Clock style={smallIconStyle} /> <span style={{ verticalAlign: "middle", display: "inline-block", width: "2.3em" }}>{formatTime(time)}</span></div>
-            <button onTouchStart={touchStartReset} onMouseDown={mouseReset} onTouchEnd={() => events.current.reset = false} style={{ touchAction: "manipulation" }}><Prev style={bigIconStyle} /></button>
-            <button id="start" onTouchStart={touchStartToggle} onMouseDown={mouseToggle} onTouchEnd={() => events.current.toggle = false}>{state === "playing" ? <Pause style={bigIconStyle} /> : <Play style={bigIconStyle} />}</button>
+            <button onTouchStart={touchStartReset} onMouseDown={mouseReset} onMouseUp={() => { events.current.reset = false }} style={{ touchAction: "manipulation" }}><Prev style={bigIconStyle} /></button>
+            <button id="start" onTouchStart={touchStartToggle} onMouseDown={mouseToggle} onMouseUp={() => { events.current.toggle = false }}>{state === "playing" ? <Pause style={bigIconStyle} /> : <Play style={bigIconStyle} />}</button>
             <span>
                 <button><DiceIcon style={smallIconStyle} onClick={() => setSeedLock(!seedLock)} /></button>
                 <span style={{ userSelect: "none" }}>{" "}</span>
