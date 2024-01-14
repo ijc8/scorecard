@@ -174,8 +174,9 @@ function Scan({ onScan, tab }: any) {
 }
 
 function About({ setTab }: any) {
-    return <div style={{ fontSize: "18px", textAlign: "left", padding: "0 12px" }}>
-            <span style={{ fontSize: "20px" }}>ScoreCard is a player for "score cards": QR codes containing tiny generative music programs.</span> A score card looks like this:
+    // TODO: Make this text fill the card on both desktop and mobile...
+    return <div id="about" style={{ textAlign: "left", padding: "0 12px", fontSize: "15px" }}>
+            <span style={{ fontSize: "1.1em" }}>ScoreCard is a player for "score cards": QR codes containing tiny generative music programs.</span> A score card looks like this:
             <img src={exampleCardUrl} style={{ display: "block", margin: "auto", padding: "12px" }} />
             Each QR code contains a valid URL (linking to this web app, the score card player) and an entire audio-generating <a href="https://webassembly.org/">WebAssembly</a> program. Because the QR code contains the piece itself, even if the link breaks, the code can still be read and played back by an instance of the ScoreCard player hosted somewhere else, or by a player that runs outside of the browser.
             <p>This also implies that piece must fit in a QR code, implying an max executable size of just 2,953 bytes (more like 2,900 bytes after encoding it in a URL).</p>
