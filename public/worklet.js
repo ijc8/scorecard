@@ -4,7 +4,6 @@ class CustomProcessor extends AudioWorkletProcessor {
         this.playing = false
         this.pos = 0
         this.port.onmessage = async e => {
-            console.log("received", e.data)
             if (e.data.cmd === "loadModule") {
                 this.module = new WebAssembly.Module(e.data.buffer)
             } else if (e.data.cmd === "reset") {

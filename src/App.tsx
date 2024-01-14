@@ -128,6 +128,25 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
     const inlineIconStyle = { height: "48px", verticalAlign: "bottom" }
     const DiceIcon = seedLock ? CloseBox : Dice
     const showMessage = error || (size === 0)
+    // Hacking around unwanted input latency and duplicate events... ugh.
+    const events = useRef<any>({})
+    const touchStartReset = () => {
+        events.current.reset = true
+        reset()
+    }
+    const mouseReset = () => {
+        if (events.current.reset) return
+        reset()
+    }
+    const touchStartToggle = () => {
+        events.current.toggle = true
+        togglePlay()
+    }
+    const mouseToggle = () => {
+        if (events.current.toggle) return
+        togglePlay()
+    }
+    const togglePlay = () => { setState(state === "playing" ? "paused" : "playing") }
     return <>
         <div style={{ position: "relative" }}>
             {showMessage && <div style={{ position: "absolute", fontSize: "48px", height: "100%", width: "100%", userSelect: "none" }}>
@@ -147,8 +166,8 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
         <h2 style={{ userSelect: "none", margin: "20px" }}>{title} | {size} bytes {/* TODO: add link and perhaps download buttons with icons */}</h2>
         <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", fontSize: "24px" }}>
             <div style={{ userSelect: "none" }}><Clock style={smallIconStyle} /> <span style={{ verticalAlign: "middle", display: "inline-block", width: "2.3em" }}>{formatTime(time)}</span></div>
-            <button onClick={reset}><Prev style={bigIconStyle} /></button>
-            <button id="start" onClick={() => setState(state === "playing" ? "paused" : "playing")}>{state === "playing" ? <Pause style={bigIconStyle} /> : <Play style={bigIconStyle} />}</button>
+            <button onTouchStart={touchStartReset} onMouseDown={mouseReset} onTouchEnd={() => events.current.reset = false} style={{ touchAction: "manipulation" }}><Prev style={bigIconStyle} /></button>
+            <button id="start" onTouchStart={touchStartToggle} onMouseDown={mouseToggle} onTouchEnd={() => events.current.toggle = false}>{state === "playing" ? <Pause style={bigIconStyle} /> : <Play style={bigIconStyle} />}</button>
             <span>
                 <button><DiceIcon style={smallIconStyle} onClick={() => setSeedLock(!seedLock)} /></button>
                 <span style={{ userSelect: "none" }}>{" "}</span>
