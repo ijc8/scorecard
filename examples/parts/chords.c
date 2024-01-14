@@ -11,7 +11,7 @@ const float dur = 60 / tempo / 2;
 
 float process() {
     static struct {
-        int freq;
+        float freq;
         float sqr_phase;
     } notes[SIZEOF(chords[0])];
     static int c, i, j;

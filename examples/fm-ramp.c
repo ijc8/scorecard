@@ -19,7 +19,7 @@ float process() {
     if (t > dur) return 0;
     float freq = ramp(t, dur, start, end);
     float mod_freq = freq / mod_ratio;
-    freq += mod_depth*sqr(&mod_phase, mod_freq);
+    freq *= 1 + mod_depth*sqr(&mod_phase, mod_freq);
     float out = sqr(&phase, freq) * env(t, dur);
     t += dt;
     return out;
