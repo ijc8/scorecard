@@ -123,9 +123,9 @@ function SeedInput({ seed, setSeed }: any) {
 
 // TODO: Specify types
 function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error }: any) {
-    const bigIconStyle = { height: "48px", verticalAlign: "middle" }
-    const smallIconStyle = { height: "24px", verticalAlign: "middle" }
-    const inlineIconStyle = { height: "48px", verticalAlign: "bottom" }
+    const bigIconStyle = { height: "10cqw", verticalAlign: "middle" }
+    const smallIconStyle = { height: "5cqw", flexShrink: 0, verticalAlign: "middle" }
+    const inlineIconStyle = { height: "11cqh", verticalAlign: "bottom" }
     const DiceIcon = seedLock ? CloseBox : Dice
     const showMessage = error || (size === 0)
     // Hacking around unwanted input latency and duplicate events... ugh.
@@ -155,34 +155,37 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
         togglePlay()
     }
     const togglePlay = () => { setState(state === "playing" ? "paused" : "playing") }
-    return <>
+    return <div>
         <div style={{ position: "relative" }}>
             {showMessage && <div style={{ position: "absolute", fontSize: "48px", height: "100%", width: "100%", userSelect: "none" }}>
-                <div style={{ border: "16px solid black", height: "100%", lineHeight: 1, display: "flex", flexDirection: "column", justifyContent: "space-evenly" }}>
+                <div style={{ border: "16px solid black", height: "100%", containerType: "size", lineHeight: 1, display: "flex", flexDirection: "column", justifyContent: "space-evenly" }}>
                     {error ? <>
-                        <div><span style={{ fontSize: "96px", verticalAlign: "top" }}>TOO BIG</span> <Subscriptions style={{ height: "96px" }} /></div>
-                        <div><span style={{ fontSize: "56px", verticalAlign: "top" }}>Can't encode!</span> <Downasaur style={{ height: "56px" }} /></div>
-                        <div><span style={{ fontSize: "52px", verticalAlign: "top" }}>Shrink binary.</span> <Flatten style={{ height: "56px" }} /></div>
+                        <div><span style={{ fontSize: "21cqh", verticalAlign: "top" }}>TOO BIG</span> <Subscriptions style={{ height: "21cqh" }} /></div>
+                        <div><span style={{ fontSize: "12.5cqh", verticalAlign: "top" }}>Can't encode!</span> <Downasaur style={{ height: "12.5cqh" }} /></div>
+                        <div><span style={{ fontSize: "11.8cqh", verticalAlign: "top" }}>Shrink binary.</span> <Flatten style={{ height: "12.5cqh" }} /></div>
                     </> : <>
-                        <div><span style={{ fontSize: "96px" }}>No card!</span></div>
-                        <div><span style={{ fontSize: "48px" }}>Scan <Camera style={inlineIconStyle} />, create <EditBox style={inlineIconStyle} />, or drag & drop <DragAndDrop style={inlineIconStyle} />.</span></div>
+                        <div><span style={{ fontSize: "23cqh" }}>No card!</span></div>
+                        <div><span style={{ fontSize: "11cqh" }}>Scan <Camera style={inlineIconStyle} />, create <EditBox style={inlineIconStyle} />, or drag & drop <DragAndDrop style={inlineIconStyle} />.</span></div>
                     </>}
                 </div>
                 </div>}
             <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", visibility: showMessage ? "hidden" : "inherit", width: "100%" }} width="1" height="1"></canvas>
         </div>
-        <h2 style={{ userSelect: "none", margin: "20px" }}>{title} | {size} bytes {/* TODO: add link and perhaps download buttons with icons */}</h2>
-        <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", fontSize: "24px" }}>
-            <div style={{ userSelect: "none" }}><Clock style={smallIconStyle} /> <span style={{ verticalAlign: "middle", display: "inline-block", width: "2.3em" }}>{formatTime(time)}</span></div>
+        <h2 style={{ userSelect: "none", margin: "20px", fontSize: "6cqw" }}>{title} | {size} bytes {/* TODO: add link and perhaps download buttons with icons */}</h2>
+        <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", fontSize: "5cqw" }}>
+            <div style={{ userSelect: "none", display: "flex", alignItems: "center", width: "4em", justifyContent: "right" }}>
+                <Clock style={smallIconStyle} />
+                <span style={{ verticalAlign: "middle", display: "inline-block" }}>{formatTime(time)}</span>
+            </div>
             <button onTouchStart={touchStartReset} onMouseDown={mouseReset} onMouseUp={() => { events.current.reset = false }} style={{ touchAction: "manipulation" }}><Prev style={bigIconStyle} /></button>
             <button id="start" onTouchStart={touchStartToggle} onMouseDown={mouseToggle} onMouseUp={() => { events.current.toggle = false }}>{state === "playing" ? <Pause style={bigIconStyle} /> : <Play style={bigIconStyle} />}</button>
-            <span>
-                <button><DiceIcon style={smallIconStyle} onClick={() => setSeedLock(!seedLock)} /></button>
-                <span style={{ userSelect: "none" }}>{" "}</span>
+            <div style={{ display: "flex", alignItems: "center" }}>
+                <button style={{ fontSize: 0 }}><DiceIcon style={smallIconStyle} onClick={() => setSeedLock(!seedLock)} /></button>
+                &nbsp;
                 <SeedInput {...{seed, setSeed}} />
-            </span>
+            </div>
         </div>
-    </>
+    </div>
 }
 
 function Scan({ onScan, tab }: any) {
@@ -202,13 +205,15 @@ function Scan({ onScan, tab }: any) {
 
 function About({ setTab }: any) {
     // TODO: Make this text fill the card on both desktop and mobile...
-    return <div id="about" style={{ textAlign: "left", padding: "0 12px", fontSize: "15px" }}>
-            <span style={{ fontSize: "1.1em" }}>ScoreCard is a player for "score cards": QR codes containing tiny generative music programs.</span> A score card looks like this:
-            <img src={exampleCardUrl} style={{ display: "block", margin: "auto", padding: "12px" }} />
-            Each QR code contains a valid URL (linking to this web app, the score card player) and an entire audio-generating <a href="https://webassembly.org/">WebAssembly</a> program. Because the QR code contains the piece itself, even if the link breaks, the code can still be read and played back by an instance of the ScoreCard player hosted somewhere else, or by a player that runs outside of the browser.
-            <p>This also implies that piece must fit in a QR code, implying an max executable size of just 2,953 bytes (more like 2,900 bytes after encoding it in a URL).</p>
-            <p>To get started, <a href="#" onClick={() => setTab(1)} style={{ textDecoration: "underline" }}>Scan</a> a score card or <a href="#" onClick={() => setTab(2)} style={{ textDecoration: "underline" }}>Create</a> one. For more information, check out the <a href="https://github.com/ijc8/scorecard" style={{ textDecoration: "underline" }}>README</a>.</p>
-            <p style={{ marginBottom: 0 }}>Happy hacking & joyful jamming!<br/>- ijc</p>
+    return <div id="about" style={{ textAlign: "left", padding: "0 12px", containerType: "size", height: "100%" }}>
+            <div style={{ fontSize: "4cqw" }}>
+                <span style={{ fontSize: "1.1em" }}>ScoreCard is a player for "score cards": QR codes containing tiny generative music programs.</span> A score card looks like this:
+                <img src={exampleCardUrl} style={{ display: "block", margin: "auto", padding: "12px" }} />
+                Each QR code contains a valid URL (linking to this web app, the score card player) and an entire audio-generating <a href="https://webassembly.org/">WebAssembly</a> program. Because the QR code contains the piece itself, even if the link breaks, the code can still be read and played back by an instance of the ScoreCard player hosted somewhere else, or by a player that runs outside of the browser.
+                <p>This also implies that piece must fit in a QR code, implying an max executable size of just 2,953 bytes (more like 2,900 bytes after encoding it in a URL).</p>
+                <p>To get started, <a href="#" onClick={() => setTab(1)} style={{ textDecoration: "underline" }}>Scan</a> a score card or <a href="#" onClick={() => setTab(2)} style={{ textDecoration: "underline" }}>Create</a> one. For more information, check out the <a href="https://github.com/ijc8/scorecard" style={{ textDecoration: "underline" }}>README</a>.</p>
+                <p style={{ marginBottom: 0 }}>Happy hacking & joyful jamming!<br/>- ijc</p>
+            </div>
     </div>
 }
 
@@ -396,7 +401,7 @@ function App() {
         { name: "About", component: <About {...{setTab}} /> },
     ]
 
-    return <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", maxWidth: "520px", margin: "auto", backgroundColor: "white", borderTop: "1px solid black" }}>
+    return <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", width: "calc(min(100vw, 520px))", containerType: "inline-size", margin: "auto", backgroundColor: "white", borderTop: "1px solid black" }}>
         <div style={{ borderLeft: "1px solid black", borderRight: "1px solid black", margin: "0 -1px" }}>
             <div style={{ margin: "20px"}} >
                 <h1 style={{ margin: "0 0 20px 0" }}><a href="/"><img src={logoUrl} style={{ imageRendering: "pixelated", width: "100%" }} /></a></h1>
