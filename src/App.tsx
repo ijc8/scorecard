@@ -129,6 +129,8 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
     const DiceIcon = seedLock ? CloseBox : Dice
     const showMessage = error || (size === 0)
     // Hacking around unwanted input latency and duplicate events... ugh.
+    // We take some pains here so that reset and play/pause respond as quickly as possible,
+    // so that a score card can be started in sync with others or "played" rhythmically.
     const events = useRef<any>({})
     const touchStartReset = () => {
         events.current.reset = true
@@ -139,6 +141,12 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
         reset()
     }
     const touchStartToggle = () => {
+        if (context.state === "suspended") {
+            // Hack within a hack... the first time play is pressed, we need to handle it in
+            // `onMouseDown` so that we can resume the AudioContext successfully.
+            // (Apparently touchstart isn't good enough?)
+            return
+        }
         events.current.toggle = true
         togglePlay()
     }
@@ -394,7 +402,7 @@ function App() {
                 <h1 style={{ margin: "0 0 20px 0" }}><a href="/"><img src={logoUrl} style={{ imageRendering: "pixelated", width: "100%" }} /></a></h1>
                 <div style={{ display: "flex" }}>
                     {tabs.map(({ component }, index) =>
-                        <div style={{ display: "flex", flexDirection: "column", visibility: index === tab ? "visible" : "hidden", width: "100%", marginRight: "-100%" }}>{component}</div>
+                        <div key={index} style={{ display: "flex", flexDirection: "column", visibility: index === tab ? "visible" : "hidden", width: "100%", marginRight: "-100%" }}>{component}</div>
                     )}
                 </div>
             </div>
@@ -402,7 +410,7 @@ function App() {
         <div className="tabs" style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
             <div style={{ borderTop: "1px solid black", flexGrow: "1", alignSelf: "stretch" }}></div>
             {tabs.map(({ name }, index) =>
-                <button className={index === tab ? "active" : ""} onClick={() => setTab(index)}>{name}</button>
+                <button key={index} className={index === tab ? "active" : ""} onClick={() => setTab(index)}>{name}</button>
             )}
             <div style={{ borderTop: "1px solid black", flexGrow: "1", alignSelf: "stretch" }}></div>
         </div>
