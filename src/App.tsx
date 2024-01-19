@@ -10,9 +10,9 @@ import Dice from "pixelarticons/svg/dice.svg?react"
 import CloseBox from "pixelarticons/svg/close-box.svg?react"
 import Downasaur from "pixelarticons/svg/downasaur.svg?react"
 import Flatten from "pixelarticons/svg/flatten.svg?react"
-// Alternative icons for "TOO BIG":
-// import Alert from "pixelarticons/svg/alert.svg?react"
+// Alternative icon for "TOO BIG":
 // import Loader from "pixelarticons/svg/loader.svg?react"
+import Alert from "pixelarticons/svg/alert.svg?react"
 import Subscriptions from "pixelarticons/svg/subscriptions.svg?react"
 import Camera from "pixelarticons/svg/camera.svg?react"
 import EditBox from "pixelarticons/svg/edit-box.svg?react"
@@ -189,18 +189,31 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
 }
 
 function Scan({ onScan, tab }: any) {
+    const [error, setError] = useState("")
     const qrCodeSuccessCallback = (data: string) => {
-        console.log("scanned", data)
         if (!onScan(data)) {
-            console.log("not a valid scorecard URL") // TODO: show error somewhere
+            setError("Invalid ScoreCard")
         }
     }
-    return tab === 1 && <Html5QrcodePlugin
-        fps={10}
-        qrbox={250}
-        disableFlip={false}
-        qrCodeSuccessCallback={qrCodeSuccessCallback}
-    />
+    useEffect(() => {
+        if (tab !== 1) {
+            // Reset error message on tab switch
+            setError("")
+        }
+    }, [tab])
+    return tab === 1 && <>
+        <Html5QrcodePlugin
+            fps={10}
+            qrbox={250}
+            disableFlip={false}
+            qrCodeSuccessCallback={qrCodeSuccessCallback}
+        />
+        <div style={{ fontSize: "6cqw", display: "flex", justifyContent: "center", alignItems: "center" }}>
+            {error && <Alert style={{ height: "6cqw" }}/>}
+            &nbsp;
+            {error}
+        </div>
+    </>
 }
 
 function About({ setTab }: any) {
@@ -407,7 +420,7 @@ function App() {
                 <h1 style={{ margin: "0 0 20px 0" }}><a href="/"><img src={logoUrl} style={{ imageRendering: "pixelated", width: "100%" }} /></a></h1>
                 <div style={{ display: "flex" }}>
                     {tabs.map(({ component }, index) =>
-                        <div key={index} style={{ display: "flex", flexDirection: "column", visibility: index === tab ? "visible" : "hidden", width: "100%", marginRight: "-100%" }}>{component}</div>
+                        <div key={index} style={{ display: "flex", flexDirection: "column", justifyContent: "center", visibility: index === tab ? "visible" : "hidden", width: "100%", marginRight: "-100%" }}>{component}</div>
                     )}
                 </div>
             </div>

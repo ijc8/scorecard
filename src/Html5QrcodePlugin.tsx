@@ -38,7 +38,7 @@ export const Html5QrcodePlugin = (props: any) => {
             }
             const Html5QrcodeScanner = (await html5QrcodePromise).Html5QrcodeScanner
             if (!valid) return
-            const html5QrcodeScanner = new Html5QrcodeScanner(qrcodeRegionId, config, verbose)
+            html5QrcodeScanner = new Html5QrcodeScanner(qrcodeRegionId, config, verbose)
             html5QrcodeScanner.render(props.qrCodeSuccessCallback, props.qrCodeErrorCallback)
             // HACK: remove the border html5-qrcode adds to its container
             document.getElementById(qrcodeRegionId)!.style.border = "none"
@@ -57,6 +57,6 @@ export const Html5QrcodePlugin = (props: any) => {
     }, [])
 
     return (
-        <div id={qrcodeRegionId} style={{ height: "100%", display: "flex", flexDirection: "column", justifyContent: "center" }} />
+        <div id={qrcodeRegionId} style={{ display: "flex", flexDirection: "column", justifyContent: "center" }} />
     )
 }
