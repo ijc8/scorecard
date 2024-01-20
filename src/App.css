@@ -5,6 +5,19 @@
   text-align: center;
 }
 
+@media screen {
+  #app {
+    width: calc(min(100vw, 520px));
+  }
+}
+
+@media print {
+  #app {
+    width: 100%;
+    max-height: 100vh;
+  }
+}
+
 .logo {
   height: 6em;
   padding: 1.5em;

@@ -414,7 +414,7 @@ function App() {
         { name: "About", component: <About {...{setTab}} /> },
     ]
 
-    return <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", width: "calc(min(100vw, 520px))", containerType: "inline-size", margin: "auto", backgroundColor: "white", borderTop: "1px solid black" }}>
+    return <div id="app" style={{ display: "flex", flexDirection: "column", alignItems: "stretch", containerType: "inline-size", margin: "auto", backgroundColor: "white", borderTop: "1px solid black" }}>
         <div style={{ borderLeft: "1px solid black", borderRight: "1px solid black", margin: "0 -1px" }}>
             <div style={{ margin: "20px"}} >
                 <h1 style={{ margin: "0 0 20px 0" }}><a href="/"><img src={logoUrl} style={{ imageRendering: "pixelated", width: "100%" }} /></a></h1>
