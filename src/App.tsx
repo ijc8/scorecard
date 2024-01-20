@@ -282,6 +282,7 @@ function App() {
     const [size, setSize] = useState(0)
     const [seed, setSeed] = useState(0)
     const [seedLock, setSeedLock] = useState(false)
+    const [buffer, setBuffer] = useState<Uint8Array | null>(null)
     const [wat, setWAT] = useState("")
     // const [link, setLink] = useState("")
     // const [download, setDownload] = useState("")
@@ -315,6 +316,25 @@ function App() {
         // Doesn't work in iOS Safari...
         // node.port.postMessage(module)
         sendToWorklet({ cmd: "loadModule", buffer })
+        setBuffer(buffer)
+        // await generateQRCode()
+        // TODO: Maybe only do this on demand/if this user is on the "Create" tab.
+        console.log("disassembling")
+        wabtPromise.then(wabt => {
+            const disassembled = wabt.readWasm(buffer, { readDebugNames: true })
+            disassembled.applyNames()
+            setWAT(disassembled.toText({ foldExprs: false, inlineExport: true }))
+        })
+    }
+
+    const qrContents = useRef<any[]>([])
+    useEffect(() => {
+        if (!buffer) return // Nothing to encode.
+        const newQrContents = seedLock ? [buffer, seed] : [buffer]
+        if (qrContents.current.length === newQrContents.length && qrContents.current.every((x, i) => x === newQrContents[i])) {
+            // Nothing to do, previously-generated QR code is still correct.
+            return
+        }
         // Generate QR code
         const prefix = window.location.origin + window.location.pathname.replace(/\/$/, "") // trim trailing slash
         const seedParam = seedLock ? `s=${encode(BigInt(seed))}&` : ""
@@ -337,14 +357,8 @@ function App() {
         // setLink(url)
         // setDownload(window.URL.createObjectURL(new Blob([buffer])))
         setTab(0)
-
-        // TODO: Maybe only do this on demand/if this user is on the "Create" tab.
-        console.log("disassembling")
-        const wabt = await wabtPromise
-        const disassembled = wabt.readWasm(buffer, { readDebugNames: true })
-        disassembled.applyNames()
-        setWAT(disassembled.toText({ foldExprs: false, inlineExport: true }))
-    }
+        qrContents.current = seedLock ? [buffer, seed] : [buffer]
+    }, [buffer, seed, seedLock])
 
     const reset = () => {
         let _seed = seed
@@ -397,7 +411,7 @@ function App() {
 
         const encodedSeed = url.searchParams.get("s")
         if (encodedSeed) {
-            setSeed(Number(decode(encodedSeed)))
+            setSeed(Number(decode(encodedSeed.replace(/ /g, "+"))))
             setSeedLock(true)
         }
         if (encodedBlob) {
