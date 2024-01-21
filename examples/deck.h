@@ -35,6 +35,7 @@
 
 #include <stdlib.h>
 #include <math.h>
+#include <inttypes.h>
 #include "generator.h"
 
 #define card_title(s) EMSCRIPTEN_KEEPALIVE char title[] = s
@@ -42,7 +43,8 @@
 
 #define SIZEOF(arr) (sizeof(arr) / sizeof(*arr))
 
-float dt = 1.0 / 44100.0;
+#define SAMPLE_RATE (44100.0)
+float dt = 1.0 / SAMPLE_RATE;
 
 // Randomness
 #define choice(arr) (arr[rand() % SIZEOF(arr)])
@@ -69,7 +71,7 @@ typedef float (*osc_func)(float *state, float freq);
 
 define_osc(sqr, phase < 0.5 ? -1 : 1)
 define_osc(saw, phase * 2 - 1)
-define_osc(tri, (phase < 0.5 ? phase : 1 - phase) * 2 - 1)
+define_osc(tri, (phase < 0.5 ? phase : 1 - phase) * 4 - 1)
 
 // Envelopes
 float env(float t, float dur) {
@@ -92,6 +94,10 @@ float ramp(float t, float dur, float start, float end) {
 }
 
 // Misc
+// float m2f(float pitch) {
+//     return powf(2, (pitch - 69)/12.0) * 440;
+// }
+
 float m2f(int pitch) {
     // This approach saves 458 bytes compared to using powf(),
     // with the downside that it only handles 12TET.

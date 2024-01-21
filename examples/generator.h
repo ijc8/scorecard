@@ -7,10 +7,10 @@
 #define gen_begin static int gen_line_number = 0; switch (gen_line_number) { case 0:;
 #define gen_end(x) } gen_line_number = -1; return x
 
-#define yield(x)                            \
+#define yield(...)                              \
     do {                                        \
         gen_line_number = __LINE__;             \
-        return (x); case __LINE__:;             \
+        return (__VA_ARGS__); case __LINE__:;   \
     } while (0)
 
 
