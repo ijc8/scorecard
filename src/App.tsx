@@ -291,11 +291,12 @@ function App() {
     const [error, setError] = useState(false)
     const encoded = new URLSearchParams(window.location.search).get("c")
     const [tab, setTab] = useState(encoded ? 1 : 3)
+    const [dragging, setDragging] = useState(false)
     const qrCanvas = useRef<HTMLCanvasElement>(null)
 
     const loadBinary = async (buffer: Uint8Array) => {
-        setSize(buffer.length)
         const module = new WebAssembly.Module(buffer)
+        setSize(buffer.length)
         console.log("loaded wasm", module)
         const instance = new WebAssembly.Instance(module)
         profile(instance)
@@ -371,7 +372,6 @@ function App() {
     }
 
     const setState = (_state: "playing" | "paused") => {
-        console.log("hey", _state)
         if (_state === "playing") {
             if (context.state === "suspended") {
                 unmute() // for iOS
@@ -387,14 +387,6 @@ function App() {
             sendToWorklet({ cmd: "pause" })
         }
         _setState(_state)
-    }
-
-    const onDrop = async (e: DragEvent) => {
-        e.preventDefault()
-        const file = e.dataTransfer!.files[0]
-        const arrayBuffer = await file.arrayBuffer()
-        loadBinary(new Uint8Array(arrayBuffer))
-        return false
     }
 
     const onScan = (data: string) => {
@@ -427,9 +419,40 @@ function App() {
     }, [])
 
     useEffect(() => {
-        document.addEventListener("drop", onDrop)
-        return () => document.removeEventListener("drop", onDrop)
-    }, [onDrop])
+        // Support drag-and-dropping .wasm files.
+        let target: EventTarget | null = null
+
+        const drop = async (e: DragEvent) => {
+            e.preventDefault()
+            target = null
+            setDragging(false)
+
+            const file = e.dataTransfer!.files[0]
+            const arrayBuffer = await file.arrayBuffer()
+            loadBinary(new Uint8Array(arrayBuffer))
+            return false
+        }
+        const dragover = (e: DragEvent) => e.preventDefault()
+        const dragenter = (e: DragEvent) => {
+            target = e.target
+            setDragging(true)
+        }
+        const dragleave = (e: DragEvent) => {
+            if (target === e.target) {
+                target = null
+                setDragging(false)
+            }
+        }
+        const handlers = { drop, dragover, dragenter, dragleave }
+        for (const [event, handler] of Object.entries(handlers)) {
+            document.addEventListener(event, handler as any)
+        }
+        return () => {
+            for (const [event, handler] of Object.entries(handlers)) {
+                document.removeEventListener(event, handler as any)
+            }
+        }
+    }, [])
 
     useEffect(() => {
         (async () => {
@@ -458,8 +481,9 @@ function App() {
         { name: "About", component: <About {...{setTab}} /> },
     ]
 
-    return <div id="app" style={{ display: "flex", flexDirection: "column", alignItems: "stretch", containerType: "inline-size", margin: "auto", backgroundColor: "white", borderTop: "1px solid black" }}>
-        <div style={{ borderLeft: "1px solid black", borderRight: "1px solid black", margin: "0 -1px" }}>
+    const border = `1px ${dragging ? "dashed" : "solid"} black`
+    return <div id="app" style={{ display: "flex", flexDirection: "column", alignItems: "stretch", containerType: "inline-size", margin: "auto", backgroundColor: "white", borderTop: border }}>
+        <div style={{ borderLeft: border, borderRight: border, margin: "0 -1px" }}>
             <div style={{ margin: "20px"}} >
                 <h1 style={{ margin: "0 0 20px 0" }}><a href="/"><img src={logoUrl} style={{ imageRendering: "pixelated", width: "100%" }} /></a></h1>
                 <div style={{ display: "flex" }}>
@@ -470,11 +494,11 @@ function App() {
             </div>
         </div>
         <div className="tabs" style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
-            <div style={{ borderTop: "1px solid black", flexGrow: "1", alignSelf: "stretch" }}></div>
+            <div style={{ borderTop: border, flexGrow: "1", alignSelf: "stretch" }}></div>
             {tabs.map(({ name }, index) =>
                 <button key={index} className={index === tab ? "active" : ""} onClick={() => setTab(index)}>{name}</button>
             )}
-            <div style={{ borderTop: "1px solid black", flexGrow: "1", alignSelf: "stretch" }}></div>
+            <div style={{ borderTop: border, flexGrow: "1", alignSelf: "stretch" }}></div>
         </div>
         {/* <a href={link}>Link</a><br /> */}
         {/* <a download="a.wasm" href={download}>Download</a> */}
