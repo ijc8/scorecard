@@ -329,15 +329,17 @@ function Debug({ wat }: { wat: string }) {
         setTimer(0)
     }
     const lines = wat?.split("\n")
-    return <>
-        <div style={{ textAlign: "left", width: "100%", height: "600px", whiteSpace: "pre", lineHeight: 1, fontSize: `${60 / (lines?.length ?? 1)}cqh`, display: "flex", flexFlow: "column wrap" }}>
-            {lines && lines.map((line, index) => {
-                const percentage = (counts[index] ?? 0) / Math.max(...Object.values(counts)) * 20
-                return <div key={index} style={{ position: "relative" }}>
-                    <div style={{ position: "absolute", top: "1px", bottom: "1px", minHeight: "1px", left: `calc(-20px - ${percentage}%)`, right: "calc(20px + 100%)", backgroundColor: "#55b" }}></div>
-                    {line}
-                </div>
-            })}
+    return <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+        <div style={{ containerType: "size", flexGrow: 1, marginBottom: "20px" }}>
+            <div style={{ textAlign: "left", width: "100%", height: "600px", whiteSpace: "pre", lineHeight: 1, fontSize: `${100 / (lines?.length ?? 1)}cqh`, display: "flex", flexFlow: "column wrap" }}>
+                {lines && lines.map((line, index) => {
+                    const percentage = (counts[index] ?? 0) / Math.max(...Object.values(counts)) * 20
+                    return <div key={index} style={{ position: "relative" }}>
+                        <div style={{ position: "absolute", top: "1px", bottom: "1px", minHeight: "1px", left: `calc(-20px - ${percentage}%)`, right: "calc(20px + 100%)", backgroundColor: "#55b" }}></div>
+                        {line}
+                    </div>
+                })}
+            </div>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between" }}>
             <button onClick={step}>Step</button>
@@ -346,7 +348,7 @@ function Debug({ wat }: { wat: string }) {
             <div>{timer ? "Running" : "Stopped"}</div>
             <div style={{ width: "4em" }}>{stepCount}</div>
         </div>
-    </>
+    </div>
 }
 
 function App() {
