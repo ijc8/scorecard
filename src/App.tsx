@@ -293,6 +293,7 @@ function Debug({ wat }: { wat: string }) {
         setStepCount(stepWrapper.current)
     }, [wat])
     const step = () => {
+        const oldDebugLogs = debugLogs
         debugLogs = {}
         if (debugSetup) {
             const process = debugInstance!.exports.process as () => number
@@ -301,12 +302,17 @@ function Debug({ wat }: { wat: string }) {
             }
             stepWrapper.current += 128
         } else {
-            (debugInstance?.exports.setup as (s: number) => void)(generateSeed())
+            if (debugInstance!.exports.setup) {
+                (debugInstance?.exports.setup as (s: number) => void)(generateSeed())
+            }
             debugSetup = true
             stepWrapper.current += 1
         }
         // console.log(debugLogs, debugLogMap)
         const newCounts: typeof counts = {}
+        for (const id of Object.keys(oldDebugLogs)) {
+            debugLogs[+id] = Math.max(debugLogs[+id] ?? 0, oldDebugLogs[+id] * 0.5)
+        }
         for (const [id, count] of Object.entries(debugLogs)) {
             for (let line = debugLogMap[+id].start.line; line < debugLogMap[+id].end.line; line++) {
                 newCounts[line] = count
@@ -322,12 +328,16 @@ function Debug({ wat }: { wat: string }) {
         clearInterval(timer)
         setTimer(0)
     }
+    const lines = wat?.split("\n")
     return <>
-        <div style={{ textAlign: "left", width: "100%", height: "600px", whiteSpace: "nowrap", lineHeight: 1, fontSize: "12px", display: "flex", flexFlow: "column wrap" }}>
-            {wat && wat.split("\n").map((line, index) =>
-                // (counts[index] ?? 0) / Math.max(...Object.values(counts)) * 100
-                <div key={index} style={{ backgroundColor: `rgb(0 255 0 / ${counts[index] ? 100 : 0}%)`, maxWidth: "8%", overflowX: "hidden" }}>{line}</div>
-            )}
+        <div style={{ textAlign: "left", width: "100%", height: "600px", whiteSpace: "pre", lineHeight: 1, fontSize: `${60 / (lines?.length ?? 1)}cqh`, display: "flex", flexFlow: "column wrap" }}>
+            {lines && lines.map((line, index) => {
+                const percentage = (counts[index] ?? 0) / Math.max(...Object.values(counts)) * 20
+                return <div key={index} style={{ position: "relative" }}>
+                    <div style={{ position: "absolute", top: "1px", bottom: "1px", minHeight: "1px", left: `calc(-20px - ${percentage}%)`, right: "calc(20px + 100%)", backgroundColor: "#55b" }}></div>
+                    {line}
+                </div>
+            })}
         </div>
         <div style={{ display: "flex", justifyContent: "space-between" }}>
             <button onClick={step}>Step</button>
@@ -352,7 +362,7 @@ function App() {
     const [time, setTime] = useState(0)
     const [error, setError] = useState(false)
     const encoded = new URLSearchParams(window.location.search).get("c")
-    const [tab, setTab] = useState(encoded ? 1 : 3)
+    const [tab, setTab] = useState(encoded ? 0 : 3)
     const [dragging, setDragging] = useState(false)
     const qrCanvas = useRef<HTMLCanvasElement>(null)
 
