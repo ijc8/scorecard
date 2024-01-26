@@ -20,6 +20,7 @@ import DragAndDrop from "pixelarticons/svg/drag-and-drop.svg?react"
 import { Html5QrcodePlugin } from "./Html5QrcodePlugin"
 import logoUrl from "./assets/logo.png"
 import exampleCardUrl from "./assets/example-card.png"
+import { instrumentWat } from "./wasmTracer"
 
 function generateSeed() {
     return Math.floor(Math.random() * Math.pow(2, 32))
@@ -295,11 +296,30 @@ function App() {
     const qrCanvas = useRef<HTMLCanvasElement>(null)
 
     const loadBinary = async (buffer: Uint8Array) => {
+        {
+            // WIP: Experiment with instrumenting binary for execution tracing.
+            const { original, instrumented, logMap } = instrumentWat(buffer)
+            setWAT(original)
+            const wabt = await wabtPromise
+            console.log(instrumented)
+            console.log(logMap)
+            const result = wabt.parseWat("main.wasm", instrumented).toBinary({})
+            console.log(result.log)
+            const module = new WebAssembly.Module(result.buffer)
+            setSize(buffer.length)
+            console.log("loaded wasm", module)
+            const logs: { [key: number]: number } = {}
+            const instance = new WebAssembly.Instance(module, {
+                scorecard: { log(i: number) { logs[i] = (logs[i] ?? 0) + 1 } }
+            })
+            profile(instance)
+            console.log(logs)
+        }
+
         const module = new WebAssembly.Module(buffer)
         setSize(buffer.length)
         console.log("loaded wasm", module)
         const instance = new WebAssembly.Instance(module)
-        profile(instance)
         // Load program title
         if (instance.exports.title) {
             const startPtr: number = (instance.exports.title as WebAssembly.Global).value
@@ -318,14 +338,13 @@ function App() {
         // node.port.postMessage(module)
         sendToWorklet({ cmd: "loadModule", buffer })
         setBuffer(buffer)
-        // await generateQRCode()
         // TODO: Maybe only do this on demand/if this user is on the "Create" tab.
         console.log("disassembling")
-        wabtPromise.then(wabt => {
-            const disassembled = wabt.readWasm(buffer, { readDebugNames: true })
-            disassembled.applyNames()
-            setWAT(disassembled.toText({ foldExprs: false, inlineExport: true }))
-        })
+        // wabtPromise.then(wabt => {
+        //     const disassembled = wabt.readWasm(buffer, { readDebugNames: true })
+        //     disassembled.applyNames()
+        //     setWAT(disassembled.toText({ foldExprs: false, inlineExport: true }))
+        // })
     }
 
     const qrContents = useRef<any[]>([])
