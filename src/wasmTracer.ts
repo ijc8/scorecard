@@ -1,6 +1,8 @@
 import * as wasmparser from "wasmparser/dist/esm/WasmParser"
 import * as wasmdis from "wasmparser/dist/esm/WasmDis"
 
+export type LogMap = { [key: number]: { start: { line: number, offset: number }, end: { line: number, offset: number } } }
+
 export function instrumentWat(content: Uint8Array) {
     const reader = new wasmparser.BinaryReader()
     reader.setData(content, 0, content.byteLength)
@@ -48,7 +50,7 @@ export function instrumentWat(content: Uint8Array) {
             doneWithFunctions = true
         }
     })
-    const logMap: { [key: number]: { start: { line: number, offset: number }, end: { line: number, offset: number } } } = {}
+    const logMap: LogMap = {}
     for (let i = 0; i < id; i++) {
         logMap[i] = {
             start: markers[i],

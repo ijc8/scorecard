@@ -20,7 +20,7 @@ import DragAndDrop from "pixelarticons/svg/drag-and-drop.svg?react"
 import { Html5QrcodePlugin } from "./Html5QrcodePlugin"
 import logoUrl from "./assets/logo.png"
 import exampleCardUrl from "./assets/example-card.png"
-import { instrumentWat } from "./wasmTracer"
+import { LogMap, instrumentWat } from "./wasmTracer"
 
 function generateSeed() {
     return Math.floor(Math.random() * Math.pow(2, 32))
@@ -75,9 +75,9 @@ function iOS() {
         'iPhone',
         'iPod'
     ].includes(navigator.platform)
-    // iPad on iOS 13 detection
-    || (navigator.userAgent.includes("Mac") && "ontouchend" in document)
-  }
+        // iPad on iOS 13 detection
+        || (navigator.userAgent.includes("Mac") && "ontouchend" in document)
+}
 
 // For iOS quirk in which Web Audio is treated like a ringer while audio tags are treated like media:
 // (See https://stackoverflow.com/questions/21122418/ios-webaudio-only-works-on-headphones/46839941#46839941)
@@ -137,7 +137,7 @@ function SeedInput({ seed, setSeed }: any) {
             width: "4.6em",
             verticalAlign: "middle",
             textAlign: "left",
-        }} 
+        }}
         onChange={e => setContents(e.target.value)}
         onKeyUp={e => {
             if (e.key === "Enter") {
@@ -196,7 +196,7 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
                         <div><span style={{ fontSize: "11cqh" }}>Scan <Camera style={inlineIconStyle} />, create <EditBox style={inlineIconStyle} />, or drag & drop <DragAndDrop style={inlineIconStyle} />.</span></div>
                     </>}
                 </div>
-                </div>}
+            </div>}
             <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", visibility: showMessage ? "hidden" : "inherit", width: "100%" }} width="1" height="1"></canvas>
         </div>
         <h2 style={{ userSelect: "none", margin: "20px", fontSize: "6cqw" }}>{title} | {size} bytes {/* TODO: add link and perhaps download buttons with icons */}</h2>
@@ -210,7 +210,7 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
             <div style={{ display: "flex", alignItems: "center" }}>
                 <button style={{ fontSize: 0 }}><DiceIcon style={smallIconStyle} onClick={() => setSeedLock(!seedLock)} /></button>
                 &nbsp;
-                <SeedInput {...{seed, setSeed}} />
+                <SeedInput {...{ seed, setSeed }} />
             </div>
         </div>
     </div>
@@ -237,7 +237,7 @@ function Scan({ onScan, tab }: any) {
             qrCodeSuccessCallback={qrCodeSuccessCallback}
         />
         <div style={{ fontSize: "6cqw", display: "flex", justifyContent: "center", alignItems: "center" }}>
-            {error && <Alert style={{ height: "6cqw" }}/>}
+            {error && <Alert style={{ height: "6cqw" }} />}
             &nbsp;
             {error}
         </div>
@@ -247,14 +247,14 @@ function Scan({ onScan, tab }: any) {
 function About({ setTab }: any) {
     // TODO: Make this text fill the card on both desktop and mobile...
     return <div id="about" style={{ textAlign: "left", padding: "0 12px", containerType: "size", height: "100%" }}>
-            <div style={{ fontSize: "4cqw" }}>
-                <span style={{ fontSize: "1.1em" }}>ScoreCard is a player for "score cards": QR codes containing tiny generative music programs.</span> A score card looks like this:
-                <img src={exampleCardUrl} style={{ display: "block", margin: "auto", padding: "12px" }} />
-                Each QR code contains a valid URL (linking to this web app, the score card player) and an entire audio-generating <a href="https://webassembly.org/">WebAssembly</a> program. Because the QR code contains the piece itself, even if the link breaks, the code can still be read and played back by an instance of the ScoreCard player hosted somewhere else, or by a player that runs outside of the browser.
-                <p>This also implies that piece must fit in a QR code, implying an max executable size of just 2,953 bytes (more like 2,900 bytes after encoding it in a URL).</p>
-                <p>To get started, <a href="#" onClick={() => setTab(1)} style={{ textDecoration: "underline" }}>Scan</a> a score card or <a href="#" onClick={() => setTab(2)} style={{ textDecoration: "underline" }}>Create</a> one. For more information, check out the <a href="https://github.com/ijc8/scorecard" style={{ textDecoration: "underline" }}>README</a>.</p>
-                <p style={{ marginBottom: 0 }}>Happy hacking & joyful jamming!<br/>- ijc</p>
-            </div>
+        <div style={{ fontSize: "4cqw" }}>
+            <span style={{ fontSize: "1.1em" }}>ScoreCard is a player for "score cards": QR codes containing tiny generative music programs.</span> A score card looks like this:
+            <img src={exampleCardUrl} style={{ display: "block", margin: "auto", padding: "12px" }} />
+            Each QR code contains a valid URL (linking to this web app, the score card player) and an entire audio-generating <a href="https://webassembly.org/">WebAssembly</a> program. Because the QR code contains the piece itself, even if the link breaks, the code can still be read and played back by an instance of the ScoreCard player hosted somewhere else, or by a player that runs outside of the browser.
+            <p>This also implies that piece must fit in a QR code, implying an max executable size of just 2,953 bytes (more like 2,900 bytes after encoding it in a URL).</p>
+            <p>To get started, <a href="#" onClick={() => setTab(1)} style={{ textDecoration: "underline" }}>Scan</a> a score card or <a href="#" onClick={() => setTab(2)} style={{ textDecoration: "underline" }}>Create</a> one. For more information, check out the <a href="https://github.com/ijc8/scorecard" style={{ textDecoration: "underline" }}>README</a>.</p>
+            <p style={{ marginBottom: 0 }}>Happy hacking & joyful jamming!<br />- ijc</p>
+        </div>
     </div>
 }
 
@@ -277,6 +277,67 @@ function Create({ loadBinary, wat, setWAT }: any) {
 }
 
 const NO_TITLE = "untitled"
+
+let debugLogs: { [key: number]: number } = {}
+let debugLogMap: LogMap
+let debugInstance: WebAssembly.Instance | undefined
+let debugSetup = false
+
+function Debug({ wat }: { wat: string }) {
+    const [counts, setCounts] = useState<{ [key: number]: number }>({})
+    const [timer, setTimer] = useState(0)
+    const [stepCount, setStepCount] = useState(-1)
+    const stepWrapper = useRef(stepCount)
+    useEffect(() => {
+        stepWrapper.current = -1
+        setStepCount(stepWrapper.current)
+    }, [wat])
+    const step = () => {
+        debugLogs = {}
+        if (debugSetup) {
+            const process = debugInstance!.exports.process as () => number
+            for (let i = 0; i < 128; i++) {
+                process()
+            }
+            stepWrapper.current += 128
+        } else {
+            (debugInstance?.exports.setup as (s: number) => void)(generateSeed())
+            debugSetup = true
+            stepWrapper.current += 1
+        }
+        // console.log(debugLogs, debugLogMap)
+        const newCounts: typeof counts = {}
+        for (const [id, count] of Object.entries(debugLogs)) {
+            for (let line = debugLogMap[+id].start.line; line < debugLogMap[+id].end.line; line++) {
+                newCounts[line] = count
+            }
+        }
+        setCounts(newCounts)
+        setStepCount(stepWrapper.current)
+    }
+    const run = () => {
+        setTimer(window.setInterval(step))
+    }
+    const stop = () => {
+        clearInterval(timer)
+        setTimer(0)
+    }
+    return <>
+        <div style={{ textAlign: "left", width: "100%", height: "600px", whiteSpace: "nowrap", lineHeight: 1, fontSize: "12px", display: "flex", flexFlow: "column wrap" }}>
+            {wat && wat.split("\n").map((line, index) =>
+                // (counts[index] ?? 0) / Math.max(...Object.values(counts)) * 100
+                <div key={index} style={{ backgroundColor: `rgb(0 255 0 / ${counts[index] ? 100 : 0}%)`, maxWidth: "8%", overflowX: "hidden" }}>{line}</div>
+            )}
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <button onClick={step}>Step</button>
+            <button onClick={run}>Run</button>
+            <button onClick={stop}>Stop</button>
+            <div>{timer ? "Running" : "Stopped"}</div>
+            <div style={{ width: "4em" }}>{stepCount}</div>
+        </div>
+    </>
+}
 
 function App() {
     const [title, setTitle] = useState(NO_TITLE)
@@ -308,12 +369,13 @@ function App() {
             const module = new WebAssembly.Module(result.buffer)
             setSize(buffer.length)
             console.log("loaded wasm", module)
-            const logs: { [key: number]: number } = {}
-            const instance = new WebAssembly.Instance(module, {
-                scorecard: { log(i: number) { logs[i] = (logs[i] ?? 0) + 1 } }
+            debugInstance = new WebAssembly.Instance(module, {
+                scorecard: { log(i: number) { debugLogs[i] = (debugLogs[i] ?? 0) + 1 } }
             })
-            profile(instance)
-            console.log(logs)
+            // profile(debugInstance)
+            // console.log(debugLogs)
+            debugSetup = false
+            debugLogMap = logMap
         }
 
         const module = new WebAssembly.Module(buffer)
@@ -376,7 +438,7 @@ function App() {
         window.history.pushState(null, "", url)
         // setLink(url)
         // setDownload(window.URL.createObjectURL(new Blob([buffer])))
-        setTab(0)
+        // setTab(0)
         qrContents.current = seedLock ? [buffer, seed] : [buffer]
     }, [buffer, seed, seedLock])
 
@@ -494,16 +556,17 @@ function App() {
     // } , [])
 
     const tabs = [
-        { name: "Listen", component: <Listen {...{qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error}} /> },
-        { name: "Scan", component: <Scan {...{onScan, tab}} /> },
-        { name: "Create", component: <Create {...{loadBinary, wat, setWAT}} /> },
-        { name: "About", component: <About {...{setTab}} /> },
+        { name: "Listen", component: <Listen {...{ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error }} /> },
+        { name: "Scan", component: <Scan {...{ onScan, tab }} /> },
+        { name: "Create", component: <Create {...{ loadBinary, wat, setWAT }} /> },
+        { name: "About", component: <About {...{ setTab }} /> },
+        { name: "Debug", component: <Debug {...{ wat }} /> },
     ]
 
     const border = `1px ${dragging ? "dashed" : "solid"} black`
     return <div id="app" style={{ display: "flex", flexDirection: "column", alignItems: "stretch", containerType: "inline-size", margin: "auto", backgroundColor: "white", borderTop: border }}>
         <div style={{ borderLeft: border, borderRight: border, margin: "0 -1px" }}>
-            <div style={{ margin: "20px"}} >
+            <div style={{ margin: "20px" }} >
                 <h1 style={{ margin: "0 0 20px 0" }}><a href="/"><img src={logoUrl} style={{ imageRendering: "pixelated", width: "100%" }} /></a></h1>
                 <div style={{ display: "flex" }}>
                     {tabs.map(({ component }, index) =>
