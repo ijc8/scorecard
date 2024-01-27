@@ -293,6 +293,7 @@ let handleTraceLogs: undefined | ((l: number[]) => void)
 
 const Debug = memo(function Debug({ wat }: { wat: string }) {
     const [counts, setCounts] = useState<{ [key: number]: number }>({})
+    const lines = useMemo(() => wat?.split("\n"), [wat])
     handleTraceLogs = (traceLogs: number[]) => {
         const oldDebugLogs = debugLogs
         debugLogs = traceLogs
@@ -308,12 +309,12 @@ const Debug = memo(function Debug({ wat }: { wat: string }) {
         })
         setCounts(newCounts)
     }
-    const lines = wat?.split("\n")
+    const max = Math.max(...Object.values(counts))
     return <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
         <div style={{ containerType: "size", flexGrow: 1, marginBottom: "20px" }}>
-            <div style={{ textAlign: "left", width: "100%", height: "600px", whiteSpace: "pre", lineHeight: 1, fontSize: `${100 / (lines?.length ?? 1)}cqh`, display: "flex", flexFlow: "column wrap" }}>
+            <div style={{ textAlign: "left", width: "100%", height: "600px", whiteSpace: "pre", lineHeight: 1, fontSize: `${98 / (lines?.length ?? 1)}cqh`, display: "flex", flexFlow: "column wrap" }}>
                 {lines && lines.map((line, index) => {
-                    const percentage = (counts[index] ?? 0) / Math.max(...Object.values(counts)) * 20
+                    const percentage = (counts[index] ?? 0) / max * 20
                     return <div key={index} style={{ position: "relative" }}>
                         <div style={{ position: "absolute", top: "1px", bottom: "1px", minHeight: "1px", left: `calc(-20px - ${percentage}%)`, right: "calc(20px + 100%)", backgroundColor: "#55b" }}></div>
                         {line}
