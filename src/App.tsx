@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import QRCode from "qrcode"
 import { encodeBlob, decodeBlob, encode, decode } from "./base43Encoder"
@@ -253,7 +253,7 @@ function Scan({ onScan, tab }: any) {
     </>
 }
 
-function About({ setTab }: any) {
+const About = memo(function About({ setTab }: any) {
     // TODO: Make this text fill the card on both desktop and mobile...
     return <div id="about" style={{ textAlign: "left", padding: "0 12px", containerType: "size", height: "100%" }}>
         <div style={{ fontSize: "4cqw" }}>
@@ -265,7 +265,7 @@ function About({ setTab }: any) {
             <p style={{ marginBottom: 0 }}>Happy hacking & joyful jamming!<br />- ijc</p>
         </div>
     </div>
-}
+})
 
 function Create({ loadBinary, wat, setWAT }: any) {
     const assemble = async () => {
@@ -291,7 +291,7 @@ let debugLogs: number[] = []
 let debugLogMap: LogMap
 let handleTraceLogs: undefined | ((l: number[]) => void)
 
-function Debug({ wat }: { wat: string }) {
+const Debug = memo(function Debug({ wat }: { wat: string }) {
     const [counts, setCounts] = useState<{ [key: number]: number }>({})
     handleTraceLogs = (traceLogs: number[]) => {
         const oldDebugLogs = debugLogs
@@ -322,7 +322,7 @@ function Debug({ wat }: { wat: string }) {
             </div>
         </div>
     </div>
-}
+})
 
 function App() {
     const [title, setTitle] = useState(NO_TITLE)
