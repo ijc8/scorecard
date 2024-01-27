@@ -149,6 +149,8 @@ function SeedInput({ seed, setSeed }: any) {
     />
 }
 
+let t = 0
+let s = 0
 // TODO: Specify types
 function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error }: any) {
     const bigIconStyle = { height: "10cqw", verticalAlign: "middle" }
@@ -181,6 +183,13 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
     const mouseToggle = () => {
         if (events.current.toggle) return
         togglePlay()
+    }
+    // TODO TEMP measure postMessage lag by observing clock
+    if (t === 0 && state === "playing") {
+        t = performance.now()
+    } else if (s === 0 && time > 1) {
+        s = performance.now()
+        console.log((s - t) / 1000)
     }
     const togglePlay = () => { setState(state === "playing" ? "paused" : "playing") }
     return <div>
@@ -278,55 +287,26 @@ function Create({ loadBinary, wat, setWAT }: any) {
 
 const NO_TITLE = "untitled"
 
-let debugLogs: { [key: number]: number } = {}
+let debugLogs: number[] = []
 let debugLogMap: LogMap
-let debugInstance: WebAssembly.Instance | undefined
-let debugSetup = false
+let handleTraceLogs: undefined | ((l: number[]) => void)
 
 function Debug({ wat }: { wat: string }) {
     const [counts, setCounts] = useState<{ [key: number]: number }>({})
-    const [timer, setTimer] = useState(0)
-    const [stepCount, setStepCount] = useState(-1)
-    const stepWrapper = useRef(stepCount)
-    useEffect(() => {
-        stepWrapper.current = -1
-        setStepCount(stepWrapper.current)
-    }, [wat])
-    const step = () => {
+    handleTraceLogs = (traceLogs: number[]) => {
         const oldDebugLogs = debugLogs
-        debugLogs = {}
-        if (debugSetup) {
-            const process = debugInstance!.exports.process as () => number
-            for (let i = 0; i < 128; i++) {
-                process()
-            }
-            stepWrapper.current += 128
-        } else {
-            if (debugInstance!.exports.setup) {
-                (debugInstance?.exports.setup as (s: number) => void)(generateSeed())
-            }
-            debugSetup = true
-            stepWrapper.current += 1
-        }
-        // console.log(debugLogs, debugLogMap)
+        debugLogs = traceLogs
         const newCounts: typeof counts = {}
-        for (const id of Object.keys(oldDebugLogs)) {
-            debugLogs[+id] = Math.max(debugLogs[+id] ?? 0, oldDebugLogs[+id] * 0.5)
-        }
-        for (const [id, count] of Object.entries(debugLogs)) {
-            for (let line = debugLogMap[+id].start.line; line < debugLogMap[+id].end.line; line++) {
+        // We use `forEach` because it skips empty slots, unlike other methods.
+        oldDebugLogs.forEach((count, id) => {
+            debugLogs[id] = Math.max(debugLogs[id] ?? 0, count * 0.5)
+        })
+        debugLogs.forEach((count, id) => {
+            for (let line = debugLogMap[id].start.line; line < debugLogMap[id].end.line; line++) {
                 newCounts[line] = count
             }
-        }
+        })
         setCounts(newCounts)
-        setStepCount(stepWrapper.current)
-    }
-    const run = () => {
-        setTimer(window.setInterval(step))
-    }
-    const stop = () => {
-        clearInterval(timer)
-        setTimer(0)
     }
     const lines = wat?.split("\n")
     return <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
@@ -340,13 +320,6 @@ function Debug({ wat }: { wat: string }) {
                     </div>
                 })}
             </div>
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <button onClick={step}>Step</button>
-            <button onClick={run}>Run</button>
-            <button onClick={stop}>Stop</button>
-            <div>{timer ? "Running" : "Stopped"}</div>
-            <div style={{ width: "4em" }}>{stepCount}</div>
         </div>
     </div>
 }
@@ -369,26 +342,24 @@ function App() {
     const qrCanvas = useRef<HTMLCanvasElement>(null)
 
     const loadBinary = async (buffer: Uint8Array) => {
-        {
-            // WIP: Experiment with instrumenting binary for execution tracing.
-            const { original, instrumented, logMap } = instrumentWat(buffer)
-            setWAT(original)
-            const wabt = await wabtPromise
-            console.log(instrumented)
-            console.log(logMap)
-            const result = wabt.parseWat("main.wasm", instrumented).toBinary({})
-            console.log(result.log)
-            const module = new WebAssembly.Module(result.buffer)
-            setSize(buffer.length)
-            console.log("loaded wasm", module)
-            debugInstance = new WebAssembly.Instance(module, {
-                scorecard: { log(i: number) { debugLogs[i] = (debugLogs[i] ?? 0) + 1 } }
-            })
-            // profile(debugInstance)
-            // console.log(debugLogs)
-            debugSetup = false
-            debugLogMap = logMap
-        }
+        // WIP: Experiment with instrumenting binary for execution tracing.
+        const { original, instrumented, logMap } = instrumentWat(buffer)
+        setWAT(original)
+        const wabt = await wabtPromise
+        console.log(instrumented)
+        console.log(logMap)
+        const result = wabt.parseWat("main.wasm", instrumented).toBinary({})
+        console.log(result.log)
+        const instrumentedBuffer = result.buffer
+        // const module = new WebAssembly.Module(result.buffer)
+        // console.log("loaded wasm", module)
+        // debugInstance = new WebAssembly.Instance(module, {
+        //     scorecard: { log(i: number) { debugLogs[i] = (debugLogs[i] ?? 0) + 1 } }
+        // })
+        // profile(debugInstance)
+        // console.log(debugLogs)
+        // debugSetup = false
+        debugLogMap = logMap
 
         const module = new WebAssembly.Module(buffer)
         setSize(buffer.length)
@@ -410,7 +381,7 @@ function App() {
         // Send to AudioWorklet
         // Doesn't work in iOS Safari...
         // node.port.postMessage(module)
-        sendToWorklet({ cmd: "loadModule", buffer })
+        sendToWorklet({ cmd: "loadModule", buffer: instrumentedBuffer, trace: true })
         setBuffer(buffer)
         // TODO: Maybe only do this on demand/if this user is on the "Create" tab.
         console.log("disassembling")
@@ -550,7 +521,13 @@ function App() {
     useEffect(() => {
         (async () => {
             const node = await nodePromise
-            node.port.onmessage = e => setTime(e.data / 44100)
+            node.port.onmessage = e => {
+                if (typeof e.data === "number") {
+                    setTime(e.data / 44100)
+                } else {
+                    handleTraceLogs?.(e.data)
+                }
+            }
         })()
         return () => { (async () => {
             const node = await nodePromise
