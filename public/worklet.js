@@ -53,7 +53,7 @@ class CustomProcessor extends AudioWorkletProcessor {
         }
 
         this.pos += 128
-        if (this.pos % 1024) {
+        if (this.pos % 1024 === 0) {
             this.port.postMessage(this.pos)
             if (this.trace) {
                 this.port.postMessage(this.traceLogs)
