@@ -491,7 +491,7 @@ function App() {
         window.history.pushState(null, "", url)
         // setLink(url)
         // setDownload(window.URL.createObjectURL(new Blob([buffer])))
-        // setTab(0)
+        setTab(0)
         qrContents.current = seedLock ? [binary, seed] : [binary]
     }, [binary, seed, seedLock])
 
@@ -658,5 +658,7 @@ function App() {
         {/* <a download="a.wasm" href={download}>Download</a> */}
     </div>
 }
+
+getWabt()
 
 export default App

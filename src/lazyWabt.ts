@@ -1,12 +1,11 @@
 import type { WabtModule } from "../wabt"
 
-let wabt: WabtModule | undefined
+let wabtPromise: Promise<WabtModule> | undefined
 
-export async function getWabt() {
-    if (wabt === undefined) {
+export function getWabt() {
+    if (wabtPromise === undefined) {
         // Dynamic import for code-splitting (wabt is big!)
-        const m = await import("../wabt")
-        wabt = await m.default()
+        wabtPromise = import("../wabt").then(m => m.default())
     }
-    return wabt
+    return wabtPromise
 }
