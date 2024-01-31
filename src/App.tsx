@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { RefObject, memo, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import QRCode from "qrcode"
 import { encodeBlob, decodeBlob, encode, decode } from "./base43Encoder"
@@ -152,7 +152,10 @@ function SeedInput({ seed, setSeed }: any) {
 let t = 0
 let s = 0
 // TODO: Specify types
-function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error }: any) {
+function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer }: {
+    qrCanvas: RefObject<HTMLCanvasElement>, title: string, size: number, seed: number, setSeed: (s: number) => void, seedLock: boolean,
+    setSeedLock: (l: boolean) => void, state: any, setState: any, time: number, reset: any, error: any, buffer: Uint8Array | null,
+}) {
     const bigIconStyle = { height: "10cqw", verticalAlign: "middle" }
     const smallIconStyle = { height: "5cqw", flexShrink: 0, verticalAlign: "middle" }
     const inlineIconStyle = { height: "11cqh", verticalAlign: "bottom" }
@@ -191,6 +194,51 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
         s = performance.now()
         console.log((s - t) / 1000)
     }
+    draw = () => {
+        if (!qrCanvas.current || !buffer) return
+        const canvas = qrCanvas.current
+        const context = canvas.getContext("2d")!
+        // Arrange bits in a square
+        const size = Math.ceil(Math.sqrt(buffer.length * 8))
+        canvas.width = size
+        canvas.height = size
+        const image = new ImageData(canvas.width, canvas.height)
+        for (let i = 0; i < size * size; i++) {
+            if (i < buffer.length * 8) {
+                const byte = Math.floor(i / 8)
+                const bit = i % 8
+                if ((buffer[byte] >> bit) & 1) {
+                    image.data[i*4] = 204
+                    image.data[i*4+1] = 204
+                    image.data[i*4+2] = 255
+                    image.data[i*4+3] = 255
+                }
+            }
+            // Byte version (one pixel per byte, instead of per bit):
+            // if (i < buffer.length) {
+            //     // image.data[i*4] = 204
+            //     // image.data[i*4+1] = 204
+            //     // image.data[i*4+2] = 255
+            //     image.data[i*4+3] = buffer[i]
+            // }
+        }
+        context.putImageData(image, 0, 0)
+        if (state === "playing") {
+            const max = Math.max(...Object.values(debugLogs))
+            debugLogs.forEach((count, id) => {
+                const startByte = debugLogMap[id].start.offset
+                const endByte = debugLogMap[id].end.offset
+                for (let i = startByte * 8; i < endByte * 8; i++) {
+                    // TODO: fewer calls to `fillRect`
+                    const x = i % canvas.width
+                    const y = Math.floor(i / canvas.width)
+                    context.fillStyle = `rgba(0 255 0 / ${count / max * 50}%)`
+                    context.fillRect(x, y, 1, 1)
+                }
+            })
+        }
+    }
+    useEffect(draw, [qrCanvas.current, buffer, state])
     const togglePlay = () => { setState(state === "playing" ? "paused" : "playing") }
     return <div>
         <div style={{ position: "relative" }}>
@@ -290,6 +338,7 @@ const NO_TITLE = "untitled"
 let debugLogs: number[] = []
 let debugLogMap: LogMap
 let handleTraceLogs: undefined | ((l: number[]) => void)
+let draw: undefined | (() => void)
 
 const Debug = memo(function Debug({ wat }: { wat: string }) {
     const [counts, setCounts] = useState<{ [key: number]: number }>({})
@@ -300,7 +349,7 @@ const Debug = memo(function Debug({ wat }: { wat: string }) {
         const newCounts: typeof counts = {}
         // We use `forEach` because it skips empty slots, unlike other methods.
         oldDebugLogs.forEach((count, id) => {
-            debugLogs[id] = Math.max(debugLogs[id] ?? 0, count * 0.5)
+            debugLogs[id] = Math.max(debugLogs[id] ?? 0, count * 0.6)
         })
         debugLogs.forEach((count, id) => {
             for (let line = debugLogMap[id].start.line; line < debugLogMap[id].end.line; line++) {
@@ -308,6 +357,7 @@ const Debug = memo(function Debug({ wat }: { wat: string }) {
             }
         })
         setCounts(newCounts)
+        draw?.()
     }
     const max = Math.max(...Object.values(counts))
     return <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
@@ -424,6 +474,7 @@ function App() {
         // setDownload(window.URL.createObjectURL(new Blob([buffer])))
         // setTab(0)
         qrContents.current = seedLock ? [buffer, seed] : [buffer]
+        debugLogs.length = 0
     }, [buffer, seed, seedLock])
 
     const reset = () => {
@@ -546,7 +597,7 @@ function App() {
     // } , [])
 
     const tabs = [
-        { name: "Listen", component: <Listen {...{ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error }} /> },
+        { name: "Listen", component: <Listen {...{ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer }} /> },
         { name: "Scan", component: <Scan {...{ onScan, tab }} /> },
         { name: "Create", component: <Create {...{ loadBinary, wat, setWAT }} /> },
         { name: "About", component: <About {...{ setTab }} /> },
