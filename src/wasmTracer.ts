@@ -1,5 +1,6 @@
 import * as wasmparser from "wasmparser/dist/esm/WasmParser"
 import * as wasmdis from "wasmparser/dist/esm/WasmDis"
+import { getWabt } from "./lazyWabt"
 
 export type TraceMap = {
     [key: number]: {
@@ -20,7 +21,7 @@ function disassembleWasm(binary: Uint8Array) {
     return dis.getResult()
 }
 
-export function instrumentWasm(binary: Uint8Array) {
+export async function instrumentWasm(binary: Uint8Array) {
     const result = disassembleWasm(binary)
     let id = 0
     const out: string[] = []
@@ -59,12 +60,15 @@ export function instrumentWasm(binary: Uint8Array) {
             doneWithFunctions = true
         }
     })
-    const logMap: TraceMap = {}
+    const map: TraceMap = {}
     for (let i = 0; i < id; i++) {
-        logMap[i] = {
+        map[i] = {
             start: markers[i],
             end: markers[i + 1],
         }
     }
-    return { original: result.lines.join("\n"), instrumented: out.join("\n"), logMap }
+    // Re-assemble instrumented WAT
+    const wabt = await getWabt()
+    const instrumented = wabt.parseWat("main.wasm", out.join("\n")).toBinary({}).buffer
+    return { binary: instrumented, map }
 }

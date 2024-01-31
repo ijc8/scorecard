@@ -95,23 +95,23 @@ function unmute() {
     tag.play()
 }
 
-function profile(instance: WebAssembly.Instance) {
-    if (instance.exports.setup) {
-        const seed = generateSeed()
-        const setup = instance.exports.setup as ((s: number) => void)
-        const start = performance.now()
-        setup(seed)
-        const end = performance.now()
-        console.log("setup:", end - start, "ms")
-    }
-    const process = instance.exports.process as (() => number)
-    const start = performance.now()
-    for (let i = 0; i < 44100; i++) {
-        process()
-    }
-    const end = performance.now()
-    console.log("process:", end - start, "ms", (end - start) / 1000, "frac", 1000 / (end - start), "mult")
-}
+// function profile(instance: WebAssembly.Instance) {
+//     if (instance.exports.setup) {
+//         const seed = generateSeed()
+//         const setup = instance.exports.setup as ((s: number) => void)
+//         const start = performance.now()
+//         setup(seed)
+//         const end = performance.now()
+//         console.log("setup:", end - start, "ms")
+//     }
+//     const process = instance.exports.process as (() => number)
+//     const start = performance.now()
+//     for (let i = 0; i < 44100; i++) {
+//         process()
+//     }
+//     const end = performance.now()
+//     console.log("process:", end - start, "ms", (end - start) / 1000, "frac", 1000 / (end - start), "mult")
+// }
 
 function SeedInput({ seed, setSeed }: any) {
     const [contents, setContents] = useState("")
@@ -422,18 +422,11 @@ function App() {
     const qrCanvas = useRef<HTMLCanvasElement>(null)
     const [tracing, _setTracing] = useState(false)
 
-    const setupTracing = async (binary: Uint8Array) => {
+    const setupTracing = async (originalBinary: Uint8Array) => {
         // Instrument Wasm for execution tracing.
-        const { instrumented, logMap } = instrumentWasm(binary)
+        const { binary, map } = await instrumentWasm(originalBinary)
         // TODO: set fixed WAT for tracing (line highlighting) in Create tab
-        // setWAT(original)
-        const wabt = await getWabt()
-        const result = wabt.parseWat("main.wasm", instrumented).toBinary({})
-        trace = {
-            binary: result.buffer,
-            map: logMap,
-            logs: []
-        }
+        trace = { binary, map, logs: [] }
     }
 
     const loadBinary = async (binary: Uint8Array) => {
