@@ -100,19 +100,21 @@ def print_scorecard(wasm_path):
     with open(wasm_path, "rb") as f:
         data = f.read()
     title = get_title(data) or "untitled"
-    print(title)
+    print("Title:", title)
     payload = base43.encode(data)
     size = len(data)
     qrcode = segno.make_qr([
         ("https://ijc8.me/s?c=", segno.consts.MODE_BYTE),
         (payload, segno.consts.MODE_ALPHANUMERIC),
     ])
+    print("QR code info:", qrcode.version, qrcode.error)
     qr_img = np.array(qrcode.matrix, dtype=bool)
     p.energy = 0xffff
     p.speed = 0xff
     p._prepare()
     print_image(upside(center(scale(render_text(f"{title} | {size}")))))
     space(20)
+    print(f"Original size: {qr_img.shape}, scale: {p.model.paper_width // qr_img.shape[1]}")
     print_image(upside(center(scale(qr_img))))
     space(20)
     print_image(upside(center(scale(render_text("ScoreCard")))))
@@ -122,8 +124,16 @@ def print_scorecard(wasm_path):
 
 
 if __name__ == "__main__":
-    dry_run = False
-    if dry_run:
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("filename", help="wasm file to print as scorecard")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="don't print, just show what would be printed"
+    )
+    args = parser.parse_args()
+    if args.dry_run:
         p = DummyPrinter()
     else:
         p = printer.PrinterDriver()
@@ -131,6 +141,6 @@ if __name__ == "__main__":
         print(p.scan("MX05", use_result=True))
 
     try:
-        print_scorecard(sys.argv[1])
+        print_scorecard(args.filename)
     finally:
         p.unload()
