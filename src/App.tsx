@@ -1,4 +1,4 @@
-import { RefObject, memo, useEffect, useMemo, useRef, useState } from 'react'
+import { RefObject, memo, useEffect, useRef, useState } from 'react'
 import './App.css'
 import QRCode from "qrcode"
 import { encodeBlob, decodeBlob, encode, decode } from "./base43Encoder"
@@ -195,7 +195,7 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
     // }
 
     const traceCanvas = useRef<HTMLCanvasElement | null>(null)
-    draw = () => {
+    const draw = () => {
         if (trace && !tracing) trace.logs.length = 0
         if (!tracing || !traceCanvas.current || !binary) return
         const canvas = traceCanvas.current
@@ -240,7 +240,26 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
             })
         }
     }
+
+    handleTraceLogs = (traceLogs: number[]) => {
+        if (trace === null || !trace.map[traceLogs.length - 1]) return
+        const oldTraceLogs = trace.logs
+        trace.logs = traceLogs
+        // We use `forEach` because it skips empty slots, unlike other methods.
+        oldTraceLogs.forEach((count, id) => {
+            trace!.logs[id] = Math.max(trace!.logs[id] ?? 0, count * 0.6)
+        })
+        // TODO: Highlight lines of WAT in Create tab.
+        // trace.logs.forEach((count, id) => {
+        //     for (let line = trace!.map[id].start.line; line < trace!.map[id].end.line; line++) {
+        //         newCounts[line] = count
+        //     }
+        // })
+        draw()
+    }
+
     useEffect(draw, [tracing, binary])
+
     const togglePlay = () => { setState(state === "playing" ? "paused" : "playing") }
     const TraceIcon = tracing ? BullseyeArrow : Bullseye
     return <div>
@@ -364,43 +383,26 @@ interface TraceData {
 let trace: TraceData | null = null
 
 let handleTraceLogs: undefined | ((l: number[]) => void)
-let draw: undefined | (() => void)
 
-const Debug = memo(function Debug({ wat }: { wat: string }) {
-    const [counts, setCounts] = useState<{ [key: number]: number }>({})
-    const lines = useMemo(() => wat?.split("\n"), [wat])
-    handleTraceLogs = (traceLogs: number[]) => {
-        if (trace === null || !trace.map[traceLogs.length - 1]) return
-        const oldTraceLogs = trace.logs
-        trace.logs = traceLogs
-        const newCounts: typeof counts = {}
-        // We use `forEach` because it skips empty slots, unlike other methods.
-        oldTraceLogs.forEach((count, id) => {
-            trace!.logs[id] = Math.max(trace!.logs[id] ?? 0, count * 0.6)
-        })
-        trace.logs.forEach((count, id) => {
-            for (let line = trace!.map[id].start.line; line < trace!.map[id].end.line; line++) {
-                newCounts[line] = count
-            }
-        })
-        setCounts(newCounts)
-        draw?.()
-    }
-    const max = Math.max(...Object.values(counts))
-    return <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-        <div style={{ containerType: "size", flexGrow: 1, marginBottom: "20px" }}>
-            <div style={{ textAlign: "left", width: "100%", height: "600px", whiteSpace: "pre", lineHeight: 1, fontSize: `${98 / (lines?.length ?? 1)}cqh`, display: "flex", flexFlow: "column wrap" }}>
-                {lines && lines.map((line, index) => {
-                    const percentage = (counts[index] ?? 0) / max * 20
-                    return <div key={index} style={{ position: "relative" }}>
-                        <div style={{ position: "absolute", top: "1px", bottom: "1px", minHeight: "1px", left: `calc(-20px - ${percentage}%)`, right: "calc(20px + 100%)", backgroundColor: "#55b" }}></div>
-                        {line}
-                    </div>
-                })}
-            </div>
-        </div>
-    </div>
-})
+// TODO: Integrate this view into the Create tab (and consider renaming the tab; maybe "Hack"?).
+// const Debug = memo(function Debug({ wat }: { wat: string }) {
+//     const [counts, setCounts] = useState<{ [key: number]: number }>({})
+//     const lines = useMemo(() => wat?.split("\n"), [wat])
+//     const max = Math.max(...Object.values(counts))
+//     return <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+//         <div style={{ containerType: "size", flexGrow: 1, marginBottom: "20px" }}>
+//             <div style={{ textAlign: "left", width: "100%", height: "600px", whiteSpace: "pre", lineHeight: 1, fontSize: `${98 / (lines?.length ?? 1)}cqh`, display: "flex", flexFlow: "column wrap" }}>
+//                 {lines && lines.map((line, index) => {
+//                     const percentage = (counts[index] ?? 0) / max * 20
+//                     return <div key={index} style={{ position: "relative" }}>
+//                         <div style={{ position: "absolute", top: "1px", bottom: "1px", minHeight: "1px", left: `calc(-20px - ${percentage}%)`, right: "calc(20px + 100%)", backgroundColor: "#55b" }}></div>
+//                         {line}
+//                     </div>
+//                 })}
+//             </div>
+//         </div>
+//     </div>
+// })
 
 function App() {
     const [title, setTitle] = useState(NO_TITLE)
@@ -638,7 +640,6 @@ function App() {
         { name: "Scan", component: <Scan {...{ onScan, tab }} /> },
         { name: "Create", component: <Create {...{ binary, loadBinary, wat, setWAT, tab }} /> },
         { name: "About", component: <About {...{ setTab }} /> },
-        { name: "Debug", component: <Debug {...{ wat }} /> },
     ]
 
     const border = `1px ${dragging ? "dashed" : "solid"} black`
