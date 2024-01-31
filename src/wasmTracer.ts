@@ -3,23 +3,26 @@ import * as wasmdis from "wasmparser/dist/esm/WasmDis"
 
 export type LogMap = { [key: number]: { start: { line: number, offset: number }, end: { line: number, offset: number } } }
 
-export function instrumentWat(content: Uint8Array) {
+export function disassembleWasm(content: Uint8Array) {
     const reader = new wasmparser.BinaryReader()
     reader.setData(content, 0, content.byteLength)
     const dis = new wasmdis.WasmDisassembler()
     dis.addOffsets = true
-    dis.skipTypes = false
+    dis.skipTypes = true
     if (!dis.disassembleChunk(reader)) {
         throw new Error("Unexpected EOF in wasm")
     }
-    const result = dis.getResult()
+    return dis.getResult()
+}
+
+export function instrumentWasm(result: wasmdis.IDisassemblerResult) {
     let id = 0
     const out: string[] = []
     const markers: { line: number, offset: number }[] = []
     let doneWithFunctions = false
     result.lines.forEach(function (s, index) {
         const offset = result.offsets![index]
-        console.log(s, offset)
+        // console.log(s, offset)
         out.push(s)
         // HACK: Instrument binary for execution tracing by editing the WAT
         // This is accomplished by generating a new import for a `log` function,
@@ -27,9 +30,9 @@ export function instrumentWat(content: Uint8Array) {
         // Each inserted call to `scorecard.log` has a unique ID.
         // We generate a map from log IDs to regions of code that must have been executed if we see that ID.
         // This map includes both line numbers (for the text format) and byte offsets (for the binary format).
-        if (s.match(/^ *\(type/) && !result.lines[index+1]?.match(/^ *\(type/)) {
+        if (s.match(/^\(module/)) {
             const line = '(import "scorecard" "log" (func $log (param i32)))'
-            console.log("INSERT:", line)
+            // console.log("INSERT:", line)
             out.push(line)
         }
         if (s.match(/^ *\(func /)) {
@@ -37,11 +40,11 @@ export function instrumentWat(content: Uint8Array) {
         }
         if (s.match(/^ *\((func|local) /) && !result.lines[index+1]?.match(/^ *\(local/)) {
             const line = `(call $log (i32.const ${id++}))`
-            console.log("INSERT:", line)
+            // console.log("INSERT:", line)
             out.push(line)
         } else if (s.match(/^ *(br_if|if|else|loop|end)/)) {
             const line = `(call $log (i32.const ${id++}))`
-            console.log("INSERT:", line)
+            // console.log("INSERT:", line)
             out.push(line)
             markers.push({ line: index + 1, offset })
         }
@@ -57,5 +60,5 @@ export function instrumentWat(content: Uint8Array) {
             end: markers[i + 1],
         }
     }
-    return { original: result.lines.join("\n"), instrumented: out.join("\n"), logMap }
+    return { instrumented: out.join("\n"), logMap }
 }

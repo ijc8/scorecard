@@ -5,7 +5,7 @@ class CustomProcessor extends AudioWorkletProcessor {
         this.pos = 0
         this.port.onmessage = async e => {
             if (e.data.cmd === "loadModule") {
-                this.module = new WebAssembly.Module(e.data.buffer)
+                this.module = new WebAssembly.Module(e.data.binary)
                 this.trace = e.data.trace
             } else if (e.data.cmd === "reset") {
                 this.setup(e.data.seed)
@@ -32,6 +32,7 @@ class CustomProcessor extends AudioWorkletProcessor {
                 traceLogs.length = 0
             }
         } else {
+            this.traceLogs = null
             this.wasm = await WebAssembly.instantiate(this.module)
             if (this.wasm.exports.setup) {
                 this.wasm.exports.setup(seed)
@@ -55,7 +56,7 @@ class CustomProcessor extends AudioWorkletProcessor {
         this.pos += 128
         if (this.pos % 1024 === 0) {
             this.port.postMessage(this.pos)
-            if (this.trace) {
+            if (this.traceLogs) {
                 this.port.postMessage(this.traceLogs)
                 this.traceLogs.length = 0
             }

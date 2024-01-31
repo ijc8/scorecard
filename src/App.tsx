@@ -22,7 +22,7 @@ import BullseyeArrow from "pixelarticons/svg/bullseye-arrow.svg?react"
 import { Html5QrcodePlugin } from "./Html5QrcodePlugin"
 import logoUrl from "./assets/logo.png"
 import exampleCardUrl from "./assets/example-card.png"
-import { LogMap, instrumentWat } from "./wasmTracer"
+import { LogMap, disassembleWasm, instrumentWasm } from "./wasmTracer"
 
 function generateSeed() {
     return Math.floor(Math.random() * Math.pow(2, 32))
@@ -151,12 +151,11 @@ function SeedInput({ seed, setSeed }: any) {
     />
 }
 
-let t = 0
-let s = 0
 // TODO: Specify types
-function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer }: {
+function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, setTracing }: {
     qrCanvas: RefObject<HTMLCanvasElement>, title: string, size: number, seed: number, setSeed: (s: number) => void, seedLock: boolean,
     setSeedLock: (l: boolean) => void, state: any, setState: any, time: number, reset: any, error: any, buffer: Uint8Array | null,
+    tracing: boolean, setTracing: (t: boolean) => void,
 }) {
     const bigIconStyle = { height: "10cqw", verticalAlign: "middle" }
     const smallIconStyle = { height: "5cqw", flexShrink: 0, verticalAlign: "middle" }
@@ -198,22 +197,22 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
     //     console.log((s - t) / 1000)
     // }
 
-    const [trace, setTrace] = useState(false)
     const traceCanvas = useRef<HTMLCanvasElement | null>(null)
     draw = () => {
-        if (!trace || !traceCanvas.current || !buffer) return
+        if (trace && !tracing) trace.logs.length = 0
+        if (!tracing || !traceCanvas.current || !binary) return
         const canvas = traceCanvas.current
         const context = canvas.getContext("2d")!
         // Arrange bits in a square
-        const size = Math.ceil(Math.sqrt(buffer.length * 8))
+        const size = Math.ceil(Math.sqrt(binary.length * 8))
         canvas.width = size
         canvas.height = size
         const image = new ImageData(canvas.width, canvas.height)
         for (let i = 0; i < size * size; i++) {
-            if (i < buffer.length * 8) {
+            if (i < binary.length * 8) {
                 const byte = Math.floor(i / 8)
                 const bit = i % 8
-                if ((buffer[byte] >> bit) & 1) {
+                if ((binary[byte] >> bit) & 1) {
                     image.data[i*4] = 204
                     image.data[i*4+1] = 204
                     image.data[i*4+2] = 255
@@ -229,24 +228,24 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
             // }
         }
         context.putImageData(image, 0, 0)
-        if (state === "playing") {
-            const max = Math.max(...Object.values(debugLogs))
-            debugLogs.forEach((count, id) => {
-                const startByte = debugLogMap[id].start.offset
-                const endByte = debugLogMap[id].end.offset
+        if (trace && state === "playing") {
+            const max = Math.max(...Object.values(trace.logs))
+            trace.logs.forEach((count, id) => {
+                const startByte = trace!.map[id].start.offset
+                const endByte = trace!.map[id].end.offset
                 for (let i = startByte * 8; i < endByte * 8; i++) {
                     // TODO: fewer calls to `fillRect`
                     const x = i % canvas.width
                     const y = Math.floor(i / canvas.width)
-                    context.fillStyle = `rgba(0 255 0 / ${count / max * 50}%)`
+                    context.fillStyle = `rgba(0 255 0 / ${count / max * 40}%)`
                     context.fillRect(x, y, 1, 1)
                 }
             })
         }
     }
-    useEffect(draw, [trace, buffer])
+    useEffect(draw, [tracing, binary])
     const togglePlay = () => { setState(state === "playing" ? "paused" : "playing") }
-    const TraceIcon = trace ? BullseyeArrow : Bullseye
+    const TraceIcon = tracing ? BullseyeArrow : Bullseye
     return <div>
         <div style={{ position: "relative" }}>
             {showMessage && <div style={{ position: "absolute", fontSize: "48px", height: "100%", width: "100%", userSelect: "none" }}>
@@ -261,8 +260,8 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
                     </>}
                 </div>
             </div>}
-            <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", display: trace ? "none" : "block", visibility: showMessage ? "hidden" : "inherit", width: "100%" }} width="1" height="1"></canvas>
-            <canvas ref={traceCanvas} style={{ imageRendering: "pixelated", display: trace ? "block" : "none", visibility: showMessage ? "hidden" : "inherit", width: "100%" }} width="1" height="1"></canvas>
+            <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", display: tracing ? "none" : "block", visibility: showMessage ? "hidden" : "inherit", width: "100%" }} width="1" height="1"></canvas>
+            <canvas ref={traceCanvas} style={{ imageRendering: "pixelated", display: tracing ? "block" : "none", visibility: showMessage ? "hidden" : "inherit", width: "100%" }} width="1" height="1"></canvas>
         </div>
         <h2 style={{ userSelect: "none", margin: "20px", fontSize: "6cqw" }}>{title} | {size} bytes {/* TODO: add link and perhaps download buttons with icons */}</h2>
         <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", fontSize: "5cqw" }}>
@@ -278,7 +277,7 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
                 &nbsp;
                 <SeedInput {...{ seed, setSeed }} />
             </div>
-            <button style={{ fontSize: 0, marginRight: "-5cqw" }} onClick={() => setTrace(!trace)}>
+            <button style={{ fontSize: 0, marginRight: "-5cqw" }} onClick={() => setTracing(!tracing)}>
                 <TraceIcon style={{ ...smallIconStyle }} />
             </button>
         </div>
@@ -347,8 +346,13 @@ function Create({ loadBinary, wat, setWAT }: any) {
 
 const NO_TITLE = "untitled"
 
-let debugLogs: number[] = []
-let debugLogMap: LogMap
+interface TraceData {
+    binary: Uint8Array
+    map: LogMap
+    logs: number[]
+}
+let trace: TraceData | null = null
+
 let handleTraceLogs: undefined | ((l: number[]) => void)
 let draw: undefined | (() => void)
 
@@ -356,15 +360,16 @@ const Debug = memo(function Debug({ wat }: { wat: string }) {
     const [counts, setCounts] = useState<{ [key: number]: number }>({})
     const lines = useMemo(() => wat?.split("\n"), [wat])
     handleTraceLogs = (traceLogs: number[]) => {
-        const oldDebugLogs = debugLogs
-        debugLogs = traceLogs
+        if (trace === null) return
+        const oldTraceLogs = trace.logs
+        trace.logs = traceLogs
         const newCounts: typeof counts = {}
         // We use `forEach` because it skips empty slots, unlike other methods.
-        oldDebugLogs.forEach((count, id) => {
-            debugLogs[id] = Math.max(debugLogs[id] ?? 0, count * 0.6)
+        oldTraceLogs.forEach((count, id) => {
+            trace!.logs[id] = Math.max(trace!.logs[id] ?? 0, count * 0.6)
         })
-        debugLogs.forEach((count, id) => {
-            for (let line = debugLogMap[id].start.line; line < debugLogMap[id].end.line; line++) {
+        trace.logs.forEach((count, id) => {
+            for (let line = trace!.map[id].start.line; line < trace!.map[id].end.line; line++) {
                 newCounts[line] = count
             }
         })
@@ -392,7 +397,7 @@ function App() {
     const [size, setSize] = useState(0)
     const [seed, setSeed] = useState(0)
     const [seedLock, setSeedLock] = useState(false)
-    const [buffer, setBuffer] = useState<Uint8Array | null>(null)
+    const [binary, setBinary] = useState<Uint8Array | null>(null)
     const [wat, setWAT] = useState("")
     // const [link, setLink] = useState("")
     // const [download, setDownload] = useState("")
@@ -403,29 +408,28 @@ function App() {
     const [tab, setTab] = useState(encoded ? 0 : 3)
     const [dragging, setDragging] = useState(false)
     const qrCanvas = useRef<HTMLCanvasElement>(null)
+    const [tracing, _setTracing] = useState(false)
 
-    const loadBinary = async (buffer: Uint8Array) => {
-        // WIP: Experiment with instrumenting binary for execution tracing.
-        const { original, instrumented, logMap } = instrumentWat(buffer)
-        setWAT(original)
+    const loadBinary = async (binary: Uint8Array) => {
+        const dis = disassembleWasm(binary)
+        setWAT(dis.lines.join("\n"))
+
+        // Instrument Wasm for tracing.
+        // TODO: do this lazily, only after user enables tracing
+        const { instrumented, logMap } = instrumentWasm(dis)
         const wabt = await wabtPromise
         console.log(instrumented)
         console.log(logMap)
         const result = wabt.parseWat("main.wasm", instrumented).toBinary({})
         console.log(result.log)
-        const instrumentedBuffer = result.buffer
-        // const module = new WebAssembly.Module(result.buffer)
-        // console.log("loaded wasm", module)
-        // debugInstance = new WebAssembly.Instance(module, {
-        //     scorecard: { log(i: number) { debugLogs[i] = (debugLogs[i] ?? 0) + 1 } }
-        // })
-        // profile(debugInstance)
-        // console.log(debugLogs)
-        // debugSetup = false
-        debugLogMap = logMap
+        trace = {
+            binary: result.buffer,
+            map: logMap,
+            logs: []
+        }
 
-        const module = new WebAssembly.Module(buffer)
-        setSize(buffer.length)
+        const module = new WebAssembly.Module(binary)
+        setSize(binary.length)
         console.log("loaded wasm", module)
         const instance = new WebAssembly.Instance(module)
         // Load program title
@@ -444,8 +448,12 @@ function App() {
         // Send to AudioWorklet
         // Doesn't work in iOS Safari...
         // node.port.postMessage(module)
-        sendToWorklet({ cmd: "loadModule", buffer: instrumentedBuffer, trace: true })
-        setBuffer(buffer)
+        if (tracing) {
+            sendToWorklet({ cmd: "loadModule", binary })
+        } else {
+            sendToWorklet({ cmd: "loadModule", binary: trace.binary, trace: true })
+        }
+        setBinary(binary)
         // TODO: Maybe only do this on demand/if this user is on the "Create" tab.
         console.log("disassembling")
         // wabtPromise.then(wabt => {
@@ -457,8 +465,8 @@ function App() {
 
     const qrContents = useRef<any[]>([])
     useEffect(() => {
-        if (!buffer) return // Nothing to encode.
-        const newQrContents = seedLock ? [buffer, seed] : [buffer]
+        if (!binary) return // Nothing to encode.
+        const newQrContents = seedLock ? [binary, seed] : [binary]
         if (qrContents.current.length === newQrContents.length && qrContents.current.every((x, i) => x === newQrContents[i])) {
             // Nothing to do, previously-generated QR code is still correct.
             return
@@ -467,7 +475,7 @@ function App() {
         const prefix = window.location.origin + window.location.pathname.replace(/\/$/, "") // trim trailing slash
         const seedParam = seedLock ? `s=${encode(BigInt(seed))}&` : ""
         console.log(seedLock, seedParam)
-        const url = `${prefix}?${seedParam}c=${encodeBlob(buffer)}`
+        const url = `${prefix}?${seedParam}c=${encodeBlob(binary)}`
         console.log(url)
         console.log("URL length:", url.length)
         const canvas = qrCanvas.current!
@@ -485,9 +493,8 @@ function App() {
         // setLink(url)
         // setDownload(window.URL.createObjectURL(new Blob([buffer])))
         // setTab(0)
-        qrContents.current = seedLock ? [buffer, seed] : [buffer]
-        debugLogs.length = 0
-    }, [buffer, seed, seedLock])
+        qrContents.current = seedLock ? [binary, seed] : [binary]
+    }, [binary, seed, seedLock])
 
     const reset = () => {
         let _seed = seed
@@ -515,6 +522,16 @@ function App() {
             sendToWorklet({ cmd: "pause" })
         }
         _setState(_state)
+    }
+
+    const setTracing = (tracing: boolean) => {
+        if (tracing) {
+            sendToWorklet({ cmd: "loadModule", binary: trace?.binary, trace: true })
+        } else {
+            console.log(binary)
+            sendToWorklet({ cmd: "loadModule", binary })
+        }
+        _setTracing(tracing)
     }
 
     const onScan = (data: string) => {
@@ -609,7 +626,7 @@ function App() {
     // } , [])
 
     const tabs = [
-        { name: "Listen", component: <Listen {...{ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer }} /> },
+        { name: "Listen", component: <Listen {...{ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, setTracing }} /> },
         { name: "Scan", component: <Scan {...{ onScan, tab }} /> },
         { name: "Create", component: <Create {...{ loadBinary, wat, setWAT }} /> },
         { name: "About", component: <About {...{ setTab }} /> },
