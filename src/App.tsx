@@ -23,6 +23,7 @@ import { Html5QrcodePlugin } from "./Html5QrcodePlugin"
 import logoUrl from "./assets/logo.png"
 import exampleCardUrl from "./assets/example-card.png"
 import { TraceMap, instrumentWasm } from "./wasmTracer"
+import { getWabt } from './lazyWabt'
 
 function generateSeed() {
     return Math.floor(Math.random() * Math.pow(2, 32))
@@ -111,10 +112,6 @@ function profile(instance: WebAssembly.Instance) {
     const end = performance.now()
     console.log("process:", end - start, "ms", (end - start) / 1000, "frac", 1000 / (end - start), "mult")
 }
-
-// TODO: Maybe don't do this until the user switches to the "Create" tab
-// Dynamic import for code-splitting (wabt is big!)
-const wabtPromise = import("../wabt").then(m => m.default())
 
 function SeedInput({ seed, setSeed }: any) {
     const [contents, setContents] = useState("")
@@ -326,12 +323,25 @@ const About = memo(function About({ setTab }: any) {
     </div>
 })
 
-function Create({ loadBinary, wat, setWAT }: any) {
+function Create({ binary, loadBinary, wat, setWAT, tab }: {
+    binary: Uint8Array | null, loadBinary: (b: Uint8Array) => void, wat: string, setWAT: (w: string) => void, tab: number
+}) {
+    const oldBinary = useRef(binary)
+    useEffect(() => {
+        if (tab !== 2 || !binary || binary === oldBinary.current) return
+        oldBinary.current = binary
+        console.log("disassembling")
+        getWabt().then(wabt => {
+            const disassembled = wabt.readWasm(binary, { readDebugNames: true })
+            disassembled.applyNames()
+            setWAT(disassembled.toText({ foldExprs: false, inlineExport: true }))
+        })
+    }, [binary, tab])
+
     const assemble = async () => {
         console.log("assembling", wat)
         console.log("text size", wat.length)
-        // const buffer = compile(textarea.value)
-        const wabt = await wabtPromise
+        const wabt = await getWabt()
         // TODO: Show errors.
         const result = wabt.parseWat("main.wasm", wat).toBinary({})
         console.log(result.log)
@@ -405,7 +415,7 @@ function App() {
     const [time, setTime] = useState(0)
     const [error, setError] = useState(false)
     const encoded = new URLSearchParams(window.location.search).get("c")
-    const [tab, setTab] = useState(encoded ? 0 : 3)
+    const [tab, setTab] = useState(encoded ? 0 : 3) // TODO: use an enum
     const [dragging, setDragging] = useState(false)
     const qrCanvas = useRef<HTMLCanvasElement>(null)
     const [tracing, _setTracing] = useState(false)
@@ -415,7 +425,7 @@ function App() {
         const { instrumented, logMap } = instrumentWasm(binary)
         // TODO: set fixed WAT for tracing (line highlighting) in Create tab
         // setWAT(original)
-        const wabt = await wabtPromise
+        const wabt = await getWabt()
         const result = wabt.parseWat("main.wasm", instrumented).toBinary({})
         trace = {
             binary: result.buffer,
@@ -453,13 +463,6 @@ function App() {
         }
         setBinary(binary)
         reset()
-        // TODO: Maybe only do this on demand/if this user is on the "Create" tab.
-        console.log("disassembling")
-        wabtPromise.then(wabt => {
-            const disassembled = wabt.readWasm(binary, { readDebugNames: true })
-            disassembled.applyNames()
-            setWAT(disassembled.toText({ foldExprs: false, inlineExport: true }))
-        })
     }
     const loadBinaryRef = useRef(loadBinary)
     loadBinaryRef.current = loadBinary
@@ -633,7 +636,7 @@ function App() {
     const tabs = [
         { name: "Listen", component: <Listen {...{ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, setTracing }} /> },
         { name: "Scan", component: <Scan {...{ onScan, tab }} /> },
-        { name: "Create", component: <Create {...{ loadBinary, wat, setWAT }} /> },
+        { name: "Create", component: <Create {...{ binary, loadBinary, wat, setWAT, tab }} /> },
         { name: "About", component: <About {...{ setTab }} /> },
         { name: "Debug", component: <Debug {...{ wat }} /> },
     ]

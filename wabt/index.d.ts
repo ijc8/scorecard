@@ -83,7 +83,7 @@ declare class WasmModule {
   destroy(): void;
 }
 
-interface WabtModule {
+export interface WabtModule {
   /** Parses a WebAssembly text format source to a module. */
   parseWat(filename: string, buffer: string | Uint8Array, options?: WasmFeatures): WasmModule;
   /** Reads a WebAssembly binary to a module. */
