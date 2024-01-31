@@ -17,6 +17,8 @@ import Subscriptions from "pixelarticons/svg/subscriptions.svg?react"
 import Camera from "pixelarticons/svg/camera.svg?react"
 import EditBox from "pixelarticons/svg/edit-box.svg?react"
 import DragAndDrop from "pixelarticons/svg/drag-and-drop.svg?react"
+import Bullseye from "pixelarticons/svg/bullseye.svg?react"
+import BullseyeArrow from "pixelarticons/svg/bullseye-arrow.svg?react"
 import { Html5QrcodePlugin } from "./Html5QrcodePlugin"
 import logoUrl from "./assets/logo.png"
 import exampleCardUrl from "./assets/example-card.png"
@@ -240,6 +242,8 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
     }
     useEffect(draw, [qrCanvas.current, buffer, state])
     const togglePlay = () => { setState(state === "playing" ? "paused" : "playing") }
+    const [trace, setTrace] = useState(false)
+    const TraceIcon = trace ? BullseyeArrow : Bullseye
     return <div>
         <div style={{ position: "relative" }}>
             {showMessage && <div style={{ position: "absolute", fontSize: "48px", height: "100%", width: "100%", userSelect: "none" }}>
@@ -260,15 +264,19 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
         <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", fontSize: "5cqw" }}>
             <div style={{ userSelect: "none", display: "flex", alignItems: "center", width: "4em", justifyContent: "right" }}>
                 <Clock style={smallIconStyle} />
+                &nbsp;
                 <span style={{ verticalAlign: "middle", display: "inline-block" }}>{formatTime(time)}</span>
             </div>
             <button onTouchStart={touchStartReset} onMouseDown={mouseReset} onMouseUp={() => { events.current.reset = false }} style={{ touchAction: "manipulation" }}><Prev style={bigIconStyle} /></button>
             <button id="start" onTouchStart={touchStartToggle} onMouseDown={mouseToggle} onMouseUp={() => { events.current.toggle = false }}>{state === "playing" ? <Pause style={bigIconStyle} /> : <Play style={bigIconStyle} />}</button>
-            <div style={{ display: "flex", alignItems: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", userSelect: "none" }}>
                 <button style={{ fontSize: 0 }}><DiceIcon style={smallIconStyle} onClick={() => setSeedLock(!seedLock)} /></button>
                 &nbsp;
                 <SeedInput {...{ seed, setSeed }} />
             </div>
+            <button style={{ fontSize: 0, marginRight: "-5cqw" }} onClick={() => setTrace(!trace)}>
+                <TraceIcon style={{ ...smallIconStyle }} />
+            </button>
         </div>
     </div>
 }
