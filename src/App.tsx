@@ -189,16 +189,20 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
         if (events.current.toggle) return
         togglePlay()
     }
-    // TODO TEMP measure postMessage lag by observing clock
-    if (t === 0 && state === "playing") {
-        t = performance.now()
-    } else if (s === 0 && time > 1) {
-        s = performance.now()
-        console.log((s - t) / 1000)
-    }
+
+    // Determine initial playback delay:
+    // if (t === 0 && state === "playing") {
+    //     t = performance.now()
+    // } else if (s === 0 && time > 1) {
+    //     s = performance.now()
+    //     console.log((s - t) / 1000)
+    // }
+
+    const [trace, setTrace] = useState(false)
+    const traceCanvas = useRef<HTMLCanvasElement | null>(null)
     draw = () => {
-        if (!qrCanvas.current || !buffer) return
-        const canvas = qrCanvas.current
+        if (!trace || !traceCanvas.current || !buffer) return
+        const canvas = traceCanvas.current
         const context = canvas.getContext("2d")!
         // Arrange bits in a square
         const size = Math.ceil(Math.sqrt(buffer.length * 8))
@@ -240,9 +244,8 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
             })
         }
     }
-    useEffect(draw, [qrCanvas.current, buffer, state])
+    useEffect(draw, [trace, buffer])
     const togglePlay = () => { setState(state === "playing" ? "paused" : "playing") }
-    const [trace, setTrace] = useState(false)
     const TraceIcon = trace ? BullseyeArrow : Bullseye
     return <div>
         <div style={{ position: "relative" }}>
@@ -258,7 +261,8 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
                     </>}
                 </div>
             </div>}
-            <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", visibility: showMessage ? "hidden" : "inherit", width: "100%" }} width="1" height="1"></canvas>
+            <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", display: trace ? "none" : "block", visibility: showMessage ? "hidden" : "inherit", width: "100%" }} width="1" height="1"></canvas>
+            <canvas ref={traceCanvas} style={{ imageRendering: "pixelated", display: trace ? "block" : "none", visibility: showMessage ? "hidden" : "inherit", width: "100%" }} width="1" height="1"></canvas>
         </div>
         <h2 style={{ userSelect: "none", margin: "20px", fontSize: "6cqw" }}>{title} | {size} bytes {/* TODO: add link and perhaps download buttons with icons */}</h2>
         <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", fontSize: "5cqw" }}>
