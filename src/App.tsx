@@ -22,7 +22,7 @@ import BullseyeArrow from "pixelarticons/svg/bullseye-arrow.svg?react"
 import { Html5QrcodePlugin } from "./Html5QrcodePlugin"
 import logoUrl from "./assets/logo.png"
 import exampleCardUrl from "./assets/example-card.png"
-import { LogMap, disassembleWasm, instrumentWasm } from "./wasmTracer"
+import { TraceMap, instrumentWasm } from "./wasmTracer"
 
 function generateSeed() {
     return Math.floor(Math.random() * Math.pow(2, 32))
@@ -348,7 +348,7 @@ const NO_TITLE = "untitled"
 
 interface TraceData {
     binary: Uint8Array
-    map: LogMap
+    map: TraceMap
     logs: number[]
 }
 let trace: TraceData | null = null
@@ -360,7 +360,7 @@ const Debug = memo(function Debug({ wat }: { wat: string }) {
     const [counts, setCounts] = useState<{ [key: number]: number }>({})
     const lines = useMemo(() => wat?.split("\n"), [wat])
     handleTraceLogs = (traceLogs: number[]) => {
-        if (trace === null) return
+        if (trace === null || !trace.map[traceLogs.length - 1]) return
         const oldTraceLogs = trace.logs
         trace.logs = traceLogs
         const newCounts: typeof counts = {}
@@ -410,24 +410,21 @@ function App() {
     const qrCanvas = useRef<HTMLCanvasElement>(null)
     const [tracing, _setTracing] = useState(false)
 
-    const loadBinary = async (binary: Uint8Array) => {
-        const dis = disassembleWasm(binary)
-        setWAT(dis.lines.join("\n"))
-
-        // Instrument Wasm for tracing.
-        // TODO: do this lazily, only after user enables tracing
-        const { instrumented, logMap } = instrumentWasm(dis)
+    const setupTracing = async (binary: Uint8Array) => {
+        // Instrument Wasm for execution tracing.
+        const { instrumented, logMap } = instrumentWasm(binary)
+        // TODO: set fixed WAT for tracing (line highlighting) in Create tab
+        // setWAT(original)
         const wabt = await wabtPromise
-        console.log(instrumented)
-        console.log(logMap)
         const result = wabt.parseWat("main.wasm", instrumented).toBinary({})
-        console.log(result.log)
         trace = {
             binary: result.buffer,
             map: logMap,
             logs: []
         }
+    }
 
+    const loadBinary = async (binary: Uint8Array) => {
         const module = new WebAssembly.Module(binary)
         setSize(binary.length)
         console.log("loaded wasm", module)
@@ -446,22 +443,26 @@ function App() {
             setTitle(NO_TITLE)
         }
         // Send to AudioWorklet
-        // Doesn't work in iOS Safari...
-        // node.port.postMessage(module)
+        // NOTE: We send the binary here because sending the WebAssembly.Module doesn't work in iOS Safari...
         if (tracing) {
-            sendToWorklet({ cmd: "loadModule", binary })
+            await setupTracing(binary)
+            sendToWorklet({ cmd: "loadModule", binary: trace!.binary, trace: true })
         } else {
-            sendToWorklet({ cmd: "loadModule", binary: trace.binary, trace: true })
+            trace = null
+            sendToWorklet({ cmd: "loadModule", binary })
         }
         setBinary(binary)
+        reset()
         // TODO: Maybe only do this on demand/if this user is on the "Create" tab.
         console.log("disassembling")
-        // wabtPromise.then(wabt => {
-        //     const disassembled = wabt.readWasm(buffer, { readDebugNames: true })
-        //     disassembled.applyNames()
-        //     setWAT(disassembled.toText({ foldExprs: false, inlineExport: true }))
-        // })
+        wabtPromise.then(wabt => {
+            const disassembled = wabt.readWasm(binary, { readDebugNames: true })
+            disassembled.applyNames()
+            setWAT(disassembled.toText({ foldExprs: false, inlineExport: true }))
+        })
     }
+    const loadBinaryRef = useRef(loadBinary)
+    loadBinaryRef.current = loadBinary
 
     const qrContents = useRef<any[]>([])
     useEffect(() => {
@@ -524,14 +525,18 @@ function App() {
         _setState(_state)
     }
 
-    const setTracing = (tracing: boolean) => {
+    const setTracing = async (tracing: boolean) => {
+        _setTracing(tracing)
+        if (!binary) return
         if (tracing) {
-            sendToWorklet({ cmd: "loadModule", binary: trace?.binary, trace: true })
+            if (!trace) {
+                await setupTracing(binary)
+            }
+            sendToWorklet({ cmd: "loadModule", binary: trace!.binary, trace: true })
         } else {
-            console.log(binary)
             sendToWorklet({ cmd: "loadModule", binary })
         }
-        _setTracing(tracing)
+        if (state !== "playing") reset()
     }
 
     const onScan = (data: string) => {
@@ -574,7 +579,7 @@ function App() {
 
             const file = e.dataTransfer!.files[0]
             const arrayBuffer = await file.arrayBuffer()
-            loadBinary(new Uint8Array(arrayBuffer))
+            loadBinaryRef.current(new Uint8Array(arrayBuffer))
             return false
         }
         const dragover = (e: DragEvent) => e.preventDefault()

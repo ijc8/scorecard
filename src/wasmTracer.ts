@@ -1,11 +1,16 @@
 import * as wasmparser from "wasmparser/dist/esm/WasmParser"
 import * as wasmdis from "wasmparser/dist/esm/WasmDis"
 
-export type LogMap = { [key: number]: { start: { line: number, offset: number }, end: { line: number, offset: number } } }
+export type TraceMap = {
+    [key: number]: {
+        start: { line: number, offset: number },
+        end: { line: number, offset: number }
+    }
+}
 
-export function disassembleWasm(content: Uint8Array) {
+function disassembleWasm(binary: Uint8Array) {
     const reader = new wasmparser.BinaryReader()
-    reader.setData(content, 0, content.byteLength)
+    reader.setData(binary, 0, binary.byteLength)
     const dis = new wasmdis.WasmDisassembler()
     dis.addOffsets = true
     dis.skipTypes = true
@@ -15,7 +20,8 @@ export function disassembleWasm(content: Uint8Array) {
     return dis.getResult()
 }
 
-export function instrumentWasm(result: wasmdis.IDisassemblerResult) {
+export function instrumentWasm(binary: Uint8Array) {
+    const result = disassembleWasm(binary)
     let id = 0
     const out: string[] = []
     const markers: { line: number, offset: number }[] = []
@@ -53,12 +59,12 @@ export function instrumentWasm(result: wasmdis.IDisassemblerResult) {
             doneWithFunctions = true
         }
     })
-    const logMap: LogMap = {}
+    const logMap: TraceMap = {}
     for (let i = 0; i < id; i++) {
         logMap[i] = {
             start: markers[i],
             end: markers[i + 1],
         }
     }
-    return { instrumented: out.join("\n"), logMap }
+    return { original: result.lines.join("\n"), instrumented: out.join("\n"), logMap }
 }
