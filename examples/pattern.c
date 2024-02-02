@@ -1,3 +1,4 @@
+// Tidalish patterns
 #include "deck.h"
 
 // Types
@@ -64,8 +65,11 @@ void sort_events() {
 
 // atom - simplest pattern (one event that occupies an entire cycle)
 void atom(void *self, span_t span) {
-    // TODO: respect span?
-    events[events_len++] = (event_t){.span = {.start = 0, .end = 1}, .value = (size_t)self};
+    int start = truncf(span.start);
+    int end = truncf(span.end);
+    for (int i = start; i < end; i++) {
+        events[events_len++] = (event_t){.span = {.start = i, .end = i + 1}, .value = (size_t)self};
+    }
 }
 
 // cat (AKA slowcat) - alternate between patterns, one per cycle
@@ -90,9 +94,21 @@ void cat(void *_self, span_t span) {
             }
         );
         for (int i = start_event; i < events_len; i++) {
-            events[i].span.start += t;
-            events[i].span.end += t;
+            events[i].span.start += (t - cycle);
+            events[i].span.end += (t - cycle);
         }
+    }
+}
+
+// fastcat - fit several patterns into one cycle
+void fastcat(void *_self, span_t span) {
+    // fastcat = slowcat + fast
+    cat_t *self = _self;
+    int start_event = events_len;
+    cat(_self, (span_t){span.start * self->len, span.end * self->len});
+    for (int i = start_event; i < events_len; i++) {
+        events[i].span.start /= self->len;
+        events[i].span.end /= self->len;
     }
 }
 
@@ -111,20 +127,25 @@ float synth(synth_state *self, int pitch, float dur) {
 
 
 // Setup pattern.
-cat_t state = {
-    .patterns = (pattern_t []){
-        {.func = atom, .state = (void*)60},
-        {.func = atom, .state = (void*)72},
-    },
-    .len = 2,
-};
-
 pattern_t pattern = {
     .func = cat,
-    .state = &state,
+    .state = &(cat_t){
+        .patterns = (pattern_t []){
+            {.func = atom, .state = (void *)60},
+            {.func = fastcat, .state = (void *)&(cat_t){
+                .patterns = (pattern_t []){
+                    {.func = atom, .state = (void *)69},
+                    {.func = atom, .state = (void *)70},
+                    {.func = atom, .state = (void *)71},
+                },
+                .len = 3,
+            }},
+        },
+        .len = 2,
+    },
 };
 
-float cps = 4;
+float cps = 2;
 
 // void setup(unsigned int seed) {
 //     query(pattern, (span_t){0, 3});
@@ -144,7 +165,7 @@ float process() {
         query(pattern, (span_t){cycle, cycle + 1});
         sort_events();
         for (int i = 0; i < events_len; i++) {
-            debug("%d: %f %f %d\n", i, events[i].span.start, events[i].span.end, events[i].value);
+            debug("%d-%d: %f %f %d\n", cycle, i, events[i].span.start, events[i].span.end, events[i].value);
         }
         for (i = 0; i < events_len; i++) {
             // Skip events whose onset is not in this cycle.
