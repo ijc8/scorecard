@@ -3,8 +3,8 @@
 
 // Types
 typedef struct {
-    float start;
-    float end;
+    double start;
+    double end;
 } span_t;
 
 typedef struct {
@@ -111,12 +111,12 @@ void stack(void *_self, span_t span) {
 // fast - warp time within pattern
 typedef struct {
     pattern_t *pattern;
-    float rate;
+    double rate;
 } fast_t;
 
 void fast(void *_self, span_t span) {
     fast_t *self = _self;
-    float rate = self->rate;
+    double rate = self->rate;
     int start_event = events_len;
     query(*(self->pattern), (span_t){span.start * rate, span.end * rate});
     for (int i = start_event; i < events_len; i++) {
@@ -139,19 +139,22 @@ void degrade(void *_self, span_t span) {
     }
 }
 
-float cps = 1;
+double cps = 1;
 
 event_t ongoing_events[MAX_EVENTS];
 int ongoing_events_len = 0;
-float t;
+double t;
 
-float synthesize_event(event_t event, float t) {
-    float freq = m2f(event.value);
+#define AD(t, attack, decay) ((t) < (attack) ? ((t) / (attack)) : (1 - ((t) - (attack)) / (decay)))
+#define SAW(phase) ((phase) * 2 - 1)
+
+float synthesize_event(event_t event, double t) {
+    double freq = m2f(event.value);
     t -= event.span.start / cps;
-    float dur = (event.span.end - event.span.start) / cps;
-    float phase = freq * t;
-    phase = phase - truncf(phase);
-    return ad(t, dur / 4, dur * 3 / 4) * (phase * 2 - 1);
+    double dur = (event.span.end - event.span.start) / cps;
+    double phase = freq * t;
+    phase = phase - trunc(phase);
+    return AD(t, dur / 4, dur * 3 / 4) * SAW(phase);
 }
 
 float mix_events() {
