@@ -170,25 +170,25 @@ float mix_events() {
     return out / 2;
 }
 
+// Better living through macros.
+#define COMBINE(fn, ...) {.func = fn, .state = &(patterns_t){ .len = SIZEOF(((pattern_t []){__VA_ARGS__})), .patterns = (pattern_t []){__VA_ARGS__}}}
+#define STACK(...) COMBINE(stack, __VA_ARGS__)
+#define CAT(...) COMBINE(cat, __VA_ARGS__)
+#define FAST(r, p) {.func = fast, .state = &(fast_t){ .rate = (r), .pattern = &(pattern_t)p}}
+#define DEGRADE(p) {.func = degrade, .state = &(pattern_t)p}
+#define NOTE(p) {.func = atom, .state = (void *)(p)}
+#define FASTCAT(...) FAST(SIZEOF(((pattern_t []){__VA_ARGS__})), CAT(__VA_ARGS__))
 
-// Setup pattern.
+// Set up pattern.
 // (Let's pretend this is Lisp!)
-pattern_t pattern = {
-    .func = stack, .state = &(patterns_t){
-        .len = 2,
-        .patterns = (pattern_t []){
-            {.func = atom, .state = (void *)48},
-            {.func = degrade, .state = (void *)&(pattern_t){
-                .func = fast, .state = (void *)&(fast_t){
-                    .rate = 4,
-                    .pattern = &(pattern_t){
-                        .func = cat, .state = (void *)&(patterns_t){
-                            .len = 4,
-                            .patterns = (pattern_t []){
-                                {.func = atom, .state = (void *)60},
-                                {.func = atom, .state = (void *)67},
-                                {.func = atom, .state = (void *)63},
-                                {.func = atom, .state = (void *)67}}}}}}}}}};
+pattern_t pattern = STACK(
+    NOTE(48),
+    DEGRADE(
+        FASTCAT(
+            NOTE(60),
+            NOTE(67),
+            NOTE(63),
+            NOTE(67))));
 
 setup_rand;
 
