@@ -100,23 +100,28 @@ void cat(void *_self, span_t span) {
     }
 }
 
-// fastcat - fit several patterns into one cycle
-void fastcat(void *_self, span_t span) {
-    // fastcat = slowcat + fast
-    patterns_t *self = _self;
-    int start_event = events_len;
-    cat(_self, (span_t){span.start * self->len, span.end * self->len});
-    for (int i = start_event; i < events_len; i++) {
-        events[i].span.start /= self->len;
-        events[i].span.end /= self->len;
-    }
-}
-
 // stack - play patterns simultaneously, in parallel
 void stack(void *_self, span_t span) {
     patterns_t *self = _self;
     for (int i = 0; i < self->len; i++) {
         query(self->patterns[i], span);
+    }
+}
+
+// fast - warp time within pattern
+typedef struct {
+    pattern_t *pattern;
+    float rate;
+} fast_t;
+
+void fast(void *_self, span_t span) {
+    fast_t *self = _self;
+    float rate = self->rate;
+    int start_event = events_len;
+    query(*(self->pattern), (span_t){span.start * rate, span.end * rate});
+    for (int i = start_event; i < events_len; i++) {
+        events[i].span.start /= rate;
+        events[i].span.end /= rate;
     }
 }
 
@@ -128,55 +133,13 @@ void degrade(void *_self, span_t span) {
     for (int i = start_event; i < events_len; i++) {
         // TODO: use a pure function of time instead of `rand()`
         if (rand() % 2) {
-            // Remove event by swapping with the event at the end.
+            // Remove event by moving the event at the end into its slot.
             events[i] = events[--events_len];
         }
     }
 }
 
-// Synth for events
-regen_vars(synth,
-    float t, phase, freq;
-);
-float synth(synth_state *self, int pitch, float dur) {
-    regen_begin;
-    self->freq = m2f(pitch);
-    for (self->t = 0; self->t < dur; self->t += dt) {
-        reyield(ad(self->t, dur / 8, dur * 7 / 8) * sqr(&self->phase, self->freq));
-    }
-    regen_end(0);
-}
-
-
-// Setup pattern.
-pattern_t pattern = {
-    .func = stack,
-    .state = &(patterns_t){
-        .patterns = (pattern_t []){
-            {.func = atom, .state = (void *)48},
-            {.func = degrade, .state = (void *)&(pattern_t)
-                {.func = fastcat, .state = (void *)&(patterns_t){
-                    .patterns = (pattern_t []){
-                        {.func = atom, .state = (void *)60},
-                        {.func = atom, .state = (void *)67},
-                        {.func = atom, .state = (void *)63},
-                        {.func = atom, .state = (void *)67},
-                    },
-                    .len = 4,
-                }}}},
-        .len = 2,
-    },
-};
-
 float cps = 1;
-
-// void setup(unsigned int seed) {
-//     query(pattern, (span_t){0, 3});
-//     sort_events();
-//     for (int i = 0; i < events_len; i++) {
-//         debug("%d: %f %f %d\n", i, events[i].span.start, events[i].span.end, events[i].value);
-//     }
-// }
 
 event_t ongoing_events[MAX_EVENTS];
 int ongoing_events_len = 0;
@@ -195,7 +158,7 @@ float mix_events() {
     float out = 0;
     for (int j = 0; j < ongoing_events_len; j++) {
         while (t >= ongoing_events[j].span.end / cps) {
-            // Event is finished; remove by swapping with the event at the end.
+            // Event is finished; remove it by moving the event at the end into its slot.
             ongoing_events[j] = ongoing_events[--ongoing_events_len];
             if (j >= ongoing_events_len) {
                 // No more events.
@@ -206,6 +169,28 @@ float mix_events() {
     }
     return out / 2;
 }
+
+
+// Setup pattern.
+// (Let's pretend this is Lisp!)
+pattern_t pattern = {
+    .func = stack, .state = &(patterns_t){
+        .len = 2,
+        .patterns = (pattern_t []){
+            {.func = atom, .state = (void *)48},
+            {.func = degrade, .state = (void *)&(pattern_t){
+                .func = fast, .state = (void *)&(fast_t){
+                    .rate = 4,
+                    .pattern = &(pattern_t){
+                        .func = cat, .state = (void *)&(patterns_t){
+                            .len = 4,
+                            .patterns = (pattern_t []){
+                                {.func = atom, .state = (void *)60},
+                                {.func = atom, .state = (void *)67},
+                                {.func = atom, .state = (void *)63},
+                                {.func = atom, .state = (void *)67}}}}}}}}}};
+
+setup_rand;
 
 float process() {
     static int cycle = 0, i;
