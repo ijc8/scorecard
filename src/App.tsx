@@ -404,6 +404,26 @@ let handleTraceLogs: undefined | ((l: number[]) => void)
 //     </div>
 // })
 
+function extractTitle(module: WebAssembly.Module) {
+    const instance = new WebAssembly.Instance(module)
+    // Support new, short export name ("d") or legacy name ("title") for old cards.
+    // (In the future, "d" may contain additional metadata such as an artist name or description.)
+    const data = instance.exports.d ?? instance.exports.title
+    if (data === undefined) {
+        return
+    }
+    const startPtr: number = (data as WebAssembly.Global).value
+    // Support new, short export name ("m") or legacy name ("memory") for old cards.
+    const memory = (instance.exports.m ?? instance.exports.memory) as WebAssembly.Memory
+    const mem = memory.buffer
+    const heap = new Uint8Array(mem)
+    let endPtr = startPtr;
+    while (heap[endPtr] != 0 && endPtr < heap.length) endPtr++
+    const title = (new TextDecoder()).decode(new Uint8Array(mem, startPtr, endPtr - startPtr))
+    console.log("Loaded title", title, "from", startPtr, "to", endPtr)
+    return title
+}
+
 function App() {
     const [title, setTitle] = useState(NO_TITLE)
     const [size, setSize] = useState(0)
@@ -433,20 +453,8 @@ function App() {
         const module = new WebAssembly.Module(binary)
         setSize(binary.length)
         console.log("loaded wasm", module)
-        const instance = new WebAssembly.Instance(module)
-        // Load program title
-        if (instance.exports.title) {
-            const startPtr: number = (instance.exports.title as WebAssembly.Global).value
-            const mem = (instance.exports.memory as WebAssembly.Memory).buffer
-            const heap = new Uint8Array(mem)
-            let endPtr = startPtr;
-            while (heap[endPtr] != 0 && endPtr < heap.length) endPtr++
-            const title = (new TextDecoder()).decode(new Uint8Array(mem, startPtr, endPtr - startPtr))
-            console.log("Loaded title", title, "from", startPtr, "to", endPtr)
-            setTitle(title)
-        } else {
-            setTitle(NO_TITLE)
-        }
+        setTitle(extractTitle(module) ?? NO_TITLE)
+
         // Send to AudioWorklet
         // NOTE: We send the binary here because sending the WebAssembly.Module doesn't work in iOS Safari...
         if (tracing) {
