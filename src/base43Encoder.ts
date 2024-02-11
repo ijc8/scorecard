@@ -58,5 +58,3 @@ export function decodeBlob(encoded: string) {
     const num = decode(encoded.slice(offset))
     return bigIntToArray(num, offset)
 }
-
-Object.assign(window, { encode: encodeBlob, decode: decodeBlob }) // TODO TEMP
