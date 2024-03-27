@@ -3,7 +3,7 @@
 [ScoreCard](https://ijc8.me/s) is a player for "score cards": QR codes containing tiny generative music programs.
 A score card looks like this:
 
-![Example card](assets/example-card.png)
+![Example card](https://github.com/ijc8/scorecard/assets/99575/47d1fb4b-0b24-450b-bc03-ce00dfa6f575)
 
 Each QR code contains a valid URL (linking to this web app, the score card player) and an entire audio-generating WebAssembly program.
 Because the QR code contains the piece itself, even if the link breaks, the code can still be read and played back by an instance of the ScoreCard player hosted somewhere else, or by a player that runs outside of the browser.
