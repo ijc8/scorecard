@@ -91,7 +91,7 @@ static const unsigned short progs[] = {
 // form, one byte per 8-bar section. bits: 1 pad, 2 kick, 4 hats, 8 snare,
 // 16 bass, 32 lead, 64 arp, 128 fill at the end of the section
 static const unsigned char form[] = {1, 1 | 4 | 16, 1 | 2 | 4 | 8 | 16 | 32 | 128, 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128,
-                                     1 | 64, 1 | 4 | 32 | 64 | 128, 1 | 2 | 4 | 8 | 16 | 32 | 64, 1 | 2 | 4 | 8 | 16 | 64, 1 | 64};
+                                     1 | 64, 1 | 4 | 32 | 64 | 128, 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128, 1 | 2 | 4 | 8 | 16 | 64, 1 | 64};
 #define NSEC (int)sizeof form
 
 static void newsong(void) {
