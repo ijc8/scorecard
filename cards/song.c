@@ -85,11 +85,11 @@ static const unsigned char vowels[] = {32, 46, 18, 32, 13, 28, 20, 68, 11, 92};
 // Every envelope and smoothed parameter is one slot: C chases T at rate R*R/2^22 per sample.
 enum { PADF, PADAMP = 4, SIDE, BASSE, KICKE, SNAREE, HATE, LEADE, DIP, LEADF, HARMF, VIB, FM1, FM2, CRASH, NENV };
 static float T[NENV], C[NENV];
-static const unsigned char R[NENV] = {92, 92, 92, 92, 20, 20, 29, 35, 54, 92, 13, 92, 112, 112, 20, 71, 71, 14};
+static const unsigned char R[NENV] = {92, 92, 92, 92, 20, 20, 29, 35, 54, 92, 68, 79, 112, 112, 20, 71, 71, 14};
 
 static int spt, cnt, step, pi, bassPat, kickPat, arpPat, n;
 static signed char mot[16], arp[8];
-static float padPh[4], bassF, bassPh, kickPh, lastNoise, leadPh, harmPh, harm, dcl, dc, damp[4], rv[4];
+static float padPh[4], bassF, bassPh, kickPh, lastNoise, leadPh, harmPh, harm, dc, damp[4], rv[4];
 static struct { float delay, prev, amp; int exc; } ks[3];
 static int ksW, ksNext;
 
@@ -159,22 +159,22 @@ static void tick(void) {
         ksNext = (ksNext + 1) % 3;
     }
 
-    int m = mot[step >> 1 & 15];
-    if (mask & LEAD && !(s16 & 1) && m >= 0) {
-        // snap strong beats to the nearest chord tone
-        int deg = 7 + m, r = (m - root + 14) % 7;
-        if (!(step & 6)) deg += r == 6 ? 1 : -(r & 1);
-        T[LEADF] = d2f(deg);
-        T[HARMF] = d2f(deg + 2);
-        TRACE("L%d@%d ", deg - 7, s16);
-        C[LEADE] = C[VIB] = 1;
-        // scat syllable: a b/d-like closure, then a random vowel
-        C[DIP] = .8f;
-        C[FM1] = 200 / SR;
-        C[FM2] = rnd() & 1 ? 700 / SR : 1900 / SR;
-        int v = rnd() % 5 * 2;
-        T[FM1] = vowels[v] * (25 / SR);
-        T[FM2] = vowels[v + 1] * (25 / SR);
+    if (!(s16 & 1)) {
+        int m = mot[step >> 1 & 15];
+        T[LEADE] *= .7f; // held notes fade
+        if (mask & LEAD && m >= 0) {
+            // snap strong beats to the nearest chord tone
+            int deg = 7 + m, r = (m - root + 14) % 7;
+            if (!(step & 6)) deg += r == 6 ? 1 : -(r & 1);
+            T[LEADF] = d2f(deg);
+            T[HARMF] = d2f(deg + 2);
+            TRACE("L%d@%d ", deg - 7, s16);
+            // scat syllable: a brief closure (see DIP below), then a random vowel
+            T[LEADE] = C[DIP] = C[VIB] = 1;
+            int v = rnd() % 5 * 2;
+            T[FM1] = vowels[v] * (25 / SR);
+            T[FM2] = vowels[v + 1] * (25 / SR);
+        }
     }
     step++;
 }
@@ -205,12 +205,12 @@ float p(void) {
                   (nz - lastNoise) * (C[HATE] * .09f + C[CRASH] * .08f);
     lastNoise = nz;
 
-    // lead singer
-    float vib = 1 + .008f * (1 - C[VIB]) * sn(t * 5.5f);
-    float lead = (fof(&leadPh, C[LEADF] * vib, C[FM1], C[FM2]) + harm * fof(&harmPh, C[HARMF] * vib, C[FM1], C[FM2])) *
-                 C[LEADE] * (1 - C[DIP]) * .45f;
-    dcl += (lead - dcl) * .002f;
-    lead -= dcl;
+    // lead singer (and harmony a third above). Each note starts with a consonant-like closure:
+    // DIP decays from 1, and its bump 4d(1-d) briefly ducks the level and pulls the formants down.
+    float vib = 1 + .008f * (1 - C[VIB]) * sn(t * 5.5f), bump = 4 * C[DIP] * (1 - C[DIP]);
+    float f1 = C[FM1] * (1 - .6f * bump), f2 = C[FM2] * (1 - .4f * bump);
+    float lead = (fof(&leadPh, C[LEADF] * vib, f1, f2) + harm * fof(&harmPh, C[HARMF] * vib, f1, f2)) * C[LEADE] *
+                 (1 - .85f * bump) * .38f;
 
     // plucks: Karplus-Strong with an interpolated delay
     float pluck = 0;
