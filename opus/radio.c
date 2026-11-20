@@ -103,7 +103,7 @@ static void newsong(void) {
         }
     int m = ri(2) * 5, a = 0;                       // ionian or aeolian
     for (int i = 0; i < 7; i++) sc[i] = a, a += 1 + (0x3b >> ((m + i) % 7) & 1);
-    root = 33 + ri(12);
+    root = 33 + ri(8);                               // A..E: keeps leads and arps out of the shrill register
     spb = (int)(SR * 15) / (84 + ri(44));
     swing = spb * ri(4) / 14;
     prog[0] = progs[ri(8)]; prog[1] = progs[ri(8)];   // verse / chorus progressions

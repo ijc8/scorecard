@@ -90,7 +90,7 @@ E("p") float p(void) {
         float src = 0;
         for (int j = 0; j < 3; j++) {
             int i = v * 3 + j;
-            S.vl[i] += (4.7f + i * .13f) / SR;
+            S.vl[i] = frac(S.vl[i] + (4.7f + i * .13f) / SR);
             S.ph[i] = frac(S.ph[i] + S.fr[v] * (1 + .006f * sn(S.vl[i]) + (j - 1) * .003f));
             src += S.ph[i] * (2 - 3 * S.ph[i]);         // KLGLOTT88-style glottal flow derivative
         }

@@ -34,6 +34,7 @@ async def main():
         await pg.goto(url)
         await pg.wait_for_timeout(1500)
         title = await pg.evaluate("document.body.innerText.split('\\n').slice(0, 12).join(' | ')")
+        title += " seed=" + str(await pg.evaluate("[...document.querySelectorAll(\"input\")].map(i => i.value).join(\",\")"))
         await pg.click("#start")
         await pg.wait_for_timeout(secs * 1000)
         lv = await pg.evaluate("window.__levels")
