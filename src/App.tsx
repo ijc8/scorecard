@@ -24,6 +24,8 @@ import logoUrl from "./assets/logo.png"
 import exampleCardUrl from "./assets/example-card.png"
 import { TraceMap, instrumentWasm } from "./wasmTracer"
 import { getWabt } from './lazyWabt'
+import { initDebug, dlog, DEBUG } from "./debug"
+import { audioDebugSnapshot, audioHealthy, onStall, sendToWorklet, setWorkletMessageHandler, startAudio } from "./audio"
 
 function generateSeed() {
     return Math.floor(Math.random() * Math.pow(2, 32))
@@ -45,64 +47,7 @@ function formatTime(seconds: number) {
     return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
 }
 
-const context = new AudioContext({ sampleRate: 44100 })
-
-const nodePromise = context.audioWorklet.addModule("worklet.js").then(() => {
-    const node = new AudioWorkletNode(context, "custom-processor")
-    node.connect(context.destination)
-    return node
-})
-
-async function sendToWorklet(message: any) {
-    const node = await nodePromise
-    node.port.postMessage(message)
-}
-
-// Workaround for iOS issue where context state is "running", but the context isn't actually running. 🙄
-// See https://bugs.webkit.org/show_bug.cgi?id=263627
-async function maybeRestartContext() {
-    const t0 = context.currentTime
-    await new Promise(r => setTimeout(r, 50))
-    if (context.currentTime === t0) {
-        await context.suspend()
-        await context.resume()
-    }
-}
-
-context.onstatechange = () => {
-    if (context.state === "suspended" || context.state === "interrupted") {
-        context.resume()
-    }
-}
-
-// https://stackoverflow.com/questions/9038625/detect-if-device-is-ios
-function iOS() {
-    return [
-        'iPad Simulator',
-        'iPhone Simulator',
-        'iPod Simulator',
-        'iPad',
-        'iPhone',
-        'iPod'
-    ].includes(navigator.platform)
-        // iPad on iOS 13 detection
-        || (navigator.userAgent.includes("Mac") && "ontouchend" in document)
-}
-
-// For iOS quirk in which Web Audio is treated like a ringer while audio tags are treated like media:
-// (See https://stackoverflow.com/questions/21122418/ios-webaudio-only-works-on-headphones/46839941#46839941)
-let unmuteTag: HTMLAudioElement | null = null
-function unmute() {
-    if (!iOS()) return
-    if (!unmuteTag) {
-        unmuteTag = document.createElement("audio")
-        unmuteTag.controls = false
-        unmuteTag.preload = "auto"
-        unmuteTag.loop = true
-        unmuteTag.src = "data:audio/mp3;base64,//MkxAAHiAICWABElBeKPL/RANb2w+yiT1g/gTok//lP/W/l3h8QO/OCdCqCW2Cw//MkxAQHkAIWUAhEmAQXWUOFW2dxPu//9mr60ElY5sseQ+xxesmHKtZr7bsqqX2L//MkxAgFwAYiQAhEAC2hq22d3///9FTV6tA36JdgBJoOGgc+7qvqej5Zu7/7uI9l//MkxBQHAAYi8AhEAO193vt9KGOq+6qcT7hhfN5FTInmwk8RkqKImTM55pRQHQSq//MkxBsGkgoIAABHhTACIJLf99nVI///yuW1uBqWfEu7CgNPWGpUadBmZ////4sL//MkxCMHMAH9iABEmAsKioqKigsLCwtVTEFNRTMuOTkuNVVVVVVVVVVVVVVVVVVV//MkxCkECAUYCAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV"
-    }
-    unmuteTag.play()
-}
+initDebug(audioDebugSnapshot)
 
 // function profile(instance: WebAssembly.Instance) {
 //     if (instance.exports.setup) {
@@ -181,16 +126,17 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
         reset()
     }
     const touchStartToggle = () => {
-        if (context.state === "suspended") {
-            // Hack within a hack... the first time play is pressed, we need to handle it in
-            // `onMouseDown` so that we can resume the AudioContext successfully.
-            // (Apparently touchstart isn't good enough?)
+        dlog("touchstart toggle", state, audioHealthy())
+        if (state !== "playing" && !audioHealthy()) {
+            // Hack within a hack... when play needs to (re)start audio, we need to handle it in
+            // `onMouseDown`: iOS doesn't count touchstart as a user gesture for starting audio.
             return
         }
         events.current.toggle = true
         togglePlay()
     }
     const mouseToggle = () => {
+        dlog("mousedown toggle", "skip=" + !!events.current.toggle)
         if (events.current.toggle) return
         togglePlay()
     }
@@ -505,7 +451,7 @@ function App() {
             setError(true)
         }
         canvas.style.cssText = style
-        window.history.pushState(null, "", url)
+        window.history.pushState(null, "", DEBUG ? url.replace("?", "?debug&") : url)
         // setLink(url)
         // setDownload(window.URL.createObjectURL(new Blob([buffer])))
         setTab(0)
@@ -523,13 +469,9 @@ function App() {
     }
 
     const setState = (_state: "playing" | "paused") => {
+        dlog("setState", _state)
         if (_state === "playing") {
-            if (context.state === "suspended" || context.state === "interrupted") {
-                unmute() // for iOS
-                context.resume()
-            } else if (context.state === "running") {
-                maybeRestartContext() // for iOS
-            }
+            startAudio() // must run synchronously inside the user gesture (for iOS)
             let _seed = seed
             if (state === "stopped" && !seedLock) {
                 _seed = generateSeed()
@@ -622,21 +564,18 @@ function App() {
     }, [])
 
     useEffect(() => {
-        (async () => {
-            const node = await nodePromise
-            node.port.onmessage = e => {
-                if (typeof e.data === "number") {
-                    setTime(e.data / 44100)
-                } else {
-                    handleTraceLogs?.(e.data)
-                }
+        setWorkletMessageHandler(e => {
+            if (typeof e.data === "number") {
+                setTime(e.data / 44100)
+            } else {
+                handleTraceLogs?.(e.data)
             }
-        })()
-        return () => { (async () => {
-            const node = await nodePromise
-            node.port.onmessage = () => {}
-        })() }
+        })
+        return () => setWorkletMessageHandler(() => {})
     }, [])
+
+    // If the audio clock stalls (iOS), show "paused" so the next Play tap can restart audio.
+    useEffect(() => onStall(() => _setState("paused")), [])
 
     // TODO: "load example" link
     // useEffect(() => {
