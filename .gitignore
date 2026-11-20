@@ -26,3 +26,10 @@ dist-ssr
 # Build artifacts
 *.wasm
 *.bin
+*.wasm.*
+*.o
+a.out
+__pycache__/
+
+# Dev-server log sink for the ?debug overlay (see vite.config.ts)
+debuglog.txt
