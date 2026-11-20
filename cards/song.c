@@ -11,12 +11,20 @@ typedef unsigned u32;
 
 char d[] = "song";
 
+#ifdef NATIVE
+// Native debug build (prints the score instead of playing): see trace.sh
+#include <stdio.h>
+#define TRACE(...) printf(__VA_ARGS__)
+static float KS[3 * 2048], ECHO[32768], REV[4 * 8192];
+#else
+#define TRACE(...)
 // Big zero-initialised buffers live at fixed addresses above the linker's data.
 #define KS ((float *)0x10000)   // 3 plucked strings x 2048 samples
 #define ECHO ((float *)0x20000) // tempo-synced echo, up to 32768 samples
 #define REV ((float *)0x40000)  // 4 reverb lines x 8192 samples
+#endif
 
-static u32 rs;
+static u32 rs, song;
 NOINLINE static u32 rnd(void) {
     rs ^= rs << 13;
     rs ^= rs >> 17;
@@ -52,22 +60,23 @@ NOINLINE static float fof(float *ph, float f, float f1, float f2) {
 static const unsigned short progs[] = {0x3540, 0x4035, 0x4350, 0x0543, 0x4345, 0x5041, 0x4530, 0x4305};
 // which layers play in each 4-bar section
 enum { PLUCK = 1, PAD = 2, BASS = 4, HAT = 8, KICK = 16, SNARE = 32, LEAD = 64, ALT = 128 };
+#define FULL (PLUCK | PAD | BASS | HAT | KICK | SNARE)
 static const unsigned char form[] = {
-    PLUCK,
-    PLUCK | PAD,
-    PLUCK | PAD | BASS | HAT,
-    PLUCK | PAD | BASS | HAT | KICK | SNARE,
-    PAD | BASS | HAT | KICK | SNARE | LEAD,
-    PLUCK | PAD | BASS | HAT | KICK | SNARE | LEAD,
-    PAD | LEAD | ALT,
-    PAD | LEAD | ALT | PLUCK | HAT,
-    PLUCK | PAD | BASS | HAT | KICK | SNARE,
-    PLUCK | PAD | BASS | HAT | KICK | SNARE | LEAD,
-    PAD | BASS | HAT | KICK | SNARE | LEAD | ALT,
-    PLUCK | PAD | BASS | HAT | KICK | SNARE | LEAD | ALT,
-    PLUCK | PAD | BASS | HAT | KICK | SNARE,
-    PLUCK | BASS | HAT | KICK | SNARE,
-    PLUCK | PAD,
+    PLUCK,                             // intro
+    PLUCK | PAD | HAT,                 //
+    FULL - PLUCK | LEAD,               // verse
+    FULL | LEAD,                       //
+    PLUCK | PAD | LEAD | ALT,          // bridge
+    PLUCK | PAD | LEAD | ALT | HAT | BASS,
+    FULL | LEAD,                       // chorus
+    FULL | LEAD,                       //
+    FULL - PAD,                        // break
+    FULL,                              //
+    FULL | LEAD | ALT,                 // bridge, full band
+    FULL | LEAD | ALT,                 //
+    FULL | LEAD,                       // chorus
+    FULL | LEAD,                       //
+    PLUCK | PAD | LEAD,                // outro
     PLUCK,
 };
 // vowel formants F1, F2 in units of 25 Hz: a o u e i
@@ -84,36 +93,42 @@ static float padPh[4], bassF, bassPh, kickPh, lastNoise, leadPh, dc, damp[4], rv
 static struct { float delay, prev, amp; int exc; } ks[3];
 static int ksW, ksNext;
 
-void s(u32 seed) { rs = seed + 0x9E3779B9; }
+void s(u32 seed) { song = seed; }
 
 static void tick(void) {
+    int s16 = step & 15, bar = step >> 4;
     if (!(step & 1023)) {
         // new song
+        rs = song = song * 1664525 + 1013904223;
         key = rnd() % 7;
         pi = rnd();
         spt = 5200 + rnd() % 1800;
         bassPat = rnd() | 1;
         kickPat = rnd() & 1 ? 0x1111 : 0x0481;
+        TRACE("\n=== song: key %d, %.0f bpm, prog %04x / %04x, kick %04x, bass %04x", key, SR * 15 / spt, progs[pi & 7], progs[(pi + 3) & 7], kickPat, bassPat & 0xffff);
     }
+    int mask = form[bar >> 2 & 15];
+    int root = progs[(pi + (mask >> 7) * 3) & 7] >> (bar & 3) * 4 & 15;
     if (!(step & 127)) {
-        // new 8-bar phrase: new melody motif and arpeggio shape
-        int deg = 4;
+        // new 8-bar phrase. The verse/chorus and the bridge each reseed the generator the same way
+        // every time, so their melody, arpeggio (and scat "lyrics") come back.
+        rs = song + (mask >> 7);
+        int w = 3;
         for (int i = 0; i < 16; i++) {
-            deg += rnd() % 5 - 2;
-            if (deg < 0) deg = 0;
-            if (deg > 9) deg = 9;
-            mot[i] = i < 13 && (!(i & 3) || rnd() & 1) ? deg : -1;
+            w += rnd() % 5 - 2;
+            if (w < 0) w = -w;
+            if (w > 7) w = 14 - w;
+            // pentatonic walk; always sing on the beat, sometimes off it, and hold the phrase's last note
+            mot[i] = i < 13 && (!(i & 3) || rnd() & 1) ? w * 7 / 5 : -1;
         }
         for (int i = 0; i < 8; i++) arp[i] = rnd() % 6;
         arpPat = rnd() | rnd();
     }
-    int s16 = step & 15, bar = step >> 4;
-    int mask = form[bar >> 2 & 15];
-    int root = progs[(pi + (mask >> 7) * 3) & 7] >> (bar & 3) * 4 & 15;
     int bit = 1 << s16;
+    if (!s16) TRACE("\n%s[sec %2d %02x] root %d | ", bar & 3 ? "" : "\n", bar >> 2 & 15, mask, root);
 
     T[PADAMP] = mask >> 1 & 1;
-    for (int k = 0; k < 4; k++) T[k] = d2f(14 + (root + (k < 3 ? k * 2 : 1)) % 7);
+    for (int k = 0; k < 4; k++) T[k] = d2f(k < 3 ? 14 + (root + k * 2) % 7 : 7 + root);
 
     if (mask & BASS && bassPat & bit) {
         bassF = d2f(root + (s16 % 8 == 6 ? 7 : 0));
@@ -136,6 +151,7 @@ static void tick(void) {
         for (int i = 0; i < 2048; i++) b[i] = 0;
         ks[ksNext].delay = 1 / d2f(14 + root + tones[arp[s16 & 7]]) - .5f;
         ks[ksNext].exc = ks[ksNext].delay;
+        TRACE("p%d ", tones[arp[s16 & 7]]);
         ks[ksNext].amp = s16 & 3 ? .6f : 1;
         ksNext = (ksNext + 1) % 3;
     }
@@ -146,6 +162,7 @@ static void tick(void) {
         int deg = 7 + m, r = (m - root + 14) % 7;
         if (!(step & 6)) deg += r == 6 ? 1 : -(r & 1);
         T[LEADF] = d2f(deg);
+        TRACE("L%d@%d ", deg - 7, s16);
         C[LEADE] = C[VIB] = 1;
         // scat syllable: a b/d-like closure, then a random vowel
         C[DIP] = .8f;
@@ -167,25 +184,26 @@ float p(void) {
     float nz = (int)rnd() * (1.f / 2147483648.f);
     for (int i = 0; i < NENV; i++) C[i] += (T[i] - C[i]) * (R[i] * R[i]) * (1.f / 4194304);
 
-    // choir: four formant voices on the chord tones, vowel drifting between "oh" and "ah", ducked by the kick
+    // choir: four formant voices (a close triad and a low root), vowel drifting between "oh" and "ah", ducked by the kick
     float pad = 0, l = sn(t * .05f);
     for (int k = 0; k < 4; k++)
         pad += fof(&padPh[k], C[k] * (1 + .004f * sn(t * (5 + k * .4f))), (550 + 200 * l) / SR, (950 + 200 * l) / SR);
-    pad *= C[PADAMP] * (1 - .7f * C[SIDE]) * .12f;
+    dc += (pad - dc) * .002f; // the formant waves aren't zero-mean
+    pad = (pad - dc) * C[PADAMP] * (1 - .7f * C[SIDE]) * .12f;
 
     // bass: 2-operator FM with a decaying index
     bassPh += bassF;
-    float bass = sn(bassPh + C[BASSE] * .4f * sn(bassPh)) * C[BASSE] * .5f;
+    float bass = sn(bassPh + C[BASSE] * .8f * sn(bassPh)) * C[BASSE] * .35f;
 
     // drums
     kickPh += .0012f + .006f * C[KICKE] * C[KICKE];
-    float drums = sn(kickPh) * C[KICKE] * .8f + nz * C[SNAREE] * C[SNAREE] * .35f +
-                  (nz - lastNoise) * (C[HATE] * .12f + C[CRASH] * .1f);
+    float drums = sn(kickPh) * C[KICKE] * .6f + nz * C[SNAREE] * C[SNAREE] * .26f +
+                  (nz - lastNoise) * (C[HATE] * .09f + C[CRASH] * .08f);
     lastNoise = nz;
 
     // lead singer
     float lead = fof(&leadPh, C[LEADF] * (1 + .008f * (1 - C[VIB]) * sn(t * 5.5f)), C[FM1], C[FM2]) * C[LEADE] *
-                 (1 - C[DIP]) * .3f;
+                 (1 - C[DIP]) * .45f;
 
     // plucks: Karplus-Strong with an interpolated delay
     float pluck = 0;
@@ -220,14 +238,23 @@ float p(void) {
     }
     for (int i = 0; i < 4; i++) REV[i * 8192 + n % (3001 + i * 1154)] = rin + .88f * (rv[i] - sum * .5f);
 
-    float x = pad + bass + drums + wetIn * .8f + sum * .2f;
+    float x = pad + bass + drums + wetIn * .8f + sum * .13f;
 #ifdef SOLO
     return SOLO;
 #endif
-    // DC blocker, soft clip
-    dc += (x - dc) * .002f;
-    x -= dc;
+    // soft clip
     if (x > 1.5f) x = 1.5f;
     if (x < -1.5f) x = -1.5f;
     return x - x * x * x * (4.f / 27);
 }
+
+#ifdef NATIVE
+int main(int argc, char **argv) {
+    int seed = 1, secs = 150;
+    if (argc > 1) sscanf(argv[1], "%d", &seed);
+    if (argc > 2) sscanf(argv[2], "%d", &secs);
+    s(seed);
+    for (int i = 0; i < secs * 44100; i++) p();
+    puts("");
+}
+#endif
