@@ -9,7 +9,7 @@ typedef unsigned u32;
 #define fabsf __builtin_fabsf
 #define NOINLINE __attribute__((noinline))
 
-char d[] = "song";
+char d[] = "scat radio";
 
 #ifdef NATIVE
 // Native debug build (prints the score instead of playing): see trace.sh
@@ -83,13 +83,13 @@ static const unsigned char form[] = {
 static const unsigned char vowels[] = {32, 46, 18, 32, 13, 28, 20, 68, 11, 92};
 
 // Every envelope and smoothed parameter is one slot: C chases T at rate R*R/2^22 per sample.
-enum { PADF, PADAMP = 4, SIDE, BASSE, KICKE, SNAREE, HATE, LEADE, DIP, LEADF, VIB, FM1, FM2, CRASH, NENV };
+enum { PADF, PADAMP = 4, SIDE, BASSE, KICKE, SNAREE, HATE, LEADE, DIP, LEADF, HARMF, VIB, FM1, FM2, CRASH, NENV };
 static float T[NENV], C[NENV];
-static const unsigned char R[NENV] = {92, 92, 92, 92, 20, 20, 29, 35, 54, 92, 13, 92, 112, 20, 71, 71, 14};
+static const unsigned char R[NENV] = {92, 92, 92, 92, 20, 20, 29, 35, 54, 92, 13, 92, 112, 112, 20, 71, 71, 14};
 
 static int spt, cnt, step, pi, bassPat, kickPat, arpPat, n;
 static signed char mot[16], arp[8];
-static float padPh[4], bassF, bassPh, kickPh, lastNoise, leadPh, dc, damp[4], rv[4];
+static float padPh[4], bassF, bassPh, kickPh, lastNoise, leadPh, harmPh, harm, dcl, dc, damp[4], rv[4];
 static struct { float delay, prev, amp; int exc; } ks[3];
 static int ksW, ksNext;
 
@@ -107,7 +107,9 @@ static void tick(void) {
         kickPat = rnd() & 1 ? 0x1111 : 0x0481;
         TRACE("\n=== song: key %d, %.0f bpm, prog %04x / %04x, kick %04x, bass %04x", key, SR * 15 / spt, progs[pi & 7], progs[(pi + 3) & 7], kickPat, bassPat & 0xffff);
     }
-    int mask = form[bar >> 2 & 15];
+    int sec = bar >> 2 & 15, mask = form[sec];
+    if ((step & 1023) == 768) key += 2; // last chorus: up a tone
+    harm = sec > 9 ? .6f : 0;           // and a harmony singer for the last third
     int root = progs[(pi + (mask >> 7) * 3) & 7] >> (bar & 3) * 4 & 15;
     if (!(step & 127)) {
         // new 8-bar phrase. The verse/chorus and the bridge each reseed the generator the same way
@@ -125,7 +127,8 @@ static void tick(void) {
         arpPat = rnd() | rnd();
     }
     int bit = 1 << s16;
-    if (!s16) TRACE("\n%s[sec %2d %02x] root %d | ", bar & 3 ? "" : "\n", bar >> 2 & 15, mask, root);
+    if (!s16) TRACE("\n%s[sec %2d %02x] root %d | ", bar & 3 ? "" : "\n", sec, mask, root);
+    
 
     T[PADAMP] = mask >> 1 & 1;
     for (int k = 0; k < 4; k++) T[k] = d2f(k < 3 ? 14 + (root + k * 2) % 7 : 7 + root);
@@ -162,6 +165,7 @@ static void tick(void) {
         int deg = 7 + m, r = (m - root + 14) % 7;
         if (!(step & 6)) deg += r == 6 ? 1 : -(r & 1);
         T[LEADF] = d2f(deg);
+        T[HARMF] = d2f(deg + 2);
         TRACE("L%d@%d ", deg - 7, s16);
         C[LEADE] = C[VIB] = 1;
         // scat syllable: a b/d-like closure, then a random vowel
@@ -202,8 +206,11 @@ float p(void) {
     lastNoise = nz;
 
     // lead singer
-    float lead = fof(&leadPh, C[LEADF] * (1 + .008f * (1 - C[VIB]) * sn(t * 5.5f)), C[FM1], C[FM2]) * C[LEADE] *
-                 (1 - C[DIP]) * .45f;
+    float vib = 1 + .008f * (1 - C[VIB]) * sn(t * 5.5f);
+    float lead = (fof(&leadPh, C[LEADF] * vib, C[FM1], C[FM2]) + harm * fof(&harmPh, C[HARMF] * vib, C[FM1], C[FM2])) *
+                 C[LEADE] * (1 - C[DIP]) * .45f;
+    dcl += (lead - dcl) * .002f;
+    lead -= dcl;
 
     // plucks: Karplus-Strong with an interpolated delay
     float pluck = 0;
@@ -236,7 +243,7 @@ float p(void) {
         damp[i] += (*r - damp[i]) * .4f;
         sum += rv[i] = damp[i];
     }
-    for (int i = 0; i < 4; i++) REV[i * 8192 + n % (3001 + i * 1154)] = rin + .88f * (rv[i] - sum * .5f);
+    for (int i = 0; i < 4; i++) REV[i * 8192 + n % (3001 + i * 1154)] = rin + .8f * (rv[i] - sum * .5f);
 
     float x = pad + bass + drums + wetIn * .8f + sum * .13f;
 #ifdef SOLO
