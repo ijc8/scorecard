@@ -149,7 +149,7 @@ static void tick(void) {
         if ((bar & 3) == 3 && st > 7) dg = (st > 9 ? 7 : 8) - c; // cadence: 2 -> 1
         trig(4, deg(c + dg + 14 + 7 * (sec == 6)), vel);         // final drop: an octave up
     }
-    if (parts & 64 && arp >> st & 1) trig(5, deg(c + 2 * ((st * 3 + (st >> 2)) & 3)) + 24, st & 1 ? .4f : .8f);
+    if (parts & 64 && arp >> st & 1) trig(5, deg(c + 2 * ((st * 3 + (st >> 2)) & 3)) + 24, vel * .7f);
 }
 
 // ---- effects
@@ -162,7 +162,7 @@ static const short cl[NC] = {1557, 1617, 1491, 1422, 1277, 1356}, al[2] = {556, 
 E("p") float p(void) {
     if (--cnt <= 0) cnt = spb + (step & 1 ? -swing : swing), tick(), step++;
     float out = 0, send = 0;
-    lfo += 5.5f / SR;
+    lfo = frac(lfo + 5.5f / SR);
     for (Voice *o = vc; o < vc + NV; o++) {
         float *in = o->in, f = o->f * (1 + o->pe + in[VIB] * sn(lfo));
         o->pe -= o->pe * in[PDE];
