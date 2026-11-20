@@ -9,7 +9,7 @@ const seed = seedArg !== undefined ? Number(seedArg) >>> 0 : (Math.random() * 2 
 if (s) s(seed)
 // SOLO=k: silence every instrument but k (debug; INST_OFF = byte offset of inst[][] in State, NP fields, GAIN/SEND idx)
 if (process.env.SOLO !== undefined) {
-  const f = new Float32Array((ex.m ?? ex.memory).buffer), off = Number(process.env.INST_OFF ?? 716) / 4, np = 15
+  const f = new Float32Array((ex.m ?? ex.memory).buffer), off = Number(process.env.INST_OFF ?? 720) / 4, np = 15
   for (let i = 0; i < 9; i++) if (i !== Number(process.env.SOLO)) f[off + i * np + 9] = f[off + i * np + 10] = 0
 }
 const d = ex.d ?? ex.title
