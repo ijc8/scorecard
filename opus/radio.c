@@ -12,15 +12,15 @@ char d[] = "endless radio";
 // All mutable state lives in one struct at a fixed low address, so loads and
 // stores use 1-byte offsets (statics would land at 2-3 byte addresses).
 typedef struct { float ph, ph2, f, pe, tgt, env, lp, bp; float *in; } Voice;
-#define NV 10
+#define NV 11
 #define NC 6
 typedef struct {
     u32 rs; int cnt, step, spb, swing, bar, sec, parts, root, mrh, di;
     int sc[7], prog[2][4], groove[3], ci[NC], ai[2];
-    float cf[NC];
+    float cf[NC], fade;
     int motif[16];
     float mf[128];                      // midi -> cycles/sample
-    float inst[7][14];
+    float inst[8][14];
     Voice vc[NV];
 } State;
 #define G ((State *)16)
@@ -42,6 +42,7 @@ typedef struct {
 #define ai (G->ai)
 #define cf (G->cf)
 #define motif (G->motif)
+#define fade (G->fade)
 #define mf (G->mf)
 #define inst (G->inst)
 #define vc (G->vc)
@@ -62,20 +63,20 @@ static float sat(float x) { return x / (1 + __builtin_fabsf(x)); }
 // value = b^3 / 2^18; times are rates = 1 / b^3 per sample
 enum { SIN, SAW, NOI, DET, PEN, CUT, CEN, Q, HP, GAIN, SEND, PDE, ATT, DEC, NP };
 static const unsigned char presets[][NP] = {
-    {64, 0, 0, 0, 77, 64, 0, 64, 0, 77, 0, 9, 2, 16},  // 0 kick
-    {43, 0, 55, 0, 40, 34, 24, 64, 0, 61, 37, 7, 2, 10},  // 1 snare
-    {0, 0, 64, 0, 0, 49, 0, 72, 101, 40, 25, 2, 2, 7},  // 2 hat
-    {0, 55, 0, 64, 0, 12, 27, 59, 0, 63, 0, 2, 6, 17},  // 3 bass
-    {0, 51, 0, 8, 0, 22, 29, 55, 0, 55, 63, 2, 5, 21},  // 4 lead
-    {64, 0, 0, 64, 0, 64, 0, 64, 0, 50, 66, 2, 2, 15},  // 5 arp/pluck
-    {0, 46, 0, 7, 0, 24, 12, 66, 0, 46, 46, 2, 26, 54},  // 6 pad (x4)
+    {64, 0, 0, 0, 90, 64, 0, 64, 0, 77, 0, 9, 2, 16},  // 0 kick
+    {55, 0, 55, 0, 50, 48, 24, 64, 50, 95, 37, 7, 2, 10},  // 1 snare
+    {0, 0, 64, 0, 0, 49, 0, 72, 101, 32, 25, 2, 2, 7},  // 2 hat
+    {0, 55, 0, 64, 0, 12, 27, 59, 0, 70, 0, 2, 6, 17},  // 3 bass
+    {0, 51, 0, 8, 0, 30, 34, 55, 0, 55, 50, 2, 5, 30},  // 4 lead
+    {64, 0, 0, 64, 0, 64, 0, 64, 0, 38, 42, 2, 2, 15},  // 5 arp/pluck
+    {0, 46, 0, 7, 0, 30, 12, 66, 0, 40, 46, 2, 26, 54},  // 6 pad (x4)
+    {0, 0, 64, 0, 0, 64, 0, 72, 64, 15, 30, 2, 2, 42},  // 7 crash
 };
 
 
 NI static void trig(int v, int ins, int note, float vel) {
     Voice *o = vc + v;
     o->in = inst[ins]; o->f = mf[note]; o->tgt = vel * (1 + .12f * ns()); o->pe = o->in[PEN];
-    if (o->in[ATT] > .05f) o->env = 0;
 }
 
 // ---- song state
@@ -101,22 +102,22 @@ static void newsong(void) {
     for (int i = 0; i < 3; i++) groove[i] = rnd();
     groove[0] = (groove[0] & 0x0424) | 0x0101;      // kick: 1, 3, sometimes syncopated
     groove[1] = (groove[1] & 0x8020) | 0x1010;      // snare: 2, 4, sometimes ghosts
-    for (int i = 0; i < 16; i++) motif[i] = ri(5) - 2;
-    mrh = rnd() | 0x0101;
+    // melody: a stepwise contour, and a 2-bar rhythm (denser on the beat)
+    for (int i = 0, a = 0; i < 16; i++) { a += ri(5) - 2; if (a < -3 || a > 6) a = 2; motif[i] = a; }
+    mrh = rnd() & (rnd() | 0x11111111) | 0x10001;
     bar = -1;
 }
 
 E("s") void s(u32 seed) {
     float f = 8.1758f / SR;
     for (int i = 0; i < 128; i++) mf[i] = f, f *= 1.0594631f;
-    for (int i = 0; i < 7; i++)
+    for (int i = 0; i < 8; i++)
         for (int j = 0; j < NP; j++) {
             float b = presets[i][j]; b *= b * b;
             inst[i][j] = j < PDE ? b / 262144 : 1 / b;
         }
     rs = seed | 1;
-    for (int i = 0; i < 4; i++) vc[6 + i].in = inst[6];
-    for (int i = 0; i < 6; i++) vc[i].in = inst[i];
+    for (int i = 0; i < NV; i++) vc[i].in = inst[0];         // silent until triggered
     newsong();
 }
 
@@ -128,19 +129,21 @@ static void tick(void) {
         int c = prog[sec & 1][bar & 3];
         // close-position 7th chord inside a fixed one-octave window of scale degrees:
         // common tones stay put, the rest move by step (cheap voice leading)
-        for (int v = 0; v < 4; v++) trig(6 + v, 6, deg((c + 2 * v + 2) % 7 + 12), sec == NSEC - 1 ? 1 - (bar & 7) / 8.f : 1);
+        for (int v = 0; v < 4; v++) trig(6 + v, 6, deg((c + 2 * v + 2) % 7 + 12), 1);
     }
     fill = (parts & 128) && (bar & 7) == 7 && st > 7;
     float vel = st & 3 ? .6f : 1;
     if (parts & 2 && groove[0] & on && !fill) trig(0, 0, 31, 1);
-    if (parts & 8 && (groove[1] & on || fill)) trig(1, 1, 52, fill ? .4f + st * .04f : groove[1] & on & 0x1010 ? 1 : .3f);
+    if (parts & 8 && (groove[1] & on || fill)) trig(1, 1, 55, fill ? .4f + st * .04f : groove[1] & on & 0x1010 ? 1 : .3f);
+    if (parts & 2 && !(bar & 7) && !st) trig(10, 7, 100, 1);     // crash into each drum section
     if (parts & 4 && (st & 1 ? groove[2] & on : 1)) trig(2, 2, 100, vel * ((st & 7) == 6 ? 1.5f : .8f));
     int c = prog[sec & 1][bar & 3];
     if (parts & 16 && (groove[0] & on || (st & 3) == 2)) trig(3, 3, deg(c) + ((st & 6) == 6 ? 12 : 0) + 12 * (root < 40), vel);
-    if (parts & 32 && mrh & on) {
-        int ph = bar & 3, dg = c + motif[st] + (ph == 1) + (ph == 2 ? motif[(st + 5) & 15] : 0);
-        if (ph == 3 && st >= 8) dg = st >= 12 ? 7 : 8 + (motif[st] > 0);
-        trig(4, 4, deg(dg + 14), vel);
+    if (parts & 32 && mrh >> (st + 16 * (bar & 1)) & 1) {
+        int dg = motif[st] + 2 * (bar & 1);                   // answer phrase sits a third higher
+        if (!(st & 3)) dg &= ~1;                               // chord tones on the beat
+        if ((bar & 3) == 3 && st > 7) dg = (st > 11 ? 7 : 8) - c; // cadence: 2 -> 1
+        trig(4, 4, deg(c + dg + 14), vel);
     }
     if (parts & 64) trig(5, 5, deg(c + 2 * ((st * 3 + (st >> 2)) & 3)) + 24, st & 1 ? .4f : .8f);
 }
@@ -167,6 +170,7 @@ E("p") float p(void) {
         float hp = x - o->lp - in[Q] * o->bp;
         o->bp += c * hp;
         x = (o->lp + (hp - o->lp) * in[HP]) * o->env;
+        if (o - vc > 2) x *= 1 - vc->env * .6f;               // sidechain: duck under the kick
         out += x * in[GAIN];
         send += x * in[SEND];
     }
@@ -188,5 +192,6 @@ E("p") float p(void) {
         *b = r + z * .5f; r = z - r;
         if (++ai[i] >= al[i]) ai[i] = 0;
     }
-    return sat(out + r * .3f);
+    fade += (1 - (bar & 7) / 8.f * (sec == NSEC - 1) - fade) * .00002f; // fade out over the outro
+    return sat((out + r * .3f) * fade);
 }

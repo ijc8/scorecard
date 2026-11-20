@@ -7,6 +7,11 @@ const ex = instance.exports
 const p = ex.p ?? ex.process, s = ex.s ?? ex.setup
 const seed = seedArg !== undefined ? Number(seedArg) >>> 0 : (Math.random() * 2 ** 32) >>> 0
 if (s) s(seed)
+// SOLO=k: silence every instrument but k (debug; INST_OFF = byte offset of inst[][] in State, NP fields, GAIN/SEND idx)
+if (process.env.SOLO !== undefined) {
+  const f = new Float32Array((ex.m ?? ex.memory).buffer), off = Number(process.env.INST_OFF ?? 768) / 4, np = 14
+  for (let i = 0; i < 8; i++) if (i !== Number(process.env.SOLO)) f[off + i * np + 9] = f[off + i * np + 10] = 0
+}
 const d = ex.d ?? ex.title
 if (d && (ex.m ?? ex.memory)) {
   const mem = new Uint8Array((ex.m ?? ex.memory).buffer), a = d.value; let e = a
