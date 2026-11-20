@@ -12,6 +12,6 @@ zig build-lib -dynamic -target wasm32-freestanding -O ReleaseSmall -rdynamic -fs
   --global-base=${GBASE:-2048} --stack 8192 --initial-memory=${MEM:-524288} $EXP $T.o -femit-bin=$T.wasm 2>&1 | grep -v "no output file" || true
 echo "zig: $(wc -c < $T.wasm)"
 $WASMOPT -all --print $T.wasm 2>/dev/null | sed 's/(export "memory"/(export "m"/' > $T.wat
-$WASMOPT -all -Oz --converge $T.wat -o $OUT
+$WASMOPT --mvp-features --enable-nontrapping-float-to-int --enable-mutable-globals --enable-sign-ext -Oz --converge $T.wat -o $OUT
 rm -f $T.o $T.wasm $T.wat
 echo "$OUT: $(wc -c < $OUT) bytes"
