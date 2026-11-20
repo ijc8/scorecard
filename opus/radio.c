@@ -70,8 +70,8 @@ static const unsigned char presets[][NP] = {
     {0, 51, 0, 8, 0, 30, 34, 55, 0, 50, 50, 11, 2, 5, 30},   // 4 lead
     {64, 0, 0, 64, 0, 50, 0, 64, 0, 38, 42, 0, 2, 2, 15},    // 5 arp/pluck
     {0, 46, 0, 7, 0, 30, 12, 66, 0, 40, 46, 8, 2, 26, 54},   // 6 pad (x4)
-    {0, 0, 64, 0, 0, 48, 0, 72, 30, 18, 30, 0, 2, 2, 42},    // 7 crash
-    {0, 0, 64, 0, 0, 10, 48, 40, 0, 16, 40, 0, 2, 48, 64},   // 8 riser
+    {0, 0, 64, 0, 0, 48, 0, 72, 30, 15, 30, 0, 2, 2, 42},    // 7 crash
+    {0, 0, 64, 0, 0, 10, 48, 40, 0, 14, 40, 0, 2, 48, 64},   // 8 riser
 };
 
 
@@ -86,7 +86,7 @@ NI static void trig(int v, int note, float vel) {          // voice = instrument
 NI static int deg(int d) { d += 70; return root - 120 + 12 * (d / 7) + sc[d % 7]; }
 
 static const unsigned short progs[] = {
-    0x0534, 0x0453, 0x5304, 0x0354, 0x0315, 0x5340, 0x3405, 0x0213,
+    0x0534, 0x0453, 0x5304, 0x0354, 0x0325, 0x5340, 0x3405, 0x0523,   // no ii (diminished in aeolian)
 };
 // form, one byte per 8-bar section. bits: 1 pad, 2 kick, 4 hats, 8 snare,
 // 16 bass, 32 lead, 64 arp, 128 fill at the end of the section
@@ -101,7 +101,7 @@ static void newsong(void) {
             float b = presets[i][j] * (0x50f8 >> j & 1 ? 1 + .2f * ns() : 1); b *= b * b;
             inst[i][j] = j < PDE ? b / 262144 : 1 / b;
         }
-    int m = 0x51540 >> (ri(5) * 4) & 15, a = 0;   // ionian, dorian, mixolydian, aeolian x2
+    int m = ri(2) * 5, a = 0;                       // ionian or aeolian
     for (int i = 0; i < 7; i++) sc[i] = a, a += 1 + (0x3b >> ((m + i) % 7) & 1);
     root = 33 + ri(12);
     spb = (int)(SR * 15) / (84 + ri(44));
@@ -147,7 +147,7 @@ static void tick(void) {
         int dg = motif[st] + 2 * (bar & 1);                   // answer phrase sits a third higher
         if (!(st & 3)) dg &= ~1;                               // chord tones on the beat
         if ((bar & 3) == 3 && st > 7) dg = (st > 9 ? 7 : 8) - c; // cadence: 2 -> 1
-        trig(4, deg(c + dg + 14 + 7 * (sec == 6)), vel);         // final drop: an octave up
+        trig(4, deg(c + dg + 14), vel);
     }
     if (parts & 64 && arp >> st & 1) trig(5, deg(c + 2 * ((st * 3 + (st >> 2)) & 3)) + 24, vel * .7f);
 }
@@ -196,6 +196,6 @@ E("p") float p(void) {
         float *b = ab[i], z = b[(n - al[i]) & 1023];
         b[n & 1023] = r + z * .5f; r = z - r;
     }
-    fade += ((float)((unsigned)(sec - NSEC + 1) >> 31) - fade) * 4e-6f;              // fade in over the intro, out over the outro
+    fade += ((float)((unsigned)(sec - NSEC + 1) >> 31) - fade) * 6e-6f;              // fade in over the intro, out over the outro
     return sat((out + r * .3f) * fade);
 }

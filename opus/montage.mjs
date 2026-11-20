@@ -6,7 +6,7 @@ for (const sd of seeds) {
   const { instance } = await WebAssembly.instantiate(bin), ex = instance.exports
   ex.s(Number(sd) >>> 0)
   const i32 = new Int32Array(ex.m.buffer), spb = i32[(16 + 16) / 4], root = i32[(16 + 36) / 4], sc = [...i32.slice(16, 23)]
-  const skip = Math.round(24 * 16 * spb * 1.0)
+  const skip = Math.round(Number(process.env.START_BAR ?? 24) * 16 * spb)
   console.error(`seed ${sd}: bpm=${(sr * 15 / spb).toFixed(0)} root=${root} scale=${sc}`)
   for (let i = 0; i < skip; i++) ex.p()
   for (let i = 0; i < secs * sr; i++) all.push(ex.p() * (Math.min(1, i / 2000, (secs * sr - i) / 2000)))

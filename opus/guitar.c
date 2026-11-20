@@ -12,7 +12,7 @@ char d[] = "fingerstyle";
 typedef struct {
     u32 rs; int n, cnt, step, spb, root, bass, pat, prog, chord, sec;
     int sc[7], fret[6];
-    float len[6], prev[6], g[6], ex[6], exa[6], exl[6], bright[6], b1, b2, c1, c2;
+    float len[6], prev[6], prev2[6], dl[6], pp[6], g[6], ex[6], exa[6], exl[6], bright[6], b1, b2, c1, c2;
     float cf[6];
 } State;
 #define G ((State *)16)
@@ -34,13 +34,14 @@ static const u32 pats[] = {
     0 | 3 << 3 | 4 << 6 | 5 << 9 | 1 << 12 | 3 << 15 | 4 << 18 | 5 << 21,     // p i m a
 };
 
-static void pluck(int s, float a) {
+static void pluck(int s, float a, float delay) {
     if (s < 0 || s > 5) return;
-    // KS loop delay = len + 0.5 (averaging filter)
+    // loop filter delay: 1 sample on the wound strings (dark 1-2-1 filter), 0.25 on the plain ones
     float f = 8.1758f; for (int m = open[s] + S.fret[s]; m--;) f *= 1.0594631f;
-    S.len[s] = SR / f - .5f;
-    S.ex[s] = S.len[s]; S.exa[s] = a * (.8f + .2f * ns()); S.g[s] = .998f;
-    S.bright[s] = s < 2 ? .25f : .5f;   // thumb is darker than fingers
+    S.len[s] = SR / f - (s < 3 ? 1 : .25f);
+    S.ex[s] = S.len[s]; S.exa[s] = a * (.8f + .2f * ns()); S.g[s] = .996f;
+    S.dl[s] = delay; S.pp[s] = .13f + .1f * ns();         // pluck position along the string
+    S.bright[s] = s < 3 ? .2f : .45f;                       // thumb is darker than fingers
 }
 
 static void chord(void) {
@@ -85,30 +86,35 @@ E("p") float p(void) {
         }
         int k = S.pat >> (3 * st) & 7;
         // last bar of each 4: strum the chord and let it ring
-        if ((S.chord & 3) == 3 && st == 0) for (int s = 5; s >= 0; s--) S.ex[s] = 0, pluck(s >= S.bass ? s : -1, .7f);
+        if ((S.chord & 3) == 3 && st == 0) for (int s = 0; s < 6; s++) S.ex[s] = 0, pluck(s >= S.bass ? s : -1, .7f, (s - S.bass) * 260);
         else if ((S.chord & 3) != 3 || st < 4) {
-            if (k < 2) pluck(S.bass + k * (S.bass < 2 ? 1 : -1) * (S.bass < 2 || 1), st ? .7f : 1);
-            else if (k < 6) pluck(k, .55f);
-            else if (k == 6) pluck(S.bass, 1), pluck(5, .6f);
+            if (k < 2) pluck(k ? (S.bass ? S.bass + 1 : 2) : S.bass, st ? .7f : 1, 0);   // thumb alternates
+            else if (k < 6) pluck(k, .55f, 0);
+            else if (k == 6) pluck(S.bass, 1, 0), pluck(5, .6f, 0);
         }
         S.step++;
     }
     int n = S.n++;
     float out = 0;
     for (int s = 0; s < 6; s++) {
-        float *b = sbuf[s], L = S.len[s], rp = n - L;
-        int i = (int)rp; float fr = rp - i;
-        float y = b[i & 2047] * (1 - fr) + b[(i + 1) & 2047] * fr;
-        float x = (y + S.prev[s]) * .5f * S.g[s];
-        S.prev[s] = y;
-        if (S.ex[s] > 0) { S.ex[s]--; S.exl[s] += (ns() - S.exl[s]) * S.bright[s]; x += S.exl[s] * S.exa[s]; }
+        float *b = sbuf[s], L = S.len[s];
+        int li = (int)L, i = n - li; float fr = L - li;          // fractional delay, linear interpolation
+        float y = b[i & 2047] * (1 - fr) + b[(i - 1) & 2047] * fr;
+        float x = (s < 3 ? (y + 2 * S.prev[s] + S.prev2[s]) * .25f : y * .75f + S.prev[s] * .25f) * S.g[s];
+        S.prev2[s] = S.prev[s]; S.prev[s] = y;
+        if (S.dl[s] > 0) S.dl[s]--;
+        else if (S.ex[s] > 0) {
+            // excitation: triangular pluck shape (plus a little noise), lowpassed by the finger
+            float u = 1 - S.ex[s]-- / L, pp = S.pp[s], sh = (u < pp ? u / pp : (1 - u) / (1 - pp)) - .5f + .15f * ns();
+            S.exl[s] += (sh - S.exl[s]) * S.bright[s]; x += S.exl[s] * S.exa[s];
+        }
         b[n & 2047] = x;
         out += y;
     }
     // body: two resonances (~100 Hz, ~220 Hz)
-    S.b1 += (out - S.b1 - 1.6f * S.c1) * .0142f; S.c1 += S.b1 * .0142f;  // (approximate SVF bandpass)
-    S.b2 += (out - S.b2 - 1.2f * S.c2) * .031f; S.c2 += S.b2 * .031f;
-    out = out * .5f + S.b1 * 2 + S.b2 * 1.2f;
+    S.c1 += .0142f * S.b1; S.b1 += .0142f * (out - S.c1 - .15f * S.b1);   // Chamberlin bandpasses
+    S.c2 += .0313f * S.b2; S.b2 += .0313f * (out - S.c2 - .25f * S.b2);
+    out = out * .5f + S.b1 * .35f + S.b2 * .25f;
     // small room
     float r = 0;
     for (int i = 0; i < 6; i++) {
@@ -117,6 +123,6 @@ E("p") float p(void) {
         b[n & 2047] = out * .05f + S.cf[i] * .8f;
         r += z;
     }
-    out = (out + r * .25f) * .4f;
+    out = (out + r * .25f) * .7f;
     return out / (1 + __builtin_fabsf(out));
 }
