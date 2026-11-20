@@ -28,7 +28,8 @@ NOINLINE static float sn(float p) {
 
 static const signed char scale[] = {0, 0, 0, 12, 3, 7, 10, -2}; // minor, root-heavy
 static unsigned char pat[16];                                    // bits 0-2 note, 3 gate, 4 accent, 5 slide, 6 octave
-static int spt, cnt, step, key, n;
+static int spt, cnt, step, key;
+static u32 n;
 static float fT, f, ph, env, acc, low, band, kick, kickPh, hat, clap, lastNoise, duck;
 
 void s(u32 seed) {

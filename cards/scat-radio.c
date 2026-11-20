@@ -1,7 +1,9 @@
-// song: a generative pop song with a scat singer and a choir, in a QR code.
-// Every seed is a different album: each ~2.5-minute song picks its own key, tempo,
-// groove, chord progression and melody, then the next one starts.
-// Freestanding C (no libc, no stack): build with ./build.sh song.c
+// scat radio: an endless stream of generated pop songs, sung by a scat singer over a choir,
+// plucked strings, bass and drums -- all in one QR code.
+// Every seed is a different station. Each song (about 2-3 minutes: intro, verse, bridge, chorus,
+// break, last chorus up a tone with a harmony singer, outro) picks its own key, tempo, groove,
+// chord progression and melodies; then the next song starts.
+// Freestanding C (no libc, no stack): build with ./build.sh scat-radio.c
 
 typedef unsigned u32;
 #define SR 44100.f
@@ -192,8 +194,7 @@ float p(void) {
     float pad = 0, l = sn(t * .05f);
     for (int k = 0; k < 4; k++)
         pad += fof(&padPh[k], C[k] * (1 + .004f * sn(t * (5 + k * .4f))), (550 + 200 * l) / SR, (950 + 200 * l) / SR);
-    dc += (pad - dc) * .002f; // the formant waves aren't zero-mean
-    pad = (pad - dc) * C[PADAMP] * (1 - .7f * C[SIDE]) * .12f;
+    pad *= C[PADAMP] * (1 - .7f * C[SIDE]) * .12f;
 
     // bass: 2-operator FM with a decaying index
     bassPh += bassF;
@@ -249,7 +250,9 @@ float p(void) {
 #ifdef SOLO
     return SOLO;
 #endif
-    // soft clip
+    // DC blocker (the formant waves aren't zero-mean), soft clip
+    dc += (x - dc) * .002f;
+    x -= dc;
     if (x > 1.5f) x = 1.5f;
     if (x < -1.5f) x = -1.5f;
     return x - x * x * x * (4.f / 27);

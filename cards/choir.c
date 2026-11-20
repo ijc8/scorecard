@@ -32,15 +32,16 @@ static int key;
 // pentatonic step -> frequency in cycles per sample
 NOINLINE static float w2f(int w) {
     int n = key + (w * 7 / 5 * 12 + 5) / 7;
-    float f = 8.1758f * 16 / SR; // MIDI 48
+    float f = 8.1758f * 12 / SR; // G2
     while (n--) f *= 1.0594631f;
     return f;
 }
 
 #define NV 8
 static struct { float loop, rate, f, ph; int w; } v[NV];
-static float dc, damp[4], rv[4], ksDelay, ksPrev, harp, harpRate;
-static int n, ksExc;
+static float dc, damp[4], rv[4], ksDelay, ksPrev, harp, harpRate, lastNoise;
+static u32 n;
+static int ksExc;
 
 void s(u32 seed) {
     rs = seed + 0x9E3779B9;
@@ -58,8 +59,8 @@ float p(void) {
     float t = ++n * (1 / SR), nz = (int)rnd() * (1.f / 2147483648.f), mix = 0;
 
     for (int k = 0; k < NV; k++) {
-        float x = (v[k].loop += v[k].rate) * 3;
-        if (x > 3) {
+        float x = (v[k].loop += v[k].rate) * 2.2f;
+        if (x > 2.2f) {
             // next time round: maybe move a step
             v[k].loop = 0;
             v[k].w += rnd() % 3 - 1;
@@ -77,12 +78,12 @@ float p(void) {
         }
     }
     dc += (mix - dc) * .002f; // the formant waves aren't zero-mean
-    mix = (mix - dc) * .14f;
+    mix = (mix - dc) * .12f;
 
     // harp: one Karplus-Strong string, plucked on its own loop
     if ((harp += harpRate) > 1) {
         harp = 0;
-        ksDelay = 1 / w2f(5 + rnd() % 8) - .5f;
+        ksDelay = 1 / w2f(7 + rnd() % 8) - .5f;
         ksExc = ksDelay;
     }
     int w = n & 2047;
@@ -94,8 +95,9 @@ float p(void) {
     ksPrev = o;
     if (ksExc > 0) {
         ksExc--;
-        y = nz;
+        y = (nz + lastNoise) * .4f; // soft pluck
     }
+    lastNoise = nz;
     KS[w] = y;
     mix += y * .25f;
 
