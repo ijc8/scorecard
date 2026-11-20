@@ -239,7 +239,12 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
             <div style={{ userSelect: "none", display: "flex", alignItems: "center", width: "4em", justifyContent: "right" }}>
                 <Clock style={smallIconStyle} />
                 &nbsp;
-                <span style={{ verticalAlign: "middle", display: "inline-block" }}>{formatTime(time)}</span>
+                <span style={{ verticalAlign: "middle", display: "inline-block" }}>{
+                    // sysfont has proportional digits ("1" is narrow, "4" wide); give each digit a
+                    // fixed cell so the colon and clock icon don't jitter while counting.
+                    [...formatTime(time)].map((c, i) => c === ":" ? c :
+                        <span key={i} style={{ display: "inline-block", width: "0.63em", textAlign: "center" }}>{c}</span>)
+                }</span>
             </div>
             <button onTouchStart={touchStartReset} onMouseDown={mouseReset} onMouseUp={() => { events.current.reset = false }} style={{ touchAction: "manipulation" }}><Prev style={bigIconStyle} /></button>
             <button id="start" onTouchStart={touchStartToggle} onMouseDown={mouseToggle} onMouseUp={() => { events.current.toggle = false }}>{state === "playing" ? <Pause style={bigIconStyle} /> : <Play style={bigIconStyle} />}</button>
