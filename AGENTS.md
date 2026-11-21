@@ -109,18 +109,27 @@ two `__EMSCRIPTEN__` branches let the same source build as a card or as a native
 
 ## Deck and starter pack
 
-The deck is a window beside the player (a slide-out drawer below 800px wide, opened from the
-"Deck" button in the tab bar). It shows the user's collected cards (`src/deck.ts`, kept in
-localStorage under `scorecard-deck`, keyed by each card's base43 code, with any saved seeds) above a
-built-in starter pack, as piles of overlapping cards; the playing card is pulled out. The motion is
-CSS (`.pcard` in `App.css`) plus `flyToPlayer`, and honours `prefers-reduced-motion`. Cards are collected when scanned or opened from a link, or by hand with the heart on Listen;
-drag-and-drop and Create don't collect, so work-in-progress builds stay out.
+The deck sits beside the player (a slide-out drawer below 800px wide, opened from the "Deck"
+button in the tab bar). It shows the user's collected cards (`src/deck.ts`, kept in localStorage
+under `scorecard-deck`, keyed by each card's base43 code, with any saved seeds) as a pile of
+overlapping cards; the playing card is pulled out. Cards are collected when scanned or opened from
+a link, or by hand with the heart on Listen; drag-and-drop and Create don't collect, so
+work-in-progress builds stay out. Mini cards and the big card share a layout (title and size above
+the QR), and the big card flips over to show the trace view.
+
+Below the pile are sealed packs (`scorecard-packs` in localStorage): bundles of cards that join the
+deck when opened. The starter pack is there until opened. "Wrap as a pack" exports the deck as a
+JSON pack file (`format: "scorecard-pack"`); "Add a pack", or dropping the file on the page,
+imports one. Imported cards are validated, and their titles and sizes are read from the binaries.
+
+The motion is CSS (`.pcard`, `.pack`, `.flip` in `App.css`) plus `flyToPlayer`, and honours
+`prefers-reduced-motion`.
 
 `examples/library/*.c` are the starter pack. `examples/library/build.sh`
 builds them all and runs `index.py`, which writes `src/library.json` (title, description, size and
 base43 code per card); the web build only reads that JSON, so it doesn't need Emscripten. The JSON
 is committed: rerun `build.sh` after touching a library card or `deck.h`. Each card's first line is
-a `//` comment that becomes its description in the tab.
+a `//` comment that becomes its description in the deck.
 
 ## Conventions
 

@@ -31,7 +31,7 @@ import Heart from "pixelarticons/svg/heart.svg?react"
 import Bookmark from "pixelarticons/svg/bookmark.svg?react"
 import Close from "pixelarticons/svg/close.svg?react"
 import library from "./library.json"
-import { DeckCard, addCard, loadDeck, removeCard, toggleSeed } from "./deck"
+import { DeckCard, Pack, addCard, addPack, loadDeck, loadPacks, removeCard, savePacks, toggleSeed } from "./deck"
 import { audioDebugSnapshot, audioHealthy, onStall, sendToWorklet, setWorkletMessageHandler, startAudio } from "./audio"
 
 // Indices into `tabs` in `App`.
@@ -239,7 +239,16 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
     const togglePlay = () => { setState(state === "playing" ? "paused" : "playing") }
     const TraceIcon = tracing ? BullseyeArrow : Bullseye
     return <div>
-        <div id="table" style={{ position: "relative" }}>
+        {/* Laid out like the cards in the deck: title and size on top, picture below. */}
+        <h2 style={{ userSelect: "none", margin: "0 0 12px", fontSize: "6cqw", fontWeight: "normal", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", textAlign: "left", lineHeight: 1.2 }}>
+            <span>{title}</span>
+            <span style={{ whiteSpace: "nowrap" }}>{size} bytes {/* TODO: add link and perhaps download buttons with icons */}
+                {binary && <button className={"toggle" + (kept ? " on" : "")} title={kept ? "Remove from deck" : "Keep in deck"} style={{ fontSize: 0, border: "none", padding: "0 0 0 6px" }} onClick={toggleKept}>
+                    <Heart style={{ height: "6cqw", verticalAlign: "middle" }} />
+                </button>}
+            </span>
+        </h2>
+        <div id="table" style={{ position: "relative", marginBottom: "20px" }}>
             {showMessage && <div style={{ position: "absolute", fontSize: "48px", height: "100%", width: "100%", userSelect: "none" }}>
                 <div style={{ border: "16px solid black", height: "100%", containerType: "size", lineHeight: 1, display: "flex", flexDirection: "column", justifyContent: "space-evenly" }}>
                     {error ? <>
@@ -252,15 +261,12 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
                     </>}
                 </div>
             </div>}
-            <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", display: tracing ? "none" : "block", visibility: showMessage ? "hidden" : "inherit", width: "100%" }} width="1" height="1"></canvas>
-            <canvas ref={traceCanvas} style={{ imageRendering: "pixelated", display: tracing ? "block" : "none", visibility: showMessage ? "hidden" : "inherit", width: "100%" }} width="1" height="1"></canvas>
+            {/* The card has two sides: the QR code on the front and, for tracing, its bits on the back. */}
+            <div className={"flip" + (tracing ? " flipped" : "")} style={{ visibility: showMessage ? "hidden" : "inherit" }}>
+                <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", display: "block", width: "100%" }} width="1" height="1"></canvas>
+                <canvas ref={traceCanvas} style={{ imageRendering: "pixelated", display: "block", width: "100%" }} width="1" height="1"></canvas>
+            </div>
         </div>
-        <h2 style={{ userSelect: "none", margin: "20px 0", fontSize: "6cqw" }}>{title} | <span style={{ whiteSpace: "nowrap" }}>{size} bytes {/* TODO: add link and perhaps download buttons with icons */}
-                {binary && <button className={"toggle" + (kept ? " on" : "")} title={kept ? "Remove from deck" : "Keep in deck"} style={{ fontSize: 0, border: "none", padding: "0 0 0 6px" }} onClick={toggleKept}>
-                    <Heart style={{ height: "6cqw", verticalAlign: "middle" }} />
-                </button>}
-            </span>
-        </h2>
         <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", fontSize: "5cqw" }}>
             <div style={{ userSelect: "none", display: "flex", alignItems: "center", width: "4em", flexShrink: 0, whiteSpace: "nowrap", justifyContent: "right" }}>
                 <Clock style={smallIconStyle} />
@@ -383,19 +389,21 @@ function Scan({ onScan, tab }: { onScan: (data: string) => boolean, tab: number 
 
 type LoadCard = (code: string, seed?: number) => void
 
-// Each card's face shows its own bits, as a little 1-bit picture.
+// Each card's face shows its QR code, like the big card on the player.
 const faces = new Map<string, string>()
 function cardFace(code: string) {
     let face = faces.get(code)
     if (face === undefined) {
-        const binary = decodeBlob(code)
         const canvas = document.createElement("canvas")
-        const size = canvas.width = canvas.height = Math.ceil(Math.sqrt(binary.length * 8))
-        const image = new ImageData(size, size)
-        for (let i = 0; i < binary.length * 8; i++) {
-            if ((binary[i >> 3] >> (i % 8)) & 1) image.data[i * 4 + 3] = 255
+        try {
+            const { size, data } = QRCode.create(cardURL(code), { errorCorrectionLevel: "L" }).modules
+            canvas.width = canvas.height = size
+            const image = new ImageData(size, size)
+            data.forEach((dark, i) => { image.data[i * 4 + 3] = dark ? 255 : 0 })
+            canvas.getContext("2d")!.putImageData(image, 0, 0)
+        } catch {
+            // Too big for a QR code: leave the face blank.
         }
-        canvas.getContext("2d")!.putImageData(image, 0, 0)
         faces.set(code, face = canvas.toDataURL())
     }
     return face
@@ -437,11 +445,33 @@ function PlayingCard({ title, size, code, index, selected, loadCard, children }:
     </div>
 }
 
-// Your collection of cards, plus a starter pack of ready-made ones (built from `examples/library` into
-// `library.json`). Cards overlap in a pile; the one that's playing is pulled out.
+// A sealed pack of cards, waiting in the deck to be torn open.
+function SealedPack({ pack, open }: { pack: Pack, open: () => void }) {
+    const [opening, setOpening] = useState(false)
+    const tear = () => {
+        if (opening) return
+        setOpening(true)
+        const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        setTimeout(open, still ? 0 : 600)
+    }
+    return <button className={"pack" + (opening ? " opening" : "")} onClick={tear}>
+        <span className="pack-top"></span>
+        <span className="pack-body">
+            <span className="pack-label">
+                <b>{pack.name}</b>
+                <span>{pack.cards.length} {pack.cards.length === 1 ? "card" : "cards"}</span>
+            </span>
+            <span className="pack-hint">Open</span>
+        </span>
+    </button>
+}
+
+// Your collection of cards, which overlap in a pile; the one that's playing is pulled out.
+// Below the pile are any sealed packs (to begin with, a starter pack built from `examples/library`).
 // On wide screens the deck sits beside the player; on narrow ones it's a drawer.
-function Deck({ deck, current, loadCard, discard, open, setOpen }: {
-    deck: DeckCard[], current: string | null, loadCard: LoadCard, discard: (code: string) => void, open: boolean, setOpen: (o: boolean) => void
+function Deck({ deck, packs, current, loadCard, discard, openPack, importPack, exportPack, open, setOpen }: {
+    deck: DeckCard[], packs: Pack[], current: string | null, loadCard: LoadCard, discard: (code: string) => void,
+    openPack: (pack: Pack) => void, importPack: (file: File) => void, exportPack: () => void, open: boolean, setOpen: (o: boolean) => void
 }) {
     const play: LoadCard = (code, seed) => {
         loadCard(code, seed)
@@ -450,35 +480,36 @@ function Deck({ deck, current, loadCard, discard, open, setOpen }: {
     return <>
         {open && <div className="deck-scrim" onClick={() => setOpen(false)}></div>}
         <aside className={"deck" + (open ? " open" : "")}>
-            <div className="titlebar">
-                <button title="Close" onClick={() => setOpen(false)}></button>
-                <span>Deck</span>
-            </div>
-            <div className="deck-scroll">
-                <div>
-                    <h3>Your cards <span>{deck.length}</span></h3>
-                    {deck.length === 0 && <p>Cards you scan or open from a link land here. Keep the one you're hearing with <Heart style={{ height: "1em", verticalAlign: "middle" }} />.</p>}
-                    <div className="pile">
-                        {deck.map((card, index) =>
-                            <PlayingCard key={card.code} {...card} index={index} selected={card.code === current} loadCard={play}>
-                                <div className="pcard-extras">
-                                    {card.seeds.map(seed =>
-                                        <button key={seed} title="Play with this seed" onClick={() => play(card.code, seed)}>{formatSeed(seed)}</button>
-                                    )}
-                                    <span>{card.seeds.length === 0 && new Date(card.added).toLocaleDateString()}</span>
-                                    <button title="Remove from deck" style={{ fontSize: 0 }} onClick={() => discard(card.code)}><Close style={{ height: "14px" }} /></button>
-                                </div>
-                            </PlayingCard>
-                        )}
-                    </div>
-                    <h3>Starter pack <span>{library.length}</span></h3>
-                    <div className="pile">
-                        {library.map((card, index) =>
-                            <PlayingCard key={card.code} {...card} index={index + deck.length} selected={card.code === current} loadCard={play}>
-                                <div className="pcard-extras">{card.description}</div>
-                            </PlayingCard>
-                        )}
-                    </div>
+            <div>
+                <h3>
+                    <span>Deck | {deck.length} {deck.length === 1 ? "card" : "cards"}</span>
+                    <button className="deck-close" title="Close" style={{ fontSize: 0 }} onClick={() => setOpen(false)}><Close style={{ height: "18px" }} /></button>
+                </h3>
+                {deck.length === 0 && <p>Cards you scan or open from a link land here. Keep the one you're hearing with <Heart style={{ height: "1em", verticalAlign: "middle" }} />.</p>}
+                <div className="pile">
+                    {deck.map((card, index) =>
+                        <PlayingCard key={card.code} {...card} index={index} selected={card.code === current} loadCard={play}>
+                            <div className="pcard-extras">
+                                {card.description && <div>{card.description}</div>}
+                                {card.seeds.map(seed =>
+                                    <button key={seed} title="Play with this seed" onClick={() => play(card.code, seed)}>{formatSeed(seed)}</button>
+                                )}
+                                <span>{card.seeds.length === 0 && new Date(card.added).toLocaleDateString()}</span>
+                                <button title="Remove from deck" style={{ fontSize: 0 }} onClick={() => discard(card.code)}><Close style={{ height: "14px" }} /></button>
+                            </div>
+                        </PlayingCard>
+                    )}
+                </div>
+                {packs.map(pack => <SealedPack key={pack.id} pack={pack} open={() => openPack(pack)} />)}
+                <div className="deck-actions">
+                    {deck.length > 0 && <button title="Save your deck as a pack file to share" onClick={exportPack}>Wrap as a pack</button>}
+                    <label title="Add a pack from a file">
+                        Add a pack
+                        <input type="file" accept=".json,application/json" onChange={e => {
+                            if (e.target.files?.[0]) importPack(e.target.files[0])
+                            e.target.value = ""
+                        }} />
+                    </label>
                 </div>
             </div>
         </aside>
@@ -615,6 +646,40 @@ let handleTraceLogs: undefined | ((l: number[]) => void)
 //     </div>
 // })
 
+const starterPack: Pack = { id: "starter", name: "Starter pack", cards: library.map(({ code, title, size, description }) => ({ code, title, size, description, seeds: [] })) }
+
+// Pack files: JSON, with a marker so that we can tell them from anything else.
+const PACK_FORMAT = "scorecard-pack"
+
+// Read a pack file, keeping only what checks out. (Titles and sizes come from the cards themselves.)
+function parsePack(text: string): Pack | undefined {
+    try {
+        const file = JSON.parse(text)
+        if (file?.format !== PACK_FORMAT || !Array.isArray(file.cards)) return
+        const cards = []
+        for (const { code, description, seeds } of file.cards) {
+            let binary
+            try {
+                binary = decodeBlob(code)
+                if (!WebAssembly.validate(binary as BufferSource)) continue
+            } catch {
+                continue
+            }
+            cards.push({
+                code: encodeBlob(binary),
+                title: extractTitle(new WebAssembly.Module(binary as BufferSource)) ?? NO_TITLE,
+                size: binary.length,
+                seeds: Array.isArray(seeds) ? seeds.filter(seed => Number.isInteger(seed) && seed >= 0 && seed < 2 ** 32) : [],
+                ...(typeof description === "string" ? { description: description.slice(0, 200) } : {}),
+            })
+        }
+        if (cards.length === 0) return
+        return { id: `${Date.now()}`, name: String(file.name ?? "Pack").slice(0, 40), cards }
+    } catch {
+        return
+    }
+}
+
 function extractTitle(module: WebAssembly.Module) {
     const instance = new WebAssembly.Instance(module)
     // Support new, short export name ("d") or legacy name ("title") for old cards.
@@ -653,6 +718,7 @@ function App() {
     const qrCanvas = useRef<HTMLCanvasElement>(null)
     const [tracing, _setTracing] = useState(false)
     const [deck, setDeck] = useState(loadDeck)
+    const [packs, setPacks] = useState(() => loadPacks(starterPack))
     const [deckOpen, setDeckOpen] = useState(false)
     const openDeck = useRef(() => setDeckOpen(true)).current
     const code = useMemo(() => binary && encodeBlob(binary), [binary])
@@ -794,6 +860,30 @@ function App() {
         onScan(window.location.href, !window.history.state?.loaded)
     }, [])
 
+    const openPack = (pack: Pack) => {
+        setDeck(addPack(deck, pack))
+        setPacks(savePacks(packs.filter(p => p.id !== pack.id)))
+    }
+    const importPack = async (file: File) => {
+        const pack = parsePack(await file.text())
+        if (!pack) return window.alert("That doesn't look like a pack of score cards.")
+        setPacks(packs => savePacks([...packs, pack]))
+        setDeckOpen(true)
+    }
+    const importPackRef = useRef(importPack)
+    importPackRef.current = importPack
+    const exportPack = () => {
+        const name = window.prompt("Name this pack:", "My pack")
+        if (!name) return
+        const cards = deck.map(({ code, seeds, description }) => ({ code, seeds, description }))
+        const blob = new Blob([JSON.stringify({ format: PACK_FORMAT, name, cards })], { type: "application/json" })
+        const link = document.createElement("a")
+        link.href = URL.createObjectURL(blob)
+        link.download = `${name.replace(/[^\w -]+/g, "").trim() || "pack"}.json`
+        link.click()
+        setTimeout(() => URL.revokeObjectURL(link.href), 1000)
+    }
+
     const loadCard: LoadCard = (code, seed) => loadBinary(decodeBlob(code), { seed: seed ?? null })
     const toggleKept = () => {
         if (!binary) return
@@ -824,6 +914,9 @@ function App() {
                 const text = await readQR(file).catch(() => undefined)
                 if (text) onScanRef.current(text)
                 return
+            }
+            if (file.type === "application/json" || file.name.endsWith(".json")) {
+                return importPackRef.current(file)
             }
             const arrayBuffer = await file.arrayBuffer()
             loadBinaryRef.current(new Uint8Array(arrayBuffer))
@@ -884,7 +977,7 @@ function App() {
 
     const border = `1px ${dragging ? "dashed" : "solid"} black`
     return <div id="layout">
-    <Deck {...{ deck, current: code, loadCard, discard: (code: string) => setDeck(removeCard(deck, code)), open: deckOpen, setOpen: setDeckOpen }} />
+    <Deck {...{ deck, packs, openPack, importPack, exportPack, current: code, loadCard, discard: (code: string) => setDeck(removeCard(deck, code)), open: deckOpen, setOpen: setDeckOpen }} />
     <div id="app" style={{ display: "flex", flexDirection: "column", alignItems: "stretch", containerType: "inline-size", backgroundColor: "white", borderTop: border }}>
         <div style={{ borderLeft: border, borderRight: border, margin: "0 -1px" }}>
             <div style={{ margin: "20px" }} >
