@@ -75,11 +75,11 @@
     font-size: 0;
     padding: 4px 0;
     width: 96px;
-    border: none;
-    border-top: 1px solid black;
-    background-color: inherit;
-    background-image: url("assets/tab-inactive.png");
-    background-size: 100% 100%;
+    /* The tab shape is drawn as a border image, so that its slanted sides and outline keep their
+       size (and all their pixels) however wide the tab is; only the middle stretches. */
+    border: 0 solid transparent;
+    border-image: url("assets/tab-inactive.png") 0 10 2 10 fill / 0 15px 3px 15px;
+    background: none;
     image-rendering: pixelated;
 }
 
@@ -89,8 +89,7 @@
 }
 
 .tabs > button.active {
-    border-top: 1px solid white;
-    background-image: url("assets/tab.png");
+    border-image-source: url("assets/tab.png");
 }
 
 
@@ -400,7 +399,7 @@
     display: none;
 }
 
-.deck-handle, .deck-scrim, .deck-close {
+.deck-peek, .deck-scrim, .deck-close {
     display: none;
 }
 
@@ -464,8 +463,46 @@
         padding-top: 12px;
     }
 
-    .deck-handle, .deck-close {
+    .deck-close {
         display: block;
+    }
+
+    /* The edges of a few cards, poking out from the side of the screen. */
+    .deck-peek {
+        display: block;
+        position: fixed;
+        z-index: 8;
+        left: 0;
+        top: 36%;
+        width: 26px;
+        height: 132px;
+        padding: 0;
+        border: none;
+        background: none;
+        transition: transform 0.2s cubic-bezier(.3, 1.8, .5, 1);
+        animation: peek 0.5s 0.6s cubic-bezier(.3, 1.6, .5, 1) backwards;
+    }
+
+    .deck-peek:hover, .deck-peek:active {
+        transform: translateX(4px);
+    }
+
+    .deck-peek > span {
+        position: absolute;
+        left: -4px;
+        height: 100px;
+        border: 1px solid black;
+        border-radius: 0 5px 5px 0;
+        box-shadow: 2px 2px 0 black;
+        background: white;
+    }
+
+    .deck-peek > span:nth-child(1) { top: 0; width: 12px; transform: rotate(-3deg); }
+    .deck-peek > span:nth-child(2) { top: 14px; width: 18px; transform: rotate(2deg); }
+    .deck-peek > span:nth-child(3) { top: 28px; width: 15px; transform: rotate(-1deg); }
+
+    @keyframes peek {
+        from { transform: translateX(-24px); }
     }
 
     .deck-scrim {
@@ -491,7 +528,7 @@
 }
 
 /* The same, when animations are turned off in Settings. */
-.still :is(.deck, .pcard, .pack, .pack > *, .flip) {
+.still :is(.deck, .deck-peek, .pcard, .pack, .pack > *, .flip) {
     animation: none !important;
     transition: none;
 }
@@ -529,6 +566,35 @@
     background:
         linear-gradient(45deg, transparent calc(50% - 1px), black calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)),
         linear-gradient(-45deg, transparent calc(50% - 1px), black calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px));
+}
+
+.settings input[type=range] {
+    display: block;
+    width: 100%;
+    height: 18px;
+    margin: 6px 0 0;
+    border: none;
+    /* A thin track... */
+    background: linear-gradient(black, black) center / 100% 1px no-repeat;
+}
+
+/* ...and a blocky thumb. */
+.settings input[type=range]::-webkit-slider-thumb {
+    appearance: none;
+    width: 10px;
+    height: 18px;
+    border: 1px solid black;
+    background: white;
+    box-shadow: 2px 2px 0 black;
+}
+
+.settings input[type=range]::-moz-range-thumb {
+    width: 8px;
+    height: 16px;
+    border: 1px solid black;
+    border-radius: 0;
+    background: white;
+    box-shadow: 2px 2px 0 black;
 }
 
 .settings small {
@@ -635,4 +701,8 @@
 
 .photo-button > input {
     display: none;
+}
+
+.settings > label:first-child {
+    width: 100%;
 }

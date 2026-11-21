@@ -26,6 +26,7 @@ let wasInterrupted = false
 let moduleMessage: any = null
 let wantPlaying = false
 let seed = 0
+let volume = 1
 let lastPos = 0
 let onWorkletMessage: (e: MessageEvent) => void = () => {}
 // Last sample of the audio clock, taken by the watchdog.
@@ -63,6 +64,7 @@ function createContext() {
             onWorkletMessage(e)
         }
         // Bring a replacement node to where the old one was: same binary, same seed.
+        node.port.postMessage({ cmd: "volume", value: volume })
         if (moduleMessage) node.port.postMessage(moduleMessage)
         if (moduleMessage && wantPlaying) node.port.postMessage({ cmd: "play", seed })
         return node
@@ -129,6 +131,7 @@ export function startAudio() {
 export function sendToWorklet(message: any) {
     if (message.cmd === "loadModule") moduleMessage = message
     else if (message.cmd === "reset" || message.cmd === "play") seed = message.seed
+    else if (message.cmd === "volume") volume = message.value
     if (message.cmd === "play") {
         wantPlaying = true
         frozenSince = null

@@ -109,8 +109,8 @@ two `__EMSCRIPTEN__` branches let the same source build as a card or as a native
 
 ## Deck and starter pack
 
-The deck sits beside the player (a slide-out drawer below 800px wide, opened from the "Deck"
-button in the tab bar). It shows the user's collected cards (`src/deck.ts`, kept in localStorage
+The deck sits beside the player (a slide-out drawer below 800px wide, pulled out by the card
+edges peeking from the left of the screen). It shows the user's collected cards (`src/deck.ts`, kept in localStorage
 under `scorecard-deck`, keyed by each card's base43 code, with any saved seeds) as a pile of
 overlapping cards; the playing card is pulled out. Cards are collected when scanned or opened from
 a link, or by hand with the heart on Listen; drag-and-drop and Create don't collect, so
@@ -121,6 +121,9 @@ Below the pile are sealed packs (`scorecard-packs` in localStorage): bundles of 
 deck when opened. The starter pack is there until opened. "Wrap as a pack" exports the deck as a
 JSON pack file (`format: "scorecard-pack"`); "Add a pack", or dropping the file on the page,
 imports one. Imported cards are validated, and their titles and sizes are read from the binaries.
+
+Settings (`scorecard-settings` in localStorage) cover volume (applied in the worklet, and re-sent
+by `audio.ts` when the context is rebuilt), auto-collecting, animations and a screen wake lock.
 
 The motion is CSS (`.pcard`, `.pack`, `.flip` in `App.css`) plus `flyToPlayer`, and honours
 `prefers-reduced-motion`.

@@ -30,8 +30,8 @@ import { initDebug, dlog, DEBUG } from "./debug"
 import Heart from "pixelarticons/svg/heart.svg?react"
 import Bookmark from "pixelarticons/svg/bookmark.svg?react"
 import Close from "pixelarticons/svg/close.svg?react"
-import CardStack from "pixelarticons/svg/card-stack.svg?react"
 import Headphone from "pixelarticons/svg/headphone.svg?react"
+import Volume from "pixelarticons/svg/volume-2.svg?react"
 import Sliders from "pixelarticons/svg/sliders.svg?react"
 import InfoBox from "pixelarticons/svg/info-box.svg?react"
 import library from "./library.json"
@@ -414,7 +414,7 @@ function cardFace(code: string) {
 }
 
 // Settings, kept in localStorage.
-const defaultSettings = { collect: true, motion: true }
+const defaultSettings = { collect: true, motion: true, volume: 1, awake: false }
 type Settings = typeof defaultSettings
 
 function loadSettings(): Settings {
@@ -433,14 +433,21 @@ function motionOff() {
 function SettingsTab({ settings, setSettings, deckSize, hasStarter, freshStarter, emptyDeck }: {
     settings: Settings, setSettings: (s: Settings) => void, deckSize: number, hasStarter: boolean, freshStarter: () => void, emptyDeck: () => void
 }) {
-    const toggle = (key: keyof Settings, label: string, hint: string) =>
+    const toggle = (key: "collect" | "motion" | "awake", label: string, hint: string) =>
         <label>
             <input type="checkbox" checked={settings[key]} onChange={e => setSettings({ ...settings, [key]: e.target.checked })} />
             <span>{label}<small>{hint}</small></span>
         </label>
     return <div className="settings">
+        <label>
+            <Volume style={{ height: "22px", flexShrink: 0 }} />
+            <span style={{ flexGrow: 1 }}>Volume
+                <input type="range" min="0" max="1" step="0.01" value={settings.volume} onChange={e => setSettings({ ...settings, volume: Number(e.target.value) })} />
+            </span>
+        </label>
         {toggle("collect", "Collect cards", "Add cards to your deck when you scan them or open their links.")}
         {toggle("motion", "Animations", "Cards that deal, fly and flip.")}
+        {"wakeLock" in navigator && toggle("awake", "Stay awake", "Keep the screen on while a card is playing.")}
         <button disabled={hasStarter} onClick={freshStarter}>Get a fresh starter pack</button>
         <button disabled={deckSize === 0} onClick={() => window.confirm(`Throw away all ${deckSize} cards in your deck, and their saved seeds?`) && emptyDeck()}>Empty my deck</button>
     </div>
@@ -514,6 +521,8 @@ function Deck({ deck, packs, current, loadCard, discard, openPack, importPack, e
         setOpen(false)
     }
     return <>
+        {/* On narrow screens, the edge of the deck peeks out from the side, to be pulled out. */}
+        <button className="deck-peek" title="Deck" aria-label="Open your deck" onClick={() => setOpen(true)}><span></span><span></span><span></span></button>
         {open && <div className="deck-scrim" onClick={() => setOpen(false)}></div>}
         <aside className={"deck" + (open ? " open" : "")}>
             <div>
@@ -766,6 +775,32 @@ function App() {
     useEffect(() => {
         document.documentElement.classList.toggle("still", !settings.motion)
     }, [settings.motion])
+    useEffect(() => {
+        // Squared, so the slider feels even to the ear.
+        sendToWorklet({ cmd: "volume", value: settings.volume ** 2 })
+    }, [settings.volume])
+    useEffect(() => {
+        // Keep the screen on while playing, if asked to. (The lock is lost whenever the page is hidden.)
+        const wakeLock = (navigator as any).wakeLock
+        if (!settings.awake || state !== "playing" || !wakeLock) return
+        let lock: any
+        let done = false
+        const acquire = () => {
+            if (document.visibilityState !== "visible") return
+            wakeLock.request("screen").then((l: any) => {
+                lock?.release()
+                lock = l
+                if (done) l.release()
+            }).catch(() => {})
+        }
+        acquire()
+        document.addEventListener("visibilitychange", acquire)
+        return () => {
+            done = true
+            lock?.release()
+            document.removeEventListener("visibilitychange", acquire)
+        }
+    }, [settings.awake, state])
     const openDeck = useRef(() => setDeckOpen(true)).current
     const code = useMemo(() => binary && encodeBlob(binary), [binary])
     const deckCard = deck.find(card => card.code === code)
@@ -827,7 +862,11 @@ function App() {
         }
         canvas.style.cssText = style
         // (The state marks this entry as ours, so that reloading the page doesn't count as following a link.)
-        window.history.pushState({ loaded: true }, "", DEBUG ? url.replace("?", "?debug&") : url)
+        try {
+            window.history.pushState({ loaded: true }, "", DEBUG ? url.replace("?", "?debug&") : url)
+        } catch {
+            // Some embeddings don't allow changing the address; the card still plays.
+        }
         // setLink(url)
         // setDownload(window.URL.createObjectURL(new Blob([buffer])))
         setTab(Tab.Listen)
@@ -1042,7 +1081,6 @@ function App() {
         </div>
         <div className="tabs" style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
             <div style={{ borderTop: border, flexGrow: "1", alignSelf: "stretch" }}></div>
-            <button className="deck-handle" title="Deck" aria-label="Deck" onClick={openDeck}><CardStack /></button>
             {tabs.map(({ name, Icon }, index) =>
                 <button key={index} title={name} aria-label={name} className={index === tab ? "active" : ""} onClick={() => setTab(index)}><Icon /></button>
             )}

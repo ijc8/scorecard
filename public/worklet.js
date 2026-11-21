@@ -35,6 +35,7 @@ class CustomProcessor extends AudioWorkletProcessor {
         super()
         this.playing = false
         this.pos = 0
+        this.volume = 1
         this.port.onmessage = async e => {
             if (e.data.cmd === "loadModule") {
                 this.module = new WebAssembly.Module(e.data.binary)
@@ -46,6 +47,8 @@ class CustomProcessor extends AudioWorkletProcessor {
                 this.playing = true
             } else if (e.data.cmd === "pause") {
                 this.playing = false
+            } else if (e.data.cmd === "volume") {
+                this.volume = e.data.value
             }
         }
     }
@@ -96,7 +99,7 @@ class CustomProcessor extends AudioWorkletProcessor {
         const speakers = outputs[0]
 
         for (let i = 0; i < speakers[0].length; i++) {
-            const x = process()
+            const x = process() * this.volume
             for (const channel of speakers) {
                 channel[i] = x
             }
