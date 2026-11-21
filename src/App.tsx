@@ -357,6 +357,36 @@ const About = memo(function About({ setTab }: any) {
     </div>
 })
 
+function cardURL(encoded: string, seed?: number) {
+    const prefix = window.location.origin + window.location.pathname.replace(/\/$/, "") // trim trailing slash
+    const seedParam = seed === undefined ? "" : `s=${encode(BigInt(seed))}&`
+    return `${prefix}?${seedParam}c=${encoded}`
+}
+
+// The largest binary (in bytes) whose URL still fits in a QR code when served from this address.
+// Found by asking the QR library directly, since the answer depends on how it packs the URL.
+let _maxCardSize: number | undefined
+function maxCardSize() {
+    if (_maxCardSize !== undefined) return _maxCardSize
+    const fits = (bytes: number) => {
+        // Longest possible encoding of this many bytes.
+        const chars = Math.ceil(bytes * 8 / Math.log2(43))
+        try {
+            QRCode.create(cardURL(":".repeat(chars)), { errorCorrectionLevel: "L" })
+            return true
+        } catch {
+            return false
+        }
+    }
+    let low = 0, high = 4096
+    while (high - low > 1) {
+        const mid = (low + high) >> 1
+        if (fits(mid)) low = mid
+        else high = mid
+    }
+    return _maxCardSize = low
+}
+
 function Create({ binary, loadBinary, wat, setWAT, tab }: {
     binary: Uint8Array | null, loadBinary: (b: Uint8Array) => void, wat: string, setWAT: (w: string) => void, tab: number
 }) {
@@ -372,19 +402,42 @@ function Create({ binary, loadBinary, wat, setWAT, tab }: {
         })
     }, [binary, tab])
 
-    const assemble = async () => {
-        console.log("assembling", wat)
-        console.log("text size", wat.length)
-        const wabt = await getWabt()
-        // TODO: Show errors.
-        const result = wabt.parseWat("main.wasm", wat).toBinary({})
-        console.log(result.log)
-        loadBinary(result.buffer)
-    }
+    // Assemble as you type (after a pause), to show the size budget and any errors.
+    const [assembled, setAssembled] = useState<{ buffer?: Uint8Array, error?: string }>({})
+    useEffect(() => {
+        if (tab !== Tab.Create) return
+        if (!wat.trim()) return setAssembled({})
+        let current = true
+        const timeout = setTimeout(async () => {
+            const wabt = await getWabt()
+            if (!current) return
+            let module
+            try {
+                module = wabt.parseWat("card.wat", wat)
+                setAssembled({ buffer: module.toBinary({}).buffer })
+            } catch (e: any) {
+                setAssembled({ error: String(e.message ?? e).trim() })
+            } finally {
+                module?.destroy()
+            }
+        }, 300)
+        return () => {
+            current = false
+            clearTimeout(timeout)
+        }
+    }, [wat, tab])
 
+    const { buffer, error } = assembled
+    const max = maxCardSize()
+    const size = buffer?.length ?? 0
     return <>
-        <textarea style={{ width: "100%", flexGrow: "1" }} value={wat} onChange={e => setWAT(e.target.value)}></textarea><br />
-        <button id="assemble" onClick={assemble}>Assemble!</button><br />
+        <textarea style={{ width: "100%", flexGrow: "1", minHeight: "200px" }} spellCheck={false} value={wat} onChange={e => setWAT(e.target.value)}></textarea>
+        {error && <pre className="assembler-error">{error}</pre>}
+        <div className={"budget" + (size > max ? " over" : "")} title="How much of a QR code this card fills">
+            <div style={{ width: `${Math.min(size / max, 1) * 100}%` }}></div>
+            <span>{buffer ? (size > max ? `${size - max} bytes too big` : `${size} bytes | ${max - size} left`) : error ? "can't assemble" : "nothing to assemble"}</span>
+        </div>
+        <button id="assemble" disabled={!buffer} onClick={() => loadBinary(buffer!)}>Assemble!</button><br />
     </>
 }
 
@@ -502,10 +555,7 @@ function App() {
             return
         }
         // Generate QR code
-        const prefix = window.location.origin + window.location.pathname.replace(/\/$/, "") // trim trailing slash
-        const seedParam = seedLock ? `s=${encode(BigInt(seed))}&` : ""
-        console.log(seedLock, seedParam)
-        const url = `${prefix}?${seedParam}c=${encodeBlob(binary)}`
+        const url = cardURL(encodeBlob(binary), seedLock ? seed : undefined)
         console.log(url)
         console.log("URL length:", url.length)
         const canvas = qrCanvas.current!

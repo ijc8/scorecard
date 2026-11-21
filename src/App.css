@@ -177,3 +177,39 @@
         display: none;
     }
 }
+
+/* Create tab: how full the card is, and what's wrong with it. */
+.budget {
+    position: relative;
+    border: 1px solid black;
+    margin: 8px 0;
+    line-height: 1.6;
+}
+
+.budget > div {
+    position: absolute;
+    inset: 0 auto 0 0;
+    background-color: #ccf;
+}
+
+.budget.over > div {
+    background-color: black;
+}
+
+.budget > span {
+    position: relative;
+}
+
+.budget.over > span {
+    color: white;
+}
+
+.assembler-error {
+    margin: 8px 0 0;
+    max-height: 6em;
+    overflow: auto;
+    text-align: left;
+    white-space: pre-wrap;
+    font-size: 12px;
+    line-height: 1.2;
+}
