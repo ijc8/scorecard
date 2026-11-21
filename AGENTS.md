@@ -74,8 +74,11 @@ that fallback in `extractTitle` (`src/App.tsx`) and in `public/worklet.js`.
   using `zxing-wasm`, loaded lazily. It was picked with `scripts/scanbench` because score cards are
   very dense codes; rerun that benchmark before changing decoders.
 - `src/wasmTracer.ts`: the bullseye toggle reassembles the binary with a `scorecard.log(i32)`
-  import at basic-block boundaries; the worklet posts counts back and the Listen tab draws a
-  heatmap over a bit-grid of the binary.
+  import at basic-block boundaries, and with every load/store address passed through
+  `scorecard.read`/`scorecard.write`. The worklet posts block counts and touched addresses back, and
+  the Listen tab draws a heatmap over a bit-grid of the binary: green for executed code, blue/red
+  for data-segment bytes read/written. Memory outside the data segments (`src/memoryTrace.ts`) is
+  drawn in a band under the card. Instrumentation must not change a card's output.
 - `wabt/` is vendored and loaded lazily through `src/lazyWabt.ts` (it's large). Use `getWabt()`
   rather than importing it directly.
 - `vite.config.ts` sets `base: "./"`, which the `ijc8.me/s` subpath deployment depends on.

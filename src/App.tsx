@@ -24,6 +24,7 @@ import { readQR } from "./qrReader"
 import logoUrl from "./assets/logo.png"
 import exampleCardUrl from "./assets/example-card.png"
 import { TraceMap, instrumentWasm } from "./wasmTracer"
+import { MemoryTrace } from "./memoryTrace"
 import { getWabt } from './lazyWabt'
 import { initDebug, dlog, DEBUG } from "./debug"
 import Heart from "pixelarticons/svg/heart.svg?react"
@@ -160,50 +161,60 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
     // }
 
     const traceCanvas = useRef<HTMLCanvasElement | null>(null)
+    // The trace view shows the card's bits, lit up as the code they encode runs (green) and as the
+    // data they encode is read (blue) or written (red). Below the card is a band for the rest of
+    // memory: everything the card has touched that isn't part of the card itself, squeezed to fit.
     const draw = () => {
         if (trace && !tracing) trace.logs.length = 0
         if (!tracing || !traceCanvas.current || !binary) return
         const canvas = traceCanvas.current
         const context = canvas.getContext("2d")!
-        // Arrange bits in a square
-        const size = Math.ceil(Math.sqrt(binary.length * 8))
+        // Arrange the bits in the top four-fifths of a square, leaving the rest for memory.
+        const bits = binary.length * 8
+        const size = Math.ceil(Math.sqrt(bits / 0.8))
+        const bandStart = (Math.ceil(bits / size) + 1) * size
         canvas.width = size
         canvas.height = size
-        const image = new ImageData(canvas.width, canvas.height)
-        for (let i = 0; i < size * size; i++) {
-            if (i < binary.length * 8) {
-                const byte = Math.floor(i / 8)
-                const bit = i % 8
-                if ((binary[byte] >> bit) & 1) {
-                    image.data[i*4] = 204
-                    image.data[i*4+1] = 204
-                    image.data[i*4+2] = 255
-                    image.data[i*4+3] = 255
-                }
-            }
-            // Byte version (one pixel per byte, instead of per bit):
-            // if (i < buffer.length) {
-            //     // image.data[i*4] = 204
-            //     // image.data[i*4+1] = 204
-            //     // image.data[i*4+2] = 255
-            //     image.data[i*4+3] = buffer[i]
-            // }
+        const image = new ImageData(size, size)
+        const paint = (i: number, r: number, g: number, b: number, alpha = 1) => {
+            // Blend over what's there (on a white background).
+            const p = image.data.subarray(i * 4, i * 4 + 4)
+            const blank = p[3] === 0
+            p[0] = (blank ? 255 : p[0]) * (1 - alpha) + r * alpha
+            p[1] = (blank ? 255 : p[1]) * (1 - alpha) + g * alpha
+            p[2] = (blank ? 255 : p[2]) * (1 - alpha) + b * alpha
+            p[3] = 255
         }
-        context.putImageData(image, 0, 0)
+        const paintRead = (i: number, heat: number) => heat && paint(i, 0, 110, 255, heat * 0.7)
+        const paintWrite = (i: number, heat: number) => heat && paint(i, 255, 50, 0, heat * 0.7)
+        for (let i = 0; i < bits; i++) {
+            if ((binary[i >> 3] >> (i % 8)) & 1) paint(i, 204, 204, 255)
+        }
         if (trace && state === "playing") {
             const max = Math.max(...Object.values(trace.logs))
             trace.logs.forEach((count, id) => {
                 const startByte = trace!.map[id].start.offset
                 const endByte = trace!.map[id].end.offset
-                for (let i = startByte * 8; i < endByte * 8; i++) {
-                    // TODO: fewer calls to `fillRect`
-                    const x = i % canvas.width
-                    const y = Math.floor(i / canvas.width)
-                    context.fillStyle = `rgba(0 255 0 / ${count / max * 40}%)`
-                    context.fillRect(x, y, 1, 1)
+                for (let i = startByte * 8; i < endByte * 8; i++) paint(i, 0, 255, 0, count / max * 0.4)
+            })
+            const { memory } = trace
+            for (const [heat, paintHeat] of [[memory.reads, paintRead], [memory.writes, paintWrite]] as const) {
+                for (const [address, value] of heat) {
+                    const segment = memory.inData(address)
+                    if (!segment) continue
+                    const byte = segment.offset + address - segment.address
+                    for (let i = byte * 8; i < byte * 8 + 8; i++) paintHeat(i, value)
                 }
+            }
+            const band = memory.layout(Math.max(size * size - bandStart, 0))
+            band.mapped.forEach((mapped, cell) => {
+                if (!mapped) return
+                paint(bandStart + cell, 232, 232, 255)
+                paintRead(bandStart + cell, band.reads[cell])
+                paintWrite(bandStart + cell, band.writes[cell])
             })
         }
+        context.putImageData(image, 0, 0)
     }
 
     handleTraceLogs = (traceLogs: number[]) => {
@@ -513,6 +524,7 @@ interface TraceData {
     binary: Uint8Array
     map: TraceMap
     logs: number[]
+    memory: MemoryTrace
 }
 let trace: TraceData | null = null
 
@@ -581,9 +593,9 @@ function App() {
 
     const setupTracing = async (originalBinary: Uint8Array) => {
         // Instrument Wasm for execution tracing.
-        const { binary, map } = await instrumentWasm(originalBinary)
+        const { binary, map, data } = await instrumentWasm(originalBinary)
         // TODO: set fixed WAT for tracing (line highlighting) in Create tab
-        trace = { binary, map, logs: [] }
+        trace = { binary, map, logs: [], memory: new MemoryTrace(data) }
     }
 
     // `keep` adds the card to the deck. `seed` loads the card with that seed locked in, or (if null)
@@ -775,8 +787,10 @@ function App() {
         setWorkletMessageHandler(e => {
             if (typeof e.data === "number") {
                 setTime(e.data / 44100)
-            } else {
+            } else if (Array.isArray(e.data)) {
                 handleTraceLogs?.(e.data)
+            } else {
+                trace?.memory.update(e.data.reads, e.data.writes)
             }
         })
         return () => setWorkletMessageHandler(() => {})

@@ -1,3 +1,35 @@
+// Remembers which bytes of memory have been touched since the last `flush()`.
+// Flags live in pages allocated on demand, so this costs little however large (or sparse) memory is.
+function makeTouchTracker() {
+    const pages = []
+    let touched = new Uint32Array(1 << 12)
+    let count = 0
+    return {
+        touch(address, size) {
+            // Fast path for hot addresses: if the first byte is already marked, the rest will be too
+            // (short of overlapping, differently-aligned accesses, which we can live with missing).
+            if (pages[address >>> 12]?.[address & 4095]) return
+            for (let a = address; a < address + size; a++) {
+                const page = pages[a >>> 12] ??= new Uint8Array(4096)
+                if (page[a & 4095]) continue
+                page[a & 4095] = 1
+                if (count === touched.length) {
+                    const bigger = new Uint32Array(count * 2)
+                    bigger.set(touched)
+                    touched = bigger
+                }
+                touched[count++] = a
+            }
+        },
+        flush() {
+            const out = touched.slice(0, count)
+            for (const a of out) pages[a >>> 12][a & 4095] = 0
+            count = 0
+            return out
+        },
+    }
+}
+
 class CustomProcessor extends AudioWorkletProcessor {
     constructor() {
         super()
@@ -24,8 +56,15 @@ class CustomProcessor extends AudioWorkletProcessor {
         if (this.trace) {
             const traceLogs = []
             this.traceLogs = traceLogs
+            const reads = this.reads = makeTouchTracker()
+            const writes = this.writes = makeTouchTracker()
             this.wasm = await WebAssembly.instantiate(this.module, {
-                scorecard: { log(i) { traceLogs[i] = (traceLogs[i] ?? 0) + 1 } }
+                scorecard: {
+                    log(i) { traceLogs[i] = (traceLogs[i] ?? 0) + 1 },
+                    // These pass the address through, so they can sit in front of each load and store.
+                    read(address, offset, size) { reads.touch((address >>> 0) + offset, size); return address },
+                    write(address, offset, size) { writes.touch((address >>> 0) + offset, size); return address },
+                }
             })
         } else {
             this.traceLogs = null
@@ -38,10 +77,15 @@ class CustomProcessor extends AudioWorkletProcessor {
             setup(seed)
         }
 
-        if (this.trace) {
-            this.port.postMessage(this.traceLogs)
-            this.traceLogs.length = 0
-        }
+        if (this.trace) this.postTrace()
+    }
+
+    postTrace() {
+        // Memory first: the execution counts that follow trigger a redraw.
+        const reads = this.reads.flush(), writes = this.writes.flush()
+        this.port.postMessage({ reads, writes }, [reads.buffer, writes.buffer])
+        this.port.postMessage(this.traceLogs)
+        this.traceLogs.length = 0
     }
 
     process(inputs, outputs, parameters) {
@@ -61,10 +105,7 @@ class CustomProcessor extends AudioWorkletProcessor {
         this.pos += 128
         if (this.pos % 1024 === 0) {
             this.port.postMessage(this.pos)
-            if (this.traceLogs) {
-                this.port.postMessage(this.traceLogs)
-                this.traceLogs.length = 0
-            }
+            if (this.traceLogs) this.postTrace()
         }
 
         return true
