@@ -53,8 +53,8 @@ that fallback in `extractTitle` (`src/App.tsx`) and in `public/worklet.js`.
 
 ## Architecture
 
-- `src/App.tsx`: the UI (Listen / Deck / Scan / Create / About tabs) and most app logic.
-  1. URL load, the Deck tab, QR scan, drag-and-drop and Create-tab assembly all call `loadBinary(Uint8Array)`.
+- `src/App.tsx`: the UI (Listen / Scan / Create / About tabs, plus the deck) and most app logic.
+  1. URL load, the deck, QR scan, drag-and-drop and Create-tab assembly all call `loadBinary(Uint8Array)`.
   2. The binary goes to the AudioWorklet (`public/worklet.js`), which instantiates it and calls
      `p` per sample. **Send the binary, not a `WebAssembly.Module`**: posting a Module breaks on
      iOS Safari.
@@ -109,9 +109,11 @@ two `__EMSCRIPTEN__` branches let the same source build as a card or as a native
 
 ## Deck and starter pack
 
-The Deck tab lists the user's collected cards (`src/deck.ts`, kept in localStorage under
-`scorecard-deck`, keyed by each card's base43 code, with any saved seeds) above a built-in starter
-pack. Cards are collected when scanned or opened from a link, or by hand with the heart on Listen;
+The deck is a window beside the player (a slide-out drawer below 800px wide, opened from the
+"Deck" button in the tab bar). It shows the user's collected cards (`src/deck.ts`, kept in
+localStorage under `scorecard-deck`, keyed by each card's base43 code, with any saved seeds) above a
+built-in starter pack, as piles of overlapping cards; the playing card is pulled out. The motion is
+CSS (`.pcard` in `App.css`) plus `flyToPlayer`, and honours `prefers-reduced-motion`. Cards are collected when scanned or opened from a link, or by hand with the heart on Listen;
 drag-and-drop and Create don't collect, so work-in-progress builds stay out.
 
 `examples/library/*.c` are the starter pack. `examples/library/build.sh`

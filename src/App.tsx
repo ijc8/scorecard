@@ -35,7 +35,7 @@ import { DeckCard, addCard, loadDeck, removeCard, toggleSeed } from "./deck"
 import { audioDebugSnapshot, audioHealthy, onStall, sendToWorklet, setWorkletMessageHandler, startAudio } from "./audio"
 
 // Indices into `tabs` in `App`.
-const Tab = { Listen: 0, Deck: 1, Scan: 2, Create: 3, About: 4 }
+const Tab = { Listen: 0, Scan: 1, Create: 2, About: 3 }
 
 function generateSeed() {
     return Math.floor(Math.random() * Math.pow(2, 32))
@@ -239,7 +239,7 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
     const togglePlay = () => { setState(state === "playing" ? "paused" : "playing") }
     const TraceIcon = tracing ? BullseyeArrow : Bullseye
     return <div>
-        <div style={{ position: "relative" }}>
+        <div id="table" style={{ position: "relative" }}>
             {showMessage && <div style={{ position: "absolute", fontSize: "48px", height: "100%", width: "100%", userSelect: "none" }}>
                 <div style={{ border: "16px solid black", height: "100%", containerType: "size", lineHeight: 1, display: "flex", flexDirection: "column", justifyContent: "space-evenly" }}>
                     {error ? <>
@@ -383,44 +383,109 @@ function Scan({ onScan, tab }: { onScan: (data: string) => boolean, tab: number 
 
 type LoadCard = (code: string, seed?: number) => void
 
-function CardEntry({ title, size, description, code, loadCard, children }: {
-    title: string, size: number, description?: string, code: string, loadCard: LoadCard, children?: React.ReactNode
+// Each card's face shows its own bits, as a little 1-bit picture.
+const faces = new Map<string, string>()
+function cardFace(code: string) {
+    let face = faces.get(code)
+    if (face === undefined) {
+        const binary = decodeBlob(code)
+        const canvas = document.createElement("canvas")
+        const size = canvas.width = canvas.height = Math.ceil(Math.sqrt(binary.length * 8))
+        const image = new ImageData(size, size)
+        for (let i = 0; i < binary.length * 8; i++) {
+            if ((binary[i >> 3] >> (i % 8)) & 1) image.data[i * 4 + 3] = 255
+        }
+        canvas.getContext("2d")!.putImageData(image, 0, 0)
+        faces.set(code, face = canvas.toDataURL())
+    }
+    return face
+}
+
+// Send a copy of a card flying from the deck onto the player.
+function flyToPlayer(card: HTMLElement) {
+    const table = document.getElementById("table")
+    if (!table || !card.animate || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
+    const from = card.getBoundingClientRect()
+    const to = table.getBoundingClientRect()
+    const copy = card.cloneNode(true) as HTMLElement
+    Object.assign(copy.style, {
+        position: "fixed", left: `${from.left}px`, top: `${from.top}px`, width: `${from.width}px`, height: `${from.height}px`,
+        margin: "0", zIndex: "100", pointerEvents: "none",
+    })
+    document.body.append(copy)
+    const move = `translate(${to.left + to.width / 2 - from.left - from.width / 2}px, ${to.top + to.height / 2 - from.top - from.height / 2}px)`
+    const scale = Math.min(to.width / from.width, to.height / from.height)
+    copy.animate([
+        { transform: "none", opacity: 1 },
+        { transform: `${move} scale(${scale * 0.9}) rotate(6deg)`, opacity: 1, offset: 0.75 },
+        { transform: `${move} scale(${scale})`, opacity: 0 },
+    ], { duration: 450, easing: "cubic-bezier(.3, 0, .2, 1)" }).onfinish = () => copy.remove()
+}
+
+function PlayingCard({ title, size, code, index, selected, loadCard, children }: {
+    title: string, size: number, code: string, index: number, selected: boolean, loadCard: LoadCard, children?: React.ReactNode
 }) {
-    return <div className="deck-card">
-        <button onClick={() => loadCard(code)}>
-            <span className="deck-title">{title}</span>
-            <span>{size} bytes</span>
-            {description && <span className="deck-description">{description}</span>}
+    // Cards sit a little crooked in the pile (each always the same way).
+    const tilt = (code.charCodeAt(1) + code.charCodeAt(2) * 3) % 7 - 3
+    const style = { "--tilt": `${tilt}deg`, "--i": Math.min(index, 12) } as React.CSSProperties
+    return <div className={"pcard" + (selected ? " selected" : "")} style={style}>
+        <button className="pcard-face" onClick={e => { flyToPlayer(e.currentTarget); loadCard(code) }}>
+            <span className="pcard-head"><b>{title}</b><span>{size}</span></span>
+            <img src={cardFace(code)} alt="" />
         </button>
-        {children}
+        {selected && children}
     </div>
 }
 
-// Your collection of cards, plus a starter pack of ready-made ones
-// (built from `examples/library` into `library.json`).
-function Deck({ deck, loadCard, discard }: { deck: DeckCard[], loadCard: LoadCard, discard: (code: string) => void }) {
-    return <div className="deck">
-        <div>
-            <h3>Your deck | {deck.length} {deck.length === 1 ? "card" : "cards"}</h3>
-            {deck.length === 0 && <p>Cards you scan or open from a link are collected here. You can also keep the card you're listening to with <Heart style={{ height: "1em", verticalAlign: "middle" }} />.</p>}
-            {deck.map(card =>
-                <CardEntry key={card.code} {...card} loadCard={loadCard}>
-                    <div className="deck-extras">
-                        {card.seeds.map(seed =>
-                            <button key={seed} title="Play with this seed" onClick={() => loadCard(card.code, seed)}>{formatSeed(seed)}</button>
+// Your collection of cards, plus a starter pack of ready-made ones (built from `examples/library` into
+// `library.json`). Cards overlap in a pile; the one that's playing is pulled out.
+// On wide screens the deck sits beside the player; on narrow ones it's a drawer.
+function Deck({ deck, current, loadCard, discard, open, setOpen }: {
+    deck: DeckCard[], current: string | null, loadCard: LoadCard, discard: (code: string) => void, open: boolean, setOpen: (o: boolean) => void
+}) {
+    const play: LoadCard = (code, seed) => {
+        loadCard(code, seed)
+        setOpen(false)
+    }
+    return <>
+        {open && <div className="deck-scrim" onClick={() => setOpen(false)}></div>}
+        <aside className={"deck" + (open ? " open" : "")}>
+            <div className="titlebar">
+                <button title="Close" onClick={() => setOpen(false)}></button>
+                <span>Deck</span>
+            </div>
+            <div className="deck-scroll">
+                <div>
+                    <h3>Your cards <span>{deck.length}</span></h3>
+                    {deck.length === 0 && <p>Cards you scan or open from a link land here. Keep the one you're hearing with <Heart style={{ height: "1em", verticalAlign: "middle" }} />.</p>}
+                    <div className="pile">
+                        {deck.map((card, index) =>
+                            <PlayingCard key={card.code} {...card} index={index} selected={card.code === current} loadCard={play}>
+                                <div className="pcard-extras">
+                                    {card.seeds.map(seed =>
+                                        <button key={seed} title="Play with this seed" onClick={() => play(card.code, seed)}>{formatSeed(seed)}</button>
+                                    )}
+                                    <span>{card.seeds.length === 0 && new Date(card.added).toLocaleDateString()}</span>
+                                    <button title="Remove from deck" style={{ fontSize: 0 }} onClick={() => discard(card.code)}><Close style={{ height: "14px" }} /></button>
+                                </div>
+                            </PlayingCard>
                         )}
-                        <span style={{ flexGrow: 1 }}>{card.seeds.length === 0 && new Date(card.added).toLocaleDateString()}</span>
-                        <button title="Remove from deck" style={{ fontSize: 0 }} onClick={() => discard(card.code)}><Close style={{ height: "16px" }} /></button>
                     </div>
-                </CardEntry>
-            )}
-            <h3>Starter pack</h3>
-            {library.map(card => <CardEntry key={card.code} {...card} loadCard={loadCard} />)}
-        </div>
-    </div>
+                    <h3>Starter pack <span>{library.length}</span></h3>
+                    <div className="pile">
+                        {library.map((card, index) =>
+                            <PlayingCard key={card.code} {...card} index={index + deck.length} selected={card.code === current} loadCard={play}>
+                                <div className="pcard-extras">{card.description}</div>
+                            </PlayingCard>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </>
 }
 
-const About = memo(function About({ setTab }: any) {
+const About = memo(function About({ setTab, openDeck }: any) {
     // TODO: Make this text fill the card on both desktop and mobile...
     return <div id="about" style={{ textAlign: "left", padding: "0 12px", containerType: "size", height: "100%" }}>
         <div style={{ fontSize: "4cqw" }}>
@@ -428,7 +493,7 @@ const About = memo(function About({ setTab }: any) {
             <img src={exampleCardUrl} style={{ display: "block", margin: "auto", padding: "12px" }} />
             Each QR code contains a valid URL (linking to this web app, the score card player) and an entire audio-generating <a href="https://webassembly.org/">WebAssembly</a> program. Because the QR code contains the piece itself, even if the link breaks, the code can still be read and played back by an instance of the ScoreCard player hosted somewhere else, or by a player that runs outside of the browser.
             <p>This also implies that piece must fit in a QR code, implying an max executable size of just 2,953 bytes (more like 2,900 bytes after encoding it in a URL).</p>
-            <p>To get started, pick a score card from the <a href="#" onClick={() => setTab(Tab.Deck)} style={{ textDecoration: "underline" }}>Deck</a>, <a href="#" onClick={() => setTab(Tab.Scan)} style={{ textDecoration: "underline" }}>Scan</a> one, or <a href="#" onClick={() => setTab(Tab.Create)} style={{ textDecoration: "underline" }}>Create</a> your own. For more information, check out the <a href="https://github.com/ijc8/scorecard" style={{ textDecoration: "underline" }}>README</a>.</p>
+            <p>To get started, pick a score card from the <a href="#" onClick={openDeck} style={{ textDecoration: "underline" }}>Deck</a>, <a href="#" onClick={() => setTab(Tab.Scan)} style={{ textDecoration: "underline" }}>Scan</a> one, or <a href="#" onClick={() => setTab(Tab.Create)} style={{ textDecoration: "underline" }}>Create</a> your own. For more information, check out the <a href="https://github.com/ijc8/scorecard" style={{ textDecoration: "underline" }}>README</a>.</p>
             <p style={{ marginBottom: 0 }}>Happy hacking & joyful jamming!<br />- ijc</p>
         </div>
     </div>
@@ -588,6 +653,8 @@ function App() {
     const qrCanvas = useRef<HTMLCanvasElement>(null)
     const [tracing, _setTracing] = useState(false)
     const [deck, setDeck] = useState(loadDeck)
+    const [deckOpen, setDeckOpen] = useState(false)
+    const openDeck = useRef(() => setDeckOpen(true)).current
     const code = useMemo(() => binary && encodeBlob(binary), [binary])
     const deckCard = deck.find(card => card.code === code)
 
@@ -810,14 +877,15 @@ function App() {
 
     const tabs = [
         { name: "Listen", component: <Listen {...{ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, setTracing, kept: !!deckCard, toggleKept, seedSaved: !!deckCard?.seeds.includes(seed), toggleSeedSaved }} /> },
-        { name: "Deck", component: <Deck {...{ deck, loadCard, discard: (code: string) => setDeck(removeCard(deck, code)) }} /> },
         { name: "Scan", component: <Scan {...{ onScan, tab }} /> },
         { name: "Create", component: <Create {...{ binary, loadBinary, wat, setWAT, tab }} /> },
-        { name: "About", component: <About {...{ setTab }} /> },
+        { name: "About", component: <About {...{ setTab, openDeck }} /> },
     ]
 
     const border = `1px ${dragging ? "dashed" : "solid"} black`
-    return <div id="app" style={{ display: "flex", flexDirection: "column", alignItems: "stretch", containerType: "inline-size", margin: "auto", backgroundColor: "white", borderTop: border }}>
+    return <div id="layout">
+    <Deck {...{ deck, current: code, loadCard, discard: (code: string) => setDeck(removeCard(deck, code)), open: deckOpen, setOpen: setDeckOpen }} />
+    <div id="app" style={{ display: "flex", flexDirection: "column", alignItems: "stretch", containerType: "inline-size", backgroundColor: "white", borderTop: border }}>
         <div style={{ borderLeft: border, borderRight: border, margin: "0 -1px" }}>
             <div style={{ margin: "20px" }} >
                 <h1 style={{ margin: "0 0 20px 0" }}><a href="/"><img src={logoUrl} style={{ imageRendering: "pixelated", width: "100%" }} /></a></h1>
@@ -830,6 +898,7 @@ function App() {
         </div>
         <div className="tabs" style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
             <div style={{ borderTop: border, flexGrow: "1", alignSelf: "stretch" }}></div>
+            <button className="deck-handle" onClick={openDeck}>Deck</button>
             {tabs.map(({ name }, index) =>
                 <button key={index} className={index === tab ? "active" : ""} onClick={() => setTab(index)}>{name}</button>
             )}
@@ -837,6 +906,7 @@ function App() {
         </div>
         {/* <a href={link}>Link</a><br /> */}
         {/* <a download="a.wasm" href={download}>Download</a> */}
+    </div>
     </div>
 }
 

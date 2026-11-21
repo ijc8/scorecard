@@ -33,7 +33,7 @@ Fortunately, **the [ScoreCard Creator](https://ijc8.me/scorecard-creator/) allow
 If you'd rather use a local toolchain, some scripts are included in `examples/` for building and debugging C examples; see [`build.sh`](examples/build.sh) and [`debug.sh`](examples/debug.sh).
 A modest library for writing scorecards in C is provided in the form of [`deck.h`](examples/deck.h).
 
-The player's Deck tab collects the cards you scan, and comes with a starter pack of ready-made ones. Their sources live in [`examples/library`](examples/library); after adding or changing one, run [`examples/library/build.sh`](examples/library/build.sh) to rebuild them all and regenerate the index the tab reads (`src/library.json`).
+The player's deck collects the cards you scan, and comes with a starter pack of ready-made ones. Their sources live in [`examples/library`](examples/library); after adding or changing one, run [`examples/library/build.sh`](examples/library/build.sh) to rebuild them all and regenerate the index the deck reads (`src/library.json`).
 
 Other languages you might be interested in exploring for use with ScoreCard include Zig, Rust, Go, and Faust. [`strip.sh`](examples/strip.sh) may also be helpful in these cases for removing or renaming exports.
 

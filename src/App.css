@@ -88,79 +88,274 @@
 }
 
 
-/* The Deck tab takes its height from the other tabs and scrolls if the list is longer. */
+/* The deck: a classic window holding a pile of overlapping cards. */
+#layout {
+    display: flex;
+    justify-content: center;
+    align-items: stretch;
+    gap: 28px;
+}
+
 .deck {
+    --card-w: 148px;
+    --card-h: 186px;
+    --peek: 30px;
     position: relative;
-    flex-grow: 1;
-    min-height: 320px;
+    width: 216px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 33px; /* line up with the bottom of the player, above its tabs */
+    border: 1px solid black;
+    box-shadow: 2px 2px 0 black;
+    background: white;
     text-align: left;
 }
 
-.deck > div {
+.titlebar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    height: 22px;
+    margin: 0;
+    border-bottom: 1px solid black;
+    /* The pinstripes of a classic title bar. */
+    background: repeating-linear-gradient(white 0 1px, black 1px 2px) content-box;
+    padding: 4px 2px 3px;
+    line-height: 1;
+    user-select: none;
+}
+
+.titlebar > span {
+    background: white;
+    padding: 0 8px;
+}
+
+.titlebar > button {
+    position: absolute;
+    left: 10px;
+    width: 13px;
+    height: 13px;
+    padding: 0;
+    box-shadow: 0 0 0 1px white;
+    display: none; /* only a drawer can be closed */
+}
+
+.deck-scroll {
+    position: relative;
+    flex-grow: 1;
+    /* The 50% gray of a classic desktop. */
+    background: repeating-conic-gradient(black 0% 25%, white 0% 50%) 0 0 / 2px 2px;
+}
+
+.deck-scroll > div {
     position: absolute;
     inset: 0;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    overflow: hidden auto;
+    padding: 10px 0 24px;
 }
 
 .deck h3, .deck p {
-    margin: 0;
-}
-
-.deck h3:not(:first-child) {
-    margin-top: 12px;
-}
-
-.deck-card {
+    margin: 0 10px 10px;
+    padding: 1px 8px;
     border: 1px solid black;
-    flex-shrink: 0;
+    background: white;
+    font-size: 1em;
+    font-weight: normal;
+    line-height: 1.3;
 }
 
-.deck-card button {
-    border: none;
+.deck h3 {
+    display: flex;
+    justify-content: space-between;
 }
 
-.deck-card button:hover {
-    background-color: #ccf;
+.pile {
+    margin-bottom: 22px;
 }
 
-.deck-card > button {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    column-gap: 12px;
-    align-items: baseline;
+.pcard {
+    position: relative;
+    width: var(--card-w);
+    height: var(--card-h);
+    margin-left: 18px;
+    transform: rotate(var(--tilt));
+    transition: transform 0.25s cubic-bezier(.3, 1.8, .5, 1), margin 0.25s cubic-bezier(.3, 1.4, .5, 1);
+    animation: deal 0.45s cubic-bezier(.3, 1.4, .5, 1) backwards;
+    animation-delay: calc(var(--i) * 45ms);
+}
+
+/* Each card covers all but the top of the one before it. */
+.pcard + .pcard {
+    margin-top: calc(var(--peek) - var(--card-h));
+}
+
+@media (hover: hover) {
+    /* Thumb a card out of the pile for a better look. */
+    .pcard:hover {
+        transform: translate(14px, -3px) rotate(0deg);
+    }
+
+    .pcard:not(.selected):hover + .pcard {
+        margin-top: calc(var(--peek) - var(--card-h) + 56px);
+    }
+}
+
+.pcard:active {
+    transform: translate(14px, -3px) rotate(0deg) scale(0.96);
+}
+
+/* The card that's playing is pulled out of the pile, pushing the rest down to show all of it. */
+.pcard.selected {
+    height: auto;
+    transform: translateX(28px) rotate(0deg);
+    animation: deal 0.45s cubic-bezier(.3, 1.4, .5, 1) backwards, float 3s ease-in-out 0.5s infinite alternate;
+}
+
+.pcard.selected + .pcard {
+    margin-top: 10px;
+}
+
+@keyframes deal {
+    from {
+        transform: translate(-60px, -30px) rotate(-14deg);
+        opacity: 0;
+    }
+}
+
+@keyframes float {
+    from { transform: translateX(28px) rotate(-1.2deg); }
+    to { transform: translate(28px, -3px) rotate(1.2deg); }
+}
+
+.pcard-face {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
     width: 100%;
-    padding: 6px 10px;
+    height: var(--card-h);
+    padding: 0;
+    border-radius: 5px;
+    box-shadow: 2px 2px 0 black;
+    overflow: hidden;
     text-align: left;
 }
 
-.deck-title {
-    font-size: 1.3em;
+.pcard-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+    height: var(--peek);
+    padding: 0 7px;
+    line-height: var(--peek);
+    white-space: nowrap;
 }
 
-.deck-description {
-    grid-column: 1 / -1;
-    line-height: 1.2;
+.pcard-head > b {
+    font-weight: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.deck-extras {
+.pcard-face > img {
+    display: block;
+    flex-shrink: 0;
+    width: calc(100% - 20px);
+    aspect-ratio: 1;
+    margin: 2px auto 0;
+    border: 1px solid black;
+    image-rendering: pixelated;
+}
+
+.pcard-extras {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 4px 8px;
-    padding: 0 10px 6px;
-}
-
-.deck-extras > button {
-    padding: 0 4px;
+    gap: 4px 6px;
+    margin-top: 6px;
+    padding: 3px 6px;
     border: 1px solid black;
+    box-shadow: 2px 2px 0 black;
+    background: white;
+    font-size: 13px;
+    line-height: 1.2;
 }
 
-.deck-extras > button:last-child {
+.pcard-extras > span {
+    flex-grow: 1;
+}
+
+.pcard-extras > button {
+    padding: 0 3px;
+}
+
+.pcard-extras > button:hover {
+    background-color: #ccf;
+}
+
+.pcard-extras > button:last-child {
     border: none;
     padding: 0;
+}
+
+.deck-handle, .deck-scrim {
+    display: none;
+}
+
+/* Without room for the deck beside the player, it becomes a drawer that slides out from the left. */
+@media screen and (max-width: 799px) {
+    .deck {
+        position: fixed;
+        z-index: 10;
+        inset: 0 auto 0 0;
+        width: 232px;
+        margin: 0;
+        border-width: 0 1px 0 0;
+        transform: translateX(-110%);
+        visibility: hidden;
+        transition: transform 0.3s cubic-bezier(.3, 1.3, .5, 1), visibility 0s 0.3s;
+    }
+
+    .deck.open {
+        transform: none;
+        visibility: visible;
+        transition-delay: 0s;
+    }
+
+    /* Hide the overshoot of the slide. */
+    .deck::before {
+        content: "";
+        position: absolute;
+        inset: 0 100% 0 -40px;
+        background: white;
+    }
+
+    .titlebar > button, .deck-handle {
+        display: block;
+    }
+
+    .deck-scrim {
+        display: block;
+        position: fixed;
+        z-index: 9;
+        inset: 0;
+        background: repeating-conic-gradient(black 0% 25%, transparent 0% 50%) 0 0 / 2px 2px;
+        opacity: 0.5;
+    }
+}
+
+@media print {
+    .deck {
+        display: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .deck, .pcard {
+        animation: none !important;
+        transition: none;
+    }
 }
 
 /* Icon buttons that are either on or off (kept card, saved seed). */
