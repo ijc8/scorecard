@@ -25,6 +25,8 @@ import logoUrl from "./assets/logo.png"
 import exampleCardUrl from "./assets/example-card.png"
 import { TraceMap, instrumentWasm } from "./wasmTracer"
 import { MemoryTrace } from "./memoryTrace"
+import { CompileResult, compileCard } from "./compiler"
+import newCardSource from "./newCard.c?raw"
 import { getWabt } from './lazyWabt'
 import { initDebug, dlog, DEBUG } from "./debug"
 import Heart from "pixelarticons/svg/heart.svg?react"
@@ -605,25 +607,99 @@ function maxCardSize() {
     return _maxCardSize = low
 }
 
-function Create({ binary, loadBinary, wat, setWAT, tab }: {
-    binary: Uint8Array | null, loadBinary: (b: Uint8Array) => void, wat: string, setWAT: (w: string) => void, tab: number
+// How full the card is, against what fits in a QR code.
+function Budget({ size, status }: { size?: number, status: string }) {
+    const max = maxCardSize()
+    const over = size !== undefined && size > max
+    return <div className={"budget" + (over ? " over" : "")} title="How much of a QR code this card fills">
+        <div style={{ width: `${Math.min((size ?? 0) / max, 1) * 100}%` }}></div>
+        <span>{size === undefined ? status : over ? `${size - max} bytes too big` : `${size} bytes | ${max - size} left`}</span>
+    </div>
+}
+
+// Sources to start from: a blank-ish card, and the starter pack.
+const templates: { [name: string]: string } = { "new card": newCardSource }
+for (const source of Object.values(import.meta.glob("../examples/library/*.c", { query: "?raw", import: "default", eager: true })) as string[]) {
+    templates[source.match(/card_title\("(.*)"\)/)?.[1] ?? "untitled"] = source
+}
+
+function loadSource() {
+    try {
+        return localStorage.getItem("scorecard-source") ?? newCardSource
+    } catch {
+        return newCardSource
+    }
+}
+
+// Write a card in C and compile it right here.
+function CreateC({ loadBinary }: { loadBinary: (b: Uint8Array) => void }) {
+    const [source, _setSource] = useState(loadSource)
+    const [result, setResult] = useState<CompileResult | null>(null)
+    // null: idle; a number: fetching the compiler (0 to 1); true: compiling.
+    const [busy, setBusy] = useState<number | true | null>(null)
+    const setSource = (source: string) => {
+        _setSource(source)
+        try {
+            localStorage.setItem("scorecard-source", source)
+        } catch {}
+    }
+
+    const compile = async () => {
+        setBusy(true)
+        const result = await compileCard(source, fraction => setBusy(fraction < 1 ? fraction : true))
+        setBusy(null)
+        setResult(result)
+        if (result.binary && result.binary.length <= maxCardSize()) loadBinary(result.binary)
+    }
+
+    const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+            compile()
+        } else if (e.key === "Tab" && !e.shiftKey) {
+            // Indent, rather than leaving the editor.
+            e.preventDefault()
+            document.execCommand("insertText", false, "    ")
+        }
+    }
+
+    return <>
+        <select value="" onChange={e => {
+            if (source.trim() === "" || Object.values(templates).includes(source) || window.confirm("Replace what you've written?")) {
+                setSource(templates[e.target.value])
+                setResult(null)
+            }
+        }}>
+            <option value="" disabled>Start from...</option>
+            {Object.keys(templates).map(name => <option key={name}>{name}</option>)}
+        </select>
+        <textarea className="editor" spellCheck={false} autoCapitalize="off" autoCorrect="off" value={source} onChange={e => setSource(e.target.value)} onKeyDown={onKeyDown}></textarea>
+        {result?.log && <pre className="assembler-error">{result.log.trim()}</pre>}
+        <Budget size={result?.binary?.length} status={
+            typeof busy === "number" ? `fetching compiler: ${Math.floor(busy * 100)}%` : busy ? "compiling..." : result ? "can't compile" : "not compiled yet"
+        } />
+        <button disabled={busy !== null} title="Compiling fetches a 27 MB compiler the first time" onClick={compile}>Compile & play</button>
+    </>
+}
+
+// Inspect the loaded card as WebAssembly text, and tweak it.
+function CreateWAT({ binary, loadBinary, wat, setWAT, active }: {
+    binary: Uint8Array | null, loadBinary: (b: Uint8Array) => void, wat: string, setWAT: (w: string) => void, active: boolean
 }) {
-    const oldBinary = useRef(binary)
+    const oldBinary = useRef<Uint8Array | null>(null)
     useEffect(() => {
-        if (tab !== Tab.Create || !binary || binary === oldBinary.current) return
+        if (!active || !binary || binary === oldBinary.current) return
         oldBinary.current = binary
-        console.log("disassembling")
         getWabt().then(wabt => {
             const disassembled = wabt.readWasm(binary, { readDebugNames: true })
             disassembled.applyNames()
             setWAT(disassembled.toText({ foldExprs: false, inlineExport: true }))
         })
-    }, [binary, tab])
+    }, [binary, active])
 
     // Assemble as you type (after a pause), to show the size budget and any errors.
     const [assembled, setAssembled] = useState<{ buffer?: Uint8Array, error?: string }>({})
     useEffect(() => {
-        if (tab !== Tab.Create) return
+        if (!active) return
         if (!wat.trim()) return setAssembled({})
         let current = true
         const timeout = setTimeout(async () => {
@@ -643,20 +719,29 @@ function Create({ binary, loadBinary, wat, setWAT, tab }: {
             current = false
             clearTimeout(timeout)
         }
-    }, [wat, tab])
+    }, [wat, active])
 
     const { buffer, error } = assembled
-    const max = maxCardSize()
-    const size = buffer?.length ?? 0
     return <>
-        <textarea style={{ width: "100%", flexGrow: "1", minHeight: "200px" }} spellCheck={false} value={wat} onChange={e => setWAT(e.target.value)}></textarea>
+        <textarea className="editor" spellCheck={false} autoCapitalize="off" autoCorrect="off" value={wat} onChange={e => setWAT(e.target.value)}></textarea>
         {error && <pre className="assembler-error">{error}</pre>}
-        <div className={"budget" + (size > max ? " over" : "")} title="How much of a QR code this card fills">
-            <div style={{ width: `${Math.min(size / max, 1) * 100}%` }}></div>
-            <span>{buffer ? (size > max ? `${size - max} bytes too big` : `${size} bytes | ${max - size} left`) : error ? "can't assemble" : "nothing to assemble"}</span>
-        </div>
-        <button id="assemble" disabled={!buffer} onClick={() => loadBinary(buffer!)}>Assemble!</button><br />
+        <Budget size={buffer?.length} status={error ? "can't assemble" : "nothing to assemble"} />
+        <button id="assemble" disabled={!buffer} onClick={() => loadBinary(buffer!)}>Assemble & play</button>
     </>
+}
+
+function Create({ binary, loadBinary, wat, setWAT, tab }: {
+    binary: Uint8Array | null, loadBinary: (b: Uint8Array) => void, wat: string, setWAT: (w: string) => void, tab: number
+}) {
+    const [mode, setMode] = useState<"C" | "WebAssembly">("C")
+    return <div className="create">
+        <div className="modes">
+            {(["C", "WebAssembly"] as const).map(m =>
+                <button key={m} className={m === mode ? "active" : ""} title={m === "C" ? "Write a card in C" : "Inspect and tweak the loaded card"} onClick={() => setMode(m)}>{m}</button>
+            )}
+        </div>
+        {mode === "C" ? <CreateC loadBinary={loadBinary} /> : <CreateWAT {...{ binary, loadBinary, wat, setWAT, active: tab === Tab.Create }} />}
+    </div>
 }
 
 const NO_TITLE = "untitled"

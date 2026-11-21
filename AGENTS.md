@@ -70,6 +70,12 @@ that fallback in `extractTitle` (`src/App.tsx`) and in `public/worklet.js`.
 - `src/base43Encoder.ts` (mirrored by `base43.py`): base43 over the QR alphanumeric set minus `%`
   and space, so the binary shares the QR's dense alphanumeric mode with the URL and stays valid in
   a query string.
+- `src/compiler.ts` / `src/compiler.worker.ts`: the Create tab's C mode. A worker runs Clang and
+  LLD (`@yowasp/clang`, ~100 MB of assets, ~27 MB gzipped, fetched on the first compile) against the
+  repository's own `examples/deck.h` and `generator.h`, then uses `binaryen` to rename the exports
+  and optimize for size, mirroring `examples/build.sh` + `strip.sh` without Emscripten. Output is
+  within a few percent of the Emscripten build. Keep the two pipelines' flags and export names in
+  step. Binaryen needs top-level await, hence `build.target: "es2022"` in `vite.config.ts`.
 - `src/qrReader.ts`: QR decoding for the Scan tab (live camera frames, photos, dropped images)
   using `zxing-wasm`, loaded lazily. It was picked with `scripts/scanbench` because score cards are
   very dense codes; rerun that benchmark before changing decoders.

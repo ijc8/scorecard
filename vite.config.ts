@@ -37,4 +37,8 @@ function debugLog(): Plugin {
 export default defineConfig({
   base: "./",
   plugins: [react(), svgr(), debugLog()],
+  // The compiler worker loads its (large) toolchain with dynamic imports, which needs ES modules.
+  worker: { format: "es" },
+  // Binaryen (used by that worker) needs top-level await.
+  build: { target: "es2022" },
 })

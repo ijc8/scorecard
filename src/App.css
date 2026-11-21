@@ -706,3 +706,60 @@
 .settings > label:first-child {
     width: 100%;
 }
+
+/* Create tab */
+.create {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    min-height: 420px;
+}
+
+.create .editor {
+    flex-grow: 1;
+    width: 100%;
+    min-height: 200px;
+    margin: 8px 0 0;
+    padding: 6px;
+    border: 1px solid black;
+    border-radius: 0;
+    font: 12px/1.3 ui-monospace, Menlo, Consolas, monospace;
+    tab-size: 4;
+    white-space: pre;
+    resize: none;
+}
+
+.create select {
+    margin-top: 8px;
+    border: 1px solid black;
+    border-radius: 0;
+    background: white;
+    color: black;
+    font: inherit;
+}
+
+.create > button:hover:enabled, .modes > button:hover {
+    background: #ccf;
+}
+
+.create > button:disabled {
+    opacity: 0.35;
+}
+
+/* Two halves of one switch. */
+.modes {
+    display: flex;
+}
+
+.modes > button {
+    flex: 1;
+}
+
+.modes > button + button {
+    border-left: none;
+}
+
+.modes > button.active {
+    background: black;
+    color: white;
+}
