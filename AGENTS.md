@@ -53,8 +53,8 @@ that fallback in `extractTitle` (`src/App.tsx`) and in `public/worklet.js`.
 
 ## Architecture
 
-- `src/App.tsx`: the UI (Listen / Scan / Create / About tabs) and most app logic.
-  1. URL load, QR scan, drag-and-drop and Create-tab assembly all call `loadBinary(Uint8Array)`.
+- `src/App.tsx`: the UI (Listen / Library / Scan / Create / About tabs) and most app logic.
+  1. URL load, the Library tab, QR scan, drag-and-drop and Create-tab assembly all call `loadBinary(Uint8Array)`.
   2. The binary goes to the AudioWorklet (`public/worklet.js`), which instantiates it and calls
      `p` per sample. **Send the binary, not a `WebAssembly.Module`**: posting a Module breaks on
      iOS Safari.
@@ -100,6 +100,14 @@ reset respond instantly: cards are meant to be started in sync or played rhythmi
 `examples/deck.h` is a small C helper layer: oscillators, envelopes, `m2f` (pitch→frequency by
 repeated multiplication, to avoid pulling in `powf`), and a coroutine-style `sleep` macro pair. Its
 two `__EMSCRIPTEN__` branches let the same source build as a card or as a native binary for `sox`.
+
+## Library
+
+`examples/library/*.c` are the cards shown in the player's Library tab. `examples/library/build.sh`
+builds them all and runs `index.py`, which writes `src/library.json` (title, description, size and
+base43 code per card); the web build only reads that JSON, so it doesn't need Emscripten. The JSON
+is committed: rerun `build.sh` after touching a library card or `deck.h`. Each card's first line is
+a `//` comment that becomes its description in the tab.
 
 ## Conventions
 

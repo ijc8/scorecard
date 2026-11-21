@@ -73,6 +73,16 @@ define_osc(sqr, phase < 0.5 ? -1 : 1)
 define_osc(saw, phase * 2 - 1)
 define_osc(tri, (phase < 0.5 ? phase : 1 - phase) * 4 - 1)
 
+// One cycle of a sine for phase in [0, 1), approximated with parabolas.
+// (Saves pulling in sinf(); the error is under 0.1%.)
+float sin1(float phase) {
+    float x = phase * 2 - 1;
+    float y = 4 * x * (fabsf(x) - 1);
+    return 0.225f * (y * fabsf(y) - y) + y;
+}
+
+define_osc(sine, sin1(phase))
+
 // Envelopes
 float env(float t, float dur) {
     float x = 1 - t / dur;
@@ -91,6 +101,74 @@ float ad(float t, float attack, float decay) {
 
 float ramp(float t, float dur, float start, float end) {
     return t / dur * (end - start) + start;
+}
+
+// Filters & effects
+// One-pole lowpass. `a` is the smoothing coefficient in (0, 1]: roughly 2*pi*cutoff/SAMPLE_RATE.
+float lp1(float *state, float x, float a) {
+    return *state += a * (x - *state);
+}
+
+// Resonant lowpass (Chamberlin state-variable filter).
+// `f` is roughly 2*pi*cutoff/SAMPLE_RATE (keep it below ~1); `damp` is 1/Q (2 = no resonance).
+typedef struct { float lp, bp; } svf_t;
+
+float svf(svf_t *s, float x, float f, float damp) {
+    s->lp += f * s->bp;
+    s->bp += f * (x - s->lp - damp * s->bp);
+    return s->lp;
+}
+
+// Feedback delay line: returns the delayed signal. `buf` should be zero-initialized
+// (static buffers cost no bytes in the binary).
+float delay(float *buf, int size, int *pos, float x, float feedback) {
+    float out = buf[*pos];
+    buf[*pos] = x + out * feedback;
+    *pos = (*pos + 1) % size;
+    return out;
+}
+
+// Soft clipper: roughly linear when quiet, saturating smoothly at +/-1.
+float soft_clip(float x) {
+    if (x > 1) return 1;
+    if (x < -1) return -1;
+    return x * (1.5f - 0.5f * x * x);
+}
+
+// Plucked string (Karplus-Strong). Call `pluck` to (re)start a note, then `string` once per sample.
+#define STRING_MIN_FREQ 40
+typedef struct {
+    float buffer[44100 / STRING_MIN_FREQ + 2];
+    float frac, prev;
+    int size, index;
+} string_t;
+
+void pluck(string_t *s, float freq) {
+    float period = SAMPLE_RATE / freq;
+    s->size = (int)period + 1;
+    s->frac = s->size - period;
+    s->index = 0;
+    for (int i = 0; i < s->size; i++) s->buffer[i] = noise();
+}
+
+float string(string_t *s) {
+    if (!s->size) return 0;
+    int next = (s->index + 1) % s->size;
+    float out = s->buffer[s->index] * (1 - s->frac) + s->buffer[next] * s->frac;
+    s->buffer[s->index] = (s->prev + out) / 2;
+    s->prev = out;
+    s->index = next;
+    return out;
+}
+
+// Small PRNG with explicit state (xorshift32), for when several voices
+// need their own reproducible random streams. The state must be nonzero.
+uint32_t xorshift(uint32_t *state) {
+    uint32_t x = *state;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    return *state = x;
 }
 
 // Misc

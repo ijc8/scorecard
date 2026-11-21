@@ -25,7 +25,11 @@ import exampleCardUrl from "./assets/example-card.png"
 import { TraceMap, instrumentWasm } from "./wasmTracer"
 import { getWabt } from './lazyWabt'
 import { initDebug, dlog, DEBUG } from "./debug"
+import library from "./library.json"
 import { audioDebugSnapshot, audioHealthy, onStall, sendToWorklet, setWorkletMessageHandler, startAudio } from "./audio"
+
+// Indices into `tabs` in `App`.
+const Tab = { Listen: 0, Library: 1, Scan: 2, Create: 3, About: 4 }
 
 function generateSeed() {
     return Math.floor(Math.random() * Math.pow(2, 32))
@@ -268,12 +272,12 @@ function Scan({ onScan, tab }: any) {
         }
     }
     useEffect(() => {
-        if (tab !== 1) {
+        if (tab !== Tab.Scan) {
             // Reset error message on tab switch
             setError("")
         }
     }, [tab])
-    return tab === 1 && <>
+    return tab === Tab.Scan && <>
         <Html5QrcodePlugin
             fps={10}
             qrbox={250}
@@ -288,6 +292,21 @@ function Scan({ onScan, tab }: any) {
     </>
 }
 
+// A shelf of ready-made cards (built from `examples/library` into `library.json`).
+function Library({ loadBinary }: { loadBinary: (b: Uint8Array) => void }) {
+    return <div className="library">
+        <div>
+            {library.map(card =>
+                <button key={card.source} onClick={() => loadBinary(decodeBlob(card.code))}>
+                    <span className="library-title">{card.title}</span>
+                    <span className="library-size">{card.size} bytes</span>
+                    <span className="library-description">{card.description}</span>
+                </button>
+            )}
+        </div>
+    </div>
+}
+
 const About = memo(function About({ setTab }: any) {
     // TODO: Make this text fill the card on both desktop and mobile...
     return <div id="about" style={{ textAlign: "left", padding: "0 12px", containerType: "size", height: "100%" }}>
@@ -296,7 +315,7 @@ const About = memo(function About({ setTab }: any) {
             <img src={exampleCardUrl} style={{ display: "block", margin: "auto", padding: "12px" }} />
             Each QR code contains a valid URL (linking to this web app, the score card player) and an entire audio-generating <a href="https://webassembly.org/">WebAssembly</a> program. Because the QR code contains the piece itself, even if the link breaks, the code can still be read and played back by an instance of the ScoreCard player hosted somewhere else, or by a player that runs outside of the browser.
             <p>This also implies that piece must fit in a QR code, implying an max executable size of just 2,953 bytes (more like 2,900 bytes after encoding it in a URL).</p>
-            <p>To get started, <a href="#" onClick={() => setTab(1)} style={{ textDecoration: "underline" }}>Scan</a> a score card or <a href="#" onClick={() => setTab(2)} style={{ textDecoration: "underline" }}>Create</a> one. For more information, check out the <a href="https://github.com/ijc8/scorecard" style={{ textDecoration: "underline" }}>README</a>.</p>
+            <p>To get started, pick a score card from the <a href="#" onClick={() => setTab(Tab.Library)} style={{ textDecoration: "underline" }}>Library</a>, <a href="#" onClick={() => setTab(Tab.Scan)} style={{ textDecoration: "underline" }}>Scan</a> one, or <a href="#" onClick={() => setTab(Tab.Create)} style={{ textDecoration: "underline" }}>Create</a> your own. For more information, check out the <a href="https://github.com/ijc8/scorecard" style={{ textDecoration: "underline" }}>README</a>.</p>
             <p style={{ marginBottom: 0 }}>Happy hacking & joyful jamming!<br />- ijc</p>
         </div>
     </div>
@@ -307,7 +326,7 @@ function Create({ binary, loadBinary, wat, setWAT, tab }: {
 }) {
     const oldBinary = useRef(binary)
     useEffect(() => {
-        if (tab !== 2 || !binary || binary === oldBinary.current) return
+        if (tab !== Tab.Create || !binary || binary === oldBinary.current) return
         oldBinary.current = binary
         console.log("disassembling")
         getWabt().then(wabt => {
@@ -397,7 +416,7 @@ function App() {
     const [time, setTime] = useState(0)
     const [error, setError] = useState(false)
     const encoded = new URLSearchParams(window.location.search).get("c")
-    const [tab, setTab] = useState(encoded ? 0 : 3) // TODO: use an enum
+    const [tab, setTab] = useState(encoded ? Tab.Listen : Tab.About)
     const [dragging, setDragging] = useState(false)
     const qrCanvas = useRef<HTMLCanvasElement>(null)
     const [tracing, _setTracing] = useState(false)
@@ -459,7 +478,7 @@ function App() {
         window.history.pushState(null, "", DEBUG ? url.replace("?", "?debug&") : url)
         // setLink(url)
         // setDownload(window.URL.createObjectURL(new Blob([buffer])))
-        setTab(0)
+        setTab(Tab.Listen)
         qrContents.current = seedLock ? [binary, seed] : [binary]
     }, [binary, seed, seedLock])
 
@@ -593,6 +612,7 @@ function App() {
 
     const tabs = [
         { name: "Listen", component: <Listen {...{ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, setTracing }} /> },
+        { name: "Library", component: <Library {...{ loadBinary }} /> },
         { name: "Scan", component: <Scan {...{ onScan, tab }} /> },
         { name: "Create", component: <Create {...{ binary, loadBinary, wat, setWAT, tab }} /> },
         { name: "About", component: <About {...{ setTab }} /> },

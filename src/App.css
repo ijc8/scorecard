@@ -87,3 +87,42 @@
     background-image: url("assets/tab.png");
 }
 
+
+/* The Library tab takes its height from the other tabs and scrolls if the list is longer. */
+.library {
+    position: relative;
+    flex-grow: 1;
+    min-height: 320px;
+}
+
+.library > div {
+    position: absolute;
+    inset: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.library button {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    column-gap: 12px;
+    align-items: baseline;
+    padding: 6px 10px;
+    text-align: left;
+    flex-shrink: 0;
+}
+
+.library button:hover {
+    background-color: #ccf;
+}
+
+.library-title {
+    font-size: 1.3em;
+}
+
+.library-description {
+    grid-column: 1 / -1;
+    line-height: 1.2;
+}
