@@ -53,7 +53,7 @@ that fallback in `extractTitle` (`src/App.tsx`) and in `public/worklet.js`.
 
 ## Architecture
 
-- `src/App.tsx`: the UI (Listen / Scan / Create / About tabs, plus the deck) and most app logic.
+- `src/App.tsx`: the UI (Listen / Scan / Create / Settings / About tabs, shown as icons, plus the deck) and most app logic.
   1. URL load, the deck, QR scan, drag-and-drop and Create-tab assembly all call `loadBinary(Uint8Array)`.
   2. The binary goes to the AudioWorklet (`public/worklet.js`), which instantiates it and calls
      `p` per sample. **Send the binary, not a `WebAssembly.Module`**: posting a Module breaks on

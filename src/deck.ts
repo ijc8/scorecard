@@ -69,6 +69,8 @@ export function addCard(deck: DeckCard[], binary: Uint8Array, title: string) {
     return save([{ code, title, size: binary.length, added: Date.now(), seeds: [] }, ...deck])
 }
 
+export const clearDeck = () => save([])
+
 export function removeCard(deck: DeckCard[], code: string) {
     return save(deck.filter(card => card.code !== code))
 }

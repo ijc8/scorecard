@@ -30,12 +30,16 @@ import { initDebug, dlog, DEBUG } from "./debug"
 import Heart from "pixelarticons/svg/heart.svg?react"
 import Bookmark from "pixelarticons/svg/bookmark.svg?react"
 import Close from "pixelarticons/svg/close.svg?react"
+import CardStack from "pixelarticons/svg/card-stack.svg?react"
+import Headphone from "pixelarticons/svg/headphone.svg?react"
+import Sliders from "pixelarticons/svg/sliders.svg?react"
+import InfoBox from "pixelarticons/svg/info-box.svg?react"
 import library from "./library.json"
-import { DeckCard, Pack, addCard, addPack, loadDeck, loadPacks, removeCard, savePacks, toggleSeed } from "./deck"
+import { DeckCard, Pack, addCard, addPack, clearDeck, loadDeck, loadPacks, removeCard, savePacks, toggleSeed } from "./deck"
 import { audioDebugSnapshot, audioHealthy, onStall, sendToWorklet, setWorkletMessageHandler, startAudio } from "./audio"
 
 // Indices into `tabs` in `App`.
-const Tab = { Listen: 0, Scan: 1, Create: 2, About: 3 }
+const Tab = { Listen: 0, Scan: 1, Create: 2, Settings: 3, About: 4 }
 
 function generateSeed() {
     return Math.floor(Math.random() * Math.pow(2, 32))
@@ -409,10 +413,43 @@ function cardFace(code: string) {
     return face
 }
 
+// Settings, kept in localStorage.
+const defaultSettings = { collect: true, motion: true }
+type Settings = typeof defaultSettings
+
+function loadSettings(): Settings {
+    try {
+        return { ...defaultSettings, ...JSON.parse(localStorage.getItem("scorecard-settings") ?? "{}") }
+    } catch {
+        return defaultSettings
+    }
+}
+
+// Animations can be turned off in Settings (which sets this class), or by the system.
+function motionOff() {
+    return document.documentElement.classList.contains("still") || window.matchMedia("(prefers-reduced-motion: reduce)").matches
+}
+
+function SettingsTab({ settings, setSettings, deckSize, hasStarter, freshStarter, emptyDeck }: {
+    settings: Settings, setSettings: (s: Settings) => void, deckSize: number, hasStarter: boolean, freshStarter: () => void, emptyDeck: () => void
+}) {
+    const toggle = (key: keyof Settings, label: string, hint: string) =>
+        <label>
+            <input type="checkbox" checked={settings[key]} onChange={e => setSettings({ ...settings, [key]: e.target.checked })} />
+            <span>{label}<small>{hint}</small></span>
+        </label>
+    return <div className="settings">
+        {toggle("collect", "Collect cards", "Add cards to your deck when you scan them or open their links.")}
+        {toggle("motion", "Animations", "Cards that deal, fly and flip.")}
+        <button disabled={hasStarter} onClick={freshStarter}>Get a fresh starter pack</button>
+        <button disabled={deckSize === 0} onClick={() => window.confirm(`Throw away all ${deckSize} cards in your deck, and their saved seeds?`) && emptyDeck()}>Empty my deck</button>
+    </div>
+}
+
 // Send a copy of a card flying from the deck onto the player.
 function flyToPlayer(card: HTMLElement) {
     const table = document.getElementById("table")
-    if (!table || !card.animate || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
+    if (!table || !card.animate || motionOff()) return
     const from = card.getBoundingClientRect()
     const to = table.getBoundingClientRect()
     const copy = card.cloneNode(true) as HTMLElement
@@ -451,8 +488,7 @@ function SealedPack({ pack, open }: { pack: Pack, open: () => void }) {
     const tear = () => {
         if (opening) return
         setOpening(true)
-        const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        setTimeout(open, still ? 0 : 600)
+        setTimeout(open, motionOff() ? 0 : 600)
     }
     return <button className={"pack" + (opening ? " opening" : "")} onClick={tear}>
         <span className="pack-top"></span>
@@ -720,6 +756,16 @@ function App() {
     const [deck, setDeck] = useState(loadDeck)
     const [packs, setPacks] = useState(() => loadPacks(starterPack))
     const [deckOpen, setDeckOpen] = useState(false)
+    const [settings, _setSettings] = useState(loadSettings)
+    const setSettings = (settings: Settings) => {
+        _setSettings(settings)
+        try {
+            localStorage.setItem("scorecard-settings", JSON.stringify(settings))
+        } catch {}
+    }
+    useEffect(() => {
+        document.documentElement.classList.toggle("still", !settings.motion)
+    }, [settings.motion])
     const openDeck = useRef(() => setDeckOpen(true)).current
     const code = useMemo(() => binary && encodeBlob(binary), [binary])
     const deckCard = deck.find(card => card.code === code)
@@ -739,7 +785,7 @@ function App() {
         console.log("loaded wasm", module)
         const title = extractTitle(module) ?? NO_TITLE
         setTitle(title)
-        if (keep) setDeck(deck => addCard(deck, binary, title))
+        if (keep && settings.collect) setDeck(deck => addCard(deck, binary, title))
         if (seed !== undefined) setSeedLock(seed !== null)
 
         // Send to AudioWorklet
@@ -969,10 +1015,15 @@ function App() {
     // } , [])
 
     const tabs = [
-        { name: "Listen", component: <Listen {...{ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, setTracing, kept: !!deckCard, toggleKept, seedSaved: !!deckCard?.seeds.includes(seed), toggleSeedSaved }} /> },
-        { name: "Scan", component: <Scan {...{ onScan, tab }} /> },
-        { name: "Create", component: <Create {...{ binary, loadBinary, wat, setWAT, tab }} /> },
-        { name: "About", component: <About {...{ setTab, openDeck }} /> },
+        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, setTracing, kept: !!deckCard, toggleKept, seedSaved: !!deckCard?.seeds.includes(seed), toggleSeedSaved }} /> },
+        { name: "Scan", Icon: Camera, component: <Scan {...{ onScan, tab }} /> },
+        { name: "Create", Icon: EditBox, component: <Create {...{ binary, loadBinary, wat, setWAT, tab }} /> },
+        { name: "Settings", Icon: Sliders, component: <SettingsTab {...{
+            settings, setSettings, deckSize: deck.length, hasStarter: packs.some(pack => pack.id === starterPack.id),
+            freshStarter: () => { setPacks(savePacks([...packs, starterPack])); setDeckOpen(true) },
+            emptyDeck: () => setDeck(clearDeck()),
+        }} /> },
+        { name: "About", Icon: InfoBox, component: <About {...{ setTab, openDeck }} /> },
     ]
 
     const border = `1px ${dragging ? "dashed" : "solid"} black`
@@ -991,9 +1042,9 @@ function App() {
         </div>
         <div className="tabs" style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
             <div style={{ borderTop: border, flexGrow: "1", alignSelf: "stretch" }}></div>
-            <button className="deck-handle" onClick={openDeck}>Deck</button>
-            {tabs.map(({ name }, index) =>
-                <button key={index} className={index === tab ? "active" : ""} onClick={() => setTab(index)}>{name}</button>
+            <button className="deck-handle" title="Deck" aria-label="Deck" onClick={openDeck}><CardStack /></button>
+            {tabs.map(({ name, Icon }, index) =>
+                <button key={index} title={name} aria-label={name} className={index === tab ? "active" : ""} onClick={() => setTab(index)}><Icon /></button>
             )}
             <div style={{ borderTop: border, flexGrow: "1", alignSelf: "stretch" }}></div>
         </div>
