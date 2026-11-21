@@ -1,4 +1,4 @@
-import { RefObject, memo, useEffect, useRef, useState } from 'react'
+import { RefObject, memo, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import QRCode from "qrcode"
 import { encodeBlob, decodeBlob, encode, decode } from "./base43Encoder"
@@ -25,11 +25,15 @@ import exampleCardUrl from "./assets/example-card.png"
 import { TraceMap, instrumentWasm } from "./wasmTracer"
 import { getWabt } from './lazyWabt'
 import { initDebug, dlog, DEBUG } from "./debug"
+import Heart from "pixelarticons/svg/heart.svg?react"
+import Bookmark from "pixelarticons/svg/bookmark.svg?react"
+import Close from "pixelarticons/svg/close.svg?react"
 import library from "./library.json"
+import { DeckCard, addCard, loadDeck, removeCard, toggleSeed } from "./deck"
 import { audioDebugSnapshot, audioHealthy, onStall, sendToWorklet, setWorkletMessageHandler, startAudio } from "./audio"
 
 // Indices into `tabs` in `App`.
-const Tab = { Listen: 0, Library: 1, Scan: 2, Create: 3, About: 4 }
+const Tab = { Listen: 0, Deck: 1, Scan: 2, Create: 3, About: 4 }
 
 function generateSeed() {
     return Math.floor(Math.random() * Math.pow(2, 32))
@@ -107,10 +111,11 @@ function SeedInput({ seed, setSeed }: any) {
 }
 
 // TODO: Specify types
-function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, setTracing }: {
+function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, setTracing, kept, toggleKept, seedSaved, toggleSeedSaved }: {
     qrCanvas: RefObject<HTMLCanvasElement>, title: string, size: number, seed: number, setSeed: (s: number) => void, seedLock: boolean,
     setSeedLock: (l: boolean) => void, state: any, setState: any, time: number, reset: any, error: any, buffer: Uint8Array | null,
     tracing: boolean, setTracing: (t: boolean) => void,
+    kept: boolean, toggleKept: () => void, seedSaved: boolean, toggleSeedSaved: () => void,
 }) {
     const bigIconStyle = { height: "10cqw", verticalAlign: "middle" }
     const smallIconStyle = { height: "5cqw", flexShrink: 0, verticalAlign: "middle" }
@@ -238,9 +243,13 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
             <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", display: tracing ? "none" : "block", visibility: showMessage ? "hidden" : "inherit", width: "100%" }} width="1" height="1"></canvas>
             <canvas ref={traceCanvas} style={{ imageRendering: "pixelated", display: tracing ? "block" : "none", visibility: showMessage ? "hidden" : "inherit", width: "100%" }} width="1" height="1"></canvas>
         </div>
-        <h2 style={{ userSelect: "none", margin: "20px", fontSize: "6cqw" }}>{title} | {size} bytes {/* TODO: add link and perhaps download buttons with icons */}</h2>
+        <h2 style={{ userSelect: "none", margin: "20px", fontSize: "6cqw" }}>{title} | {size} bytes {/* TODO: add link and perhaps download buttons with icons */}
+            {binary && <button className={"toggle" + (kept ? " on" : "")} title={kept ? "Remove from deck" : "Keep in deck"} style={{ fontSize: 0, border: "none", padding: "0 0 0 6px" }} onClick={toggleKept}>
+                <Heart style={{ height: "6cqw", verticalAlign: "middle" }} />
+            </button>}
+        </h2>
         <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", fontSize: "5cqw" }}>
-            <div style={{ userSelect: "none", display: "flex", alignItems: "center", width: "4em", justifyContent: "right" }}>
+            <div style={{ userSelect: "none", display: "flex", alignItems: "center", width: "4em", flexShrink: 0, whiteSpace: "nowrap", justifyContent: "right" }}>
                 <Clock style={smallIconStyle} />
                 &nbsp;
                 <span style={{ verticalAlign: "middle", display: "inline-block" }}>{
@@ -256,6 +265,9 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
                 <button style={{ fontSize: 0 }}><DiceIcon style={smallIconStyle} onClick={() => setSeedLock(!seedLock)} /></button>
                 &nbsp;
                 <SeedInput {...{ seed, setSeed }} />
+                <button className={"toggle" + (seedSaved ? " on" : "")} title={seedSaved ? "Forget this seed" : "Save this seed"} style={{ fontSize: 0 }} onClick={toggleSeedSaved}>
+                    <Bookmark style={smallIconStyle} />
+                </button>
             </div>
             <button style={{ fontSize: 0, marginRight: "-5cqw" }} onClick={() => setTracing(!tracing)}>
                 <TraceIcon style={{ ...smallIconStyle }} />
@@ -292,17 +304,41 @@ function Scan({ onScan, tab }: any) {
     </>
 }
 
-// A shelf of ready-made cards (built from `examples/library` into `library.json`).
-function Library({ loadBinary }: { loadBinary: (b: Uint8Array) => void }) {
-    return <div className="library">
+type LoadCard = (code: string, seed?: number) => void
+
+function CardEntry({ title, size, description, code, loadCard, children }: {
+    title: string, size: number, description?: string, code: string, loadCard: LoadCard, children?: React.ReactNode
+}) {
+    return <div className="deck-card">
+        <button onClick={() => loadCard(code)}>
+            <span className="deck-title">{title}</span>
+            <span>{size} bytes</span>
+            {description && <span className="deck-description">{description}</span>}
+        </button>
+        {children}
+    </div>
+}
+
+// Your collection of cards, plus a starter pack of ready-made ones
+// (built from `examples/library` into `library.json`).
+function Deck({ deck, loadCard, discard }: { deck: DeckCard[], loadCard: LoadCard, discard: (code: string) => void }) {
+    return <div className="deck">
         <div>
-            {library.map(card =>
-                <button key={card.source} onClick={() => loadBinary(decodeBlob(card.code))}>
-                    <span className="library-title">{card.title}</span>
-                    <span className="library-size">{card.size} bytes</span>
-                    <span className="library-description">{card.description}</span>
-                </button>
+            <h3>Your deck | {deck.length} {deck.length === 1 ? "card" : "cards"}</h3>
+            {deck.length === 0 && <p>Cards you scan or open from a link are collected here. You can also keep the card you're listening to with <Heart style={{ height: "1em", verticalAlign: "middle" }} />.</p>}
+            {deck.map(card =>
+                <CardEntry key={card.code} {...card} loadCard={loadCard}>
+                    <div className="deck-extras">
+                        {card.seeds.map(seed =>
+                            <button key={seed} title="Play with this seed" onClick={() => loadCard(card.code, seed)}>{formatSeed(seed)}</button>
+                        )}
+                        <span style={{ flexGrow: 1 }}>{card.seeds.length === 0 && new Date(card.added).toLocaleDateString()}</span>
+                        <button title="Remove from deck" style={{ fontSize: 0 }} onClick={() => discard(card.code)}><Close style={{ height: "16px" }} /></button>
+                    </div>
+                </CardEntry>
             )}
+            <h3>Starter pack</h3>
+            {library.map(card => <CardEntry key={card.code} {...card} loadCard={loadCard} />)}
         </div>
     </div>
 }
@@ -315,7 +351,7 @@ const About = memo(function About({ setTab }: any) {
             <img src={exampleCardUrl} style={{ display: "block", margin: "auto", padding: "12px" }} />
             Each QR code contains a valid URL (linking to this web app, the score card player) and an entire audio-generating <a href="https://webassembly.org/">WebAssembly</a> program. Because the QR code contains the piece itself, even if the link breaks, the code can still be read and played back by an instance of the ScoreCard player hosted somewhere else, or by a player that runs outside of the browser.
             <p>This also implies that piece must fit in a QR code, implying an max executable size of just 2,953 bytes (more like 2,900 bytes after encoding it in a URL).</p>
-            <p>To get started, pick a score card from the <a href="#" onClick={() => setTab(Tab.Library)} style={{ textDecoration: "underline" }}>Library</a>, <a href="#" onClick={() => setTab(Tab.Scan)} style={{ textDecoration: "underline" }}>Scan</a> one, or <a href="#" onClick={() => setTab(Tab.Create)} style={{ textDecoration: "underline" }}>Create</a> your own. For more information, check out the <a href="https://github.com/ijc8/scorecard" style={{ textDecoration: "underline" }}>README</a>.</p>
+            <p>To get started, pick a score card from the <a href="#" onClick={() => setTab(Tab.Deck)} style={{ textDecoration: "underline" }}>Deck</a>, <a href="#" onClick={() => setTab(Tab.Scan)} style={{ textDecoration: "underline" }}>Scan</a> one, or <a href="#" onClick={() => setTab(Tab.Create)} style={{ textDecoration: "underline" }}>Create</a> your own. For more information, check out the <a href="https://github.com/ijc8/scorecard" style={{ textDecoration: "underline" }}>README</a>.</p>
             <p style={{ marginBottom: 0 }}>Happy hacking & joyful jamming!<br />- ijc</p>
         </div>
     </div>
@@ -420,6 +456,9 @@ function App() {
     const [dragging, setDragging] = useState(false)
     const qrCanvas = useRef<HTMLCanvasElement>(null)
     const [tracing, _setTracing] = useState(false)
+    const [deck, setDeck] = useState(loadDeck)
+    const code = useMemo(() => binary && encodeBlob(binary), [binary])
+    const deckCard = deck.find(card => card.code === code)
 
     const setupTracing = async (originalBinary: Uint8Array) => {
         // Instrument Wasm for execution tracing.
@@ -428,11 +467,16 @@ function App() {
         trace = { binary, map, logs: [] }
     }
 
-    const loadBinary = async (binary: Uint8Array) => {
+    // `keep` adds the card to the deck. `seed` loads the card with that seed locked in, or (if null)
+    // unlocked with a fresh seed; by default the seed lock is left as it is.
+    const loadBinary = async (binary: Uint8Array, { keep, seed }: { keep?: boolean, seed?: number | null } = {}) => {
         const module = new WebAssembly.Module(binary as BufferSource)
         setSize(binary.length)
         console.log("loaded wasm", module)
-        setTitle(extractTitle(module) ?? NO_TITLE)
+        const title = extractTitle(module) ?? NO_TITLE
+        setTitle(title)
+        if (keep) setDeck(deck => addCard(deck, binary, title))
+        if (seed !== undefined) setSeedLock(seed !== null)
 
         // Send to AudioWorklet
         // NOTE: We send the binary here because sending the WebAssembly.Module doesn't work in iOS Safari...
@@ -444,7 +488,7 @@ function App() {
             sendToWorklet({ cmd: "loadModule", binary })
         }
         setBinary(binary)
-        reset()
+        reset(seed)
     }
     const loadBinaryRef = useRef(loadBinary)
     loadBinaryRef.current = loadBinary
@@ -475,16 +519,19 @@ function App() {
             setError(true)
         }
         canvas.style.cssText = style
-        window.history.pushState(null, "", DEBUG ? url.replace("?", "?debug&") : url)
+        // (The state marks this entry as ours, so that reloading the page doesn't count as following a link.)
+        window.history.pushState({ loaded: true }, "", DEBUG ? url.replace("?", "?debug&") : url)
         // setLink(url)
         // setDownload(window.URL.createObjectURL(new Blob([buffer])))
         setTab(Tab.Listen)
         qrContents.current = seedLock ? [binary, seed] : [binary]
     }, [binary, seed, seedLock])
 
-    const reset = () => {
-        let _seed = seed
-        if (!seedLock) {
+    const reset = (newSeed?: number | null) => {
+        let _seed = newSeed ?? seed
+        if (typeof newSeed === "number") {
+            setSeed(_seed)
+        } else if (newSeed === null || !seedLock) {
             _seed = generateSeed()
             setSeed(_seed)
         }
@@ -522,7 +569,7 @@ function App() {
         if (state !== "playing") reset()
     }
 
-    const onScan = (data: string) => {
+    const onScan = (data: string, keep = true) => {
         // Return value indicates whether the string contains a valid ScoreCard URL.
         // TODO: More validity checks (does the param contain valid base43? do the bytes contain valid wasm?)
         let url
@@ -535,21 +582,28 @@ function App() {
         if (!encodedBlob) return false
 
         const encodedSeed = url.searchParams.get("s")
-        if (encodedSeed) {
-            setSeed(Number(decode(encodedSeed.replace(/ /g, "+"))))
-            setSeedLock(true)
-        }
-        if (encodedBlob) {
-            const buffer = decodeBlob(encodedBlob.replace(/ /g, "+"))
-            loadBinary(buffer)
-            return true
-        }
-        return false
+        const seed = encodedSeed ? Number(decode(encodedSeed.replace(/ /g, "+"))) : null
+        const buffer = decodeBlob(encodedBlob.replace(/ /g, "+"))
+        loadBinary(buffer, { keep, seed })
+        return true
     }
 
     useEffect(() => {
-        onScan(window.location.href)
+        // Collect the card if we got here by following a link (or scanning with another app),
+        // but not if this is just a reload of a card that was loaded some other way.
+        onScan(window.location.href, !window.history.state?.loaded)
     }, [])
+
+    const loadCard: LoadCard = (code, seed) => loadBinary(decodeBlob(code), { seed: seed ?? null })
+    const toggleKept = () => {
+        if (!binary) return
+        setDeck(deckCard ? removeCard(deck, code!) : addCard(deck, binary, title))
+    }
+    const toggleSeedSaved = () => {
+        if (!binary) return
+        // Saving a seed implies keeping the card.
+        setDeck(toggleSeed(addCard(deck, binary, title), code!, seed))
+    }
 
     useEffect(() => {
         // Support drag-and-dropping .wasm files.
@@ -611,8 +665,8 @@ function App() {
     // } , [])
 
     const tabs = [
-        { name: "Listen", component: <Listen {...{ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, setTracing }} /> },
-        { name: "Library", component: <Library {...{ loadBinary }} /> },
+        { name: "Listen", component: <Listen {...{ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, setTracing, kept: !!deckCard, toggleKept, seedSaved: !!deckCard?.seeds.includes(seed), toggleSeedSaved }} /> },
+        { name: "Deck", component: <Deck {...{ deck, loadCard, discard: (code: string) => setDeck(removeCard(deck, code)) }} /> },
         { name: "Scan", component: <Scan {...{ onScan, tab }} /> },
         { name: "Create", component: <Create {...{ binary, loadBinary, wat, setWAT, tab }} /> },
         { name: "About", component: <About {...{ setTab }} /> },

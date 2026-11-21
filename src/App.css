@@ -88,14 +88,15 @@
 }
 
 
-/* The Library tab takes its height from the other tabs and scrolls if the list is longer. */
-.library {
+/* The Deck tab takes its height from the other tabs and scrolls if the list is longer. */
+.deck {
     position: relative;
     flex-grow: 1;
     min-height: 320px;
+    text-align: left;
 }
 
-.library > div {
+.deck > div {
     position: absolute;
     inset: 0;
     overflow-y: auto;
@@ -104,25 +105,75 @@
     gap: 8px;
 }
 
-.library button {
+.deck h3, .deck p {
+    margin: 0;
+}
+
+.deck h3:not(:first-child) {
+    margin-top: 12px;
+}
+
+.deck-card {
+    border: 1px solid black;
+    flex-shrink: 0;
+}
+
+.deck-card button {
+    border: none;
+}
+
+.deck-card button:hover {
+    background-color: #ccf;
+}
+
+.deck-card > button {
     display: grid;
     grid-template-columns: 1fr auto;
     column-gap: 12px;
     align-items: baseline;
+    width: 100%;
     padding: 6px 10px;
     text-align: left;
-    flex-shrink: 0;
 }
 
-.library button:hover {
-    background-color: #ccf;
-}
-
-.library-title {
+.deck-title {
     font-size: 1.3em;
 }
 
-.library-description {
+.deck-description {
     grid-column: 1 / -1;
     line-height: 1.2;
+}
+
+.deck-extras {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    padding: 0 10px 6px;
+}
+
+.deck-extras > button {
+    padding: 0 4px;
+    border: 1px solid black;
+}
+
+.deck-extras > button:last-child {
+    border: none;
+    padding: 0;
+}
+
+/* Icon buttons that are either on or off (kept card, saved seed). */
+.toggle {
+    opacity: 0.25;
+}
+
+.toggle.on {
+    opacity: 1;
+}
+
+@media print {
+    .toggle {
+        display: none;
+    }
 }
