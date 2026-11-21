@@ -70,6 +70,9 @@ that fallback in `extractTitle` (`src/App.tsx`) and in `public/worklet.js`.
 - `src/base43Encoder.ts` (mirrored by `base43.py`): base43 over the QR alphanumeric set minus `%`
   and space, so the binary shares the QR's dense alphanumeric mode with the URL and stays valid in
   a query string.
+- `src/qrReader.ts`: QR decoding for the Scan tab (live camera frames, photos, dropped images)
+  using `zxing-wasm`, loaded lazily. It was picked with `scripts/scanbench` because score cards are
+  very dense codes; rerun that benchmark before changing decoders.
 - `src/wasmTracer.ts`: the bullseye toggle reassembles the binary with a `scorecard.log(i32)`
   import at basic-block boundaries; the worklet posts counts back and the Listen tab draws a
   heatmap over a bit-grid of the binary.
