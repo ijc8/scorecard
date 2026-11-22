@@ -1,7 +1,7 @@
 function arrayToBigInt(array: Uint8Array) {
     let offset = array.findIndex(x => x !== 0)
     if (offset === -1) offset = array.length
-    let bits = 8n
+    const bits = 8n
     let num = 0n
     for (const x of array.subarray(offset)) {
         num = (num << bits) | BigInt(x)
@@ -48,7 +48,7 @@ export function decode(encoded: string) {
 }
 
 export function encodeBlob(data: Uint8Array) {
-    let { num, offset } = arrayToBigInt(data)
+    const { num, offset } = arrayToBigInt(data)
     return chars[0].repeat(offset) + encode(num)
 }
 

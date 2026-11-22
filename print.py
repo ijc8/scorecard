@@ -104,7 +104,10 @@ def print_scorecard(wasm_path):
     payload = base43.encode(data)
     size = len(data)
     qrcode = segno.make_qr([
-        ("https://ijc8.me/s?c=", segno.consts.MODE_BYTE),
+        # The link form the player itself writes (see `cardURL` in src/card.ts): capitals where
+        # they're free, so that they share the payload's alphanumeric mode.
+        ("HTTPS://IJC8.ME/", segno.consts.MODE_ALPHANUMERIC),
+        ("s#", segno.consts.MODE_BYTE),
         (payload, segno.consts.MODE_ALPHANUMERIC),
     ])
     print("QR code info:", qrcode.version, qrcode.error)

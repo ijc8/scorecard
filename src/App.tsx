@@ -1,7 +1,13 @@
-import { RefObject, forwardRef, memo, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import { RefObject, memo, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
+import { Tab } from "./tabs"
+import { NO_TITLE, cardFragment, cardURL, extractTitle, formatTime, formatSeed, generateSeed, parseCardURL } from "./card"
+import { Face, SourceFace, SourceHandle } from "./SourceFace"
+import { Scan } from "./Scan"
+import { Settings, SettingsTab, loadSettings } from "./Settings"
+import { Deck, LoadCard, PACK_FORMAT, parsePack, starterPack } from "./Deck"
 import QRCode from "qrcode"
-import { encodeBlob, decodeBlob, encode, decode } from "./base43Encoder"
+import { encodeBlob, decodeBlob } from "./base43Encoder"
 import Play from "pixelarticons/svg/play.svg?react"
 import Pause from "pixelarticons/svg/pause.svg?react"
 import Prev from "pixelarticons/svg/prev.svg?react"
@@ -12,58 +18,27 @@ import Downasaur from "pixelarticons/svg/downasaur.svg?react"
 import Flatten from "pixelarticons/svg/flatten.svg?react"
 // Alternative icon for "TOO BIG":
 // import Loader from "pixelarticons/svg/loader.svg?react"
-import Alert from "pixelarticons/svg/alert.svg?react"
 import Subscriptions from "pixelarticons/svg/subscriptions.svg?react"
 import Camera from "pixelarticons/svg/camera.svg?react"
 import EditBox from "pixelarticons/svg/edit-box.svg?react"
 import DragAndDrop from "pixelarticons/svg/drag-and-drop.svg?react"
 import Bullseye from "pixelarticons/svg/bullseye.svg?react"
 import BullseyeArrow from "pixelarticons/svg/bullseye-arrow.svg?react"
-import ImageIcon from "pixelarticons/svg/image.svg?react"
 import { readQR } from "./qrReader"
 import logoUrl from "./assets/logo.png"
 import exampleCardUrl from "./assets/example-card.png"
 import { TraceMap, instrumentWasm } from "./wasmTracer"
 import { MemoryTrace } from "./memoryTrace"
-import { compileCard } from "./compiler"
-import newCardSource from "./newCard.c?raw"
-import { getSource, saveSource, templates } from "./sources"
-import { highlight } from "./highlight"
 import { getWabt } from './lazyWabt'
 import { initDebug, dlog, DEBUG } from "./debug"
 import Heart from "pixelarticons/svg/heart.svg?react"
 import Bookmark from "pixelarticons/svg/bookmark.svg?react"
-import Close from "pixelarticons/svg/close.svg?react"
 import Headphone from "pixelarticons/svg/headphone.svg?react"
-import Volume from "pixelarticons/svg/volume-2.svg?react"
 import Sliders from "pixelarticons/svg/sliders.svg?react"
 import InfoBox from "pixelarticons/svg/info-box.svg?react"
-import library from "./library.json"
-import { DeckCard, Pack, addCard, addPack, clearDeck, loadDeck, loadPacks, removeCard, savePacks, toggleSeed } from "./deck"
+import { Pack, addCard, addPack, clearDeck, loadDeck, loadPacks, removeCard, savePacks, toggleSeed } from "./deck"
 import { audioDebugSnapshot, audioHealthy, onStall, sendToWorklet, setWorkletMessageHandler, startAudio } from "./audio"
 
-// Indices into `tabs` in `App`.
-const Tab = { Listen: 0, Scan: 1, Create: 2, Settings: 3, About: 4 }
-
-function generateSeed() {
-    return Math.floor(Math.random() * Math.pow(2, 32))
-}
-
-function formatSeed(seed: number) {
-    return seed.toString(16).padStart(8, "0")
-}
-
-function formatTime(seconds: number) {
-    seconds = Math.floor(seconds)
-    let minutes = Math.floor(seconds / 60)
-    seconds -= minutes * 60
-    const hours = Math.floor(minutes / 60)
-    if (hours === 0) {
-        return `${minutes}:${seconds.toString().padStart(2, "0")}`
-    }
-    minutes -= hours * 60
-    return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
-}
 
 initDebug(audioDebugSnapshot)
 
@@ -119,159 +94,6 @@ function SeedInput({ seed, setSeed }: any) {
         onBlur={submit}
     />
 }
-
-function loadScratch() {
-    try {
-        return localStorage.getItem("scorecard-source") ?? newCardSource
-    } catch {
-        return newCardSource
-    }
-}
-
-interface SourceHandle {
-    // Make sure the loaded card is up to date with the editor; resolves to whether it is.
-    build: () => Promise<boolean>
-}
-
-// The third side of a card: its source. That's C if we know it (the starter pack's sources ship with
-// the app, and whatever is compiled here is remembered), and otherwise the WebAssembly text that
-// the card disassembles to. Either can be edited; playing rebuilds the card if it has been.
-const SourceFace = forwardRef<SourceHandle, {
-    binary: Uint8Array | null, code: string | null, loadBinary: (b: Uint8Array) => Promise<void>, active: boolean
-}>(function SourceFace({ binary, code, loadBinary, active }, ref) {
-    const [mode, setMode] = useState<"C" | "Wasm">("C")
-    const [source, _setSource] = useState(loadScratch)
-    const [wat, setWAT] = useState("")
-    const [log, setLog] = useState("")
-    // null: idle; a number: fetching the compiler (0 to 1); true: building.
-    const [busy, setBusy] = useState<number | true | null>(null)
-    // What the loaded card was built from (in each language), to tell whether the editor has moved on.
-    const [builtSource, setBuiltSource] = useState<string | null>(null)
-    const [builtWAT, setBuiltWAT] = useState("")
-    const ownBuild = useRef<Uint8Array | null>(null)
-
-    const setSource = (source: string) => {
-        _setSource(source)
-        try {
-            localStorage.setItem("scorecard-source", source)
-        } catch {}
-    }
-
-    // When another card is loaded, show its source: C if we have it, WebAssembly otherwise.
-    useEffect(() => {
-        if (!code || binary === ownBuild.current) return
-        const known = getSource(code)
-        setLog("")
-        setBuiltSource(known ?? null)
-        if (known === undefined) return setMode("Wasm")
-        _setSource(known)
-        setMode("C")
-    }, [code])
-
-    const disassembled = useRef<Uint8Array | null>(null)
-    useEffect(() => {
-        if (!active || mode !== "Wasm" || !binary || binary === disassembled.current) return
-        disassembled.current = binary
-        getWabt().then(wabt => {
-            const module = wabt.readWasm(binary, { readDebugNames: true })
-            module.applyNames()
-            const text = module.toText({ foldExprs: false, inlineExport: true })
-            module.destroy()
-            setWAT(text)
-            setBuiltWAT(text)
-        })
-    }, [binary, active, mode])
-
-    const dirty = mode === "C" ? source !== builtSource : wat !== builtWAT
-
-    const build = async () => {
-        if (busy !== null) return false
-        if (!dirty && binary) return true
-        setBusy(true)
-        let result: { binary?: Uint8Array, log: string }
-        if (mode === "C") {
-            result = await compileCard(source, fraction => setBusy(fraction < 1 ? fraction : true))
-        } else {
-            const wabt = await getWabt()
-            let module
-            try {
-                module = wabt.parseWat("card.wat", wat)
-                result = { binary: module.toBinary({}).buffer, log: "" }
-            } catch (e: any) {
-                result = { log: String(e.message ?? e).trim() }
-            } finally {
-                module?.destroy()
-            }
-        }
-        setBusy(null)
-        const built = result.binary
-        if (built && built.length > maxCardSize()) {
-            setLog(`${result.log}\nThat makes ${built.length} bytes, which is ${built.length - maxCardSize()} too many to fit in a QR code.`.trim())
-            return false
-        }
-        setLog(result.log.trim())
-        if (!built) return false
-        ownBuild.current = built
-        if (mode === "C") {
-            saveSource(encodeBlob(built), source)
-            setBuiltSource(source)
-        } else {
-            setBuiltWAT(wat)
-            setBuiltSource(null)
-        }
-        await loadBinary(built)
-        return true
-    }
-    useImperativeHandle(ref, () => ({ build }))
-
-    const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-            build()
-        } else if (e.key === "Tab" && !e.shiftKey) {
-            // Indent, rather than leaving the editor.
-            e.preventDefault()
-            document.execCommand("insertText", false, "    ")
-        }
-    }
-
-    const text = mode === "C" ? source : wat
-    const highlighted = useMemo(() => highlight(text, mode), [text, mode])
-    const backdrop = useRef<HTMLPreElement>(null)
-    const max = maxCardSize()
-    const status = typeof busy === "number" ? `fetching compiler: ${Math.floor(busy * 100)}%`
-        : busy ? "building..."
-        : dirty ? (/error/.test(log) ? "has errors" : "edited: play to rebuild")
-        : binary ? `${max - binary.length} bytes left` : ""
-    return <div className="source">
-        <div className="editor">
-            {/* The colours come from a copy of the text behind the (see-through) textarea. */}
-            <pre ref={backdrop} aria-hidden>{highlighted}{"\n"}</pre>
-            <textarea spellCheck={false} autoCapitalize="off" autoCorrect="off" onKeyDown={onKeyDown}
-                onScroll={e => backdrop.current?.scrollTo(e.currentTarget.scrollLeft, e.currentTarget.scrollTop)}
-                value={text} onChange={e => mode === "C" ? setSource(e.target.value) : setWAT(e.target.value)}></textarea>
-        </div>
-        {log && <pre className="log">{log}</pre>}
-        <div>
-            <div className="modes">
-                {(["C", "Wasm"] as const).map(m =>
-                    <button key={m} className={m === mode ? "active" : ""} title={m === "C" ? "Write the card in C" : "The card as WebAssembly text"} onClick={() => { setMode(m); setLog("") }}>{m}</button>
-                )}
-            </div>
-            {mode === "C" && <select value="" title="Start from an example" onChange={e => {
-                if (!dirty || source.trim() === "" || window.confirm("Replace what you've written?")) {
-                    setSource(templates[e.target.value])
-                    setLog("")
-                }
-            }}>
-                <option value="" disabled>New...</option>
-                {Object.keys(templates).map(name => <option key={name}>{name}</option>)}
-            </select>}
-            <span>{status}</span>
-        </div>
-    </div>
-})
-
-type Face = "qr" | "bits" | "source"
 
 // TODO: Specify types
 function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, kept, toggleKept, seedSaved, toggleSeedSaved, face, code, loadBinary }: {
@@ -483,268 +305,6 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
     </div>
 }
 
-function Scan({ onScan, tab }: { onScan: (data: string) => boolean, tab: number }) {
-    const [message, setMessage] = useState("")
-    const video = useRef<HTMLVideoElement>(null)
-    const onScanRef = useRef(onScan)
-    onScanRef.current = onScan
-    const active = tab === Tab.Scan
-
-    const handle = (text: string | undefined, nothing: string) => {
-        if (text === undefined) setMessage(nothing)
-        else if (!onScanRef.current(text)) setMessage("That's not a score card")
-    }
-
-    useEffect(() => {
-        if (!active) return
-        setMessage("")
-        let stream: MediaStream | undefined
-        let stopped = false
-        let timeout: number | undefined
-        const canvas = document.createElement("canvas")
-        const context = canvas.getContext("2d", { willReadFrequently: true })!
-
-        const scan = async () => {
-            const v = video.current
-            if (stopped || !v) return
-            if (v.videoWidth) {
-                // Decode the whole frame at full resolution, not just what's visible in the viewfinder.
-                canvas.width = v.videoWidth
-                canvas.height = v.videoHeight
-                context.drawImage(v, 0, 0)
-                try {
-                    const text = await readQR(context.getImageData(0, 0, canvas.width, canvas.height))
-                    if (stopped) return
-                    if (text !== undefined) handle(text, "")
-                } catch (e) {
-                    console.error(e)
-                }
-            }
-            timeout = window.setTimeout(scan, 60)
-        }
-
-        ;(async () => {
-            try {
-                // Ask for a high-resolution rear camera: dense codes need the pixels.
-                stream = await navigator.mediaDevices.getUserMedia({
-                    audio: false,
-                    video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
-                })
-            } catch (e) {
-                dlog("camera failed", String(e))
-                if (!stopped) setMessage("Can't use the camera")
-                return
-            }
-            if (stopped || !video.current) {
-                stream.getTracks().forEach(track => track.stop())
-                return
-            }
-            video.current.srcObject = stream
-            video.current.play().catch(() => {})
-            scan()
-        })()
-
-        return () => {
-            stopped = true
-            clearTimeout(timeout)
-            stream?.getTracks().forEach(track => track.stop())
-            if (video.current) video.current.srcObject = null
-        }
-    }, [active])
-
-    const scanPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0]
-        e.target.value = ""
-        if (!file) return
-        setMessage("Reading...")
-        handle(await readQR(file).catch(() => undefined), "No card found in that photo")
-    }
-
-    return active && <>
-        <div className="viewfinder">
-            <video ref={video} playsInline muted autoPlay />
-            <div></div>
-        </div>
-        <div style={{ fontSize: "6cqw", display: "flex", justifyContent: "center", alignItems: "center", margin: "12px 0" }}>
-            {message ? <><Alert style={{ height: "6cqw" }} />&nbsp;{message}</> : "Point at a score card"}
-        </div>
-        <label className="photo-button">
-            <ImageIcon style={{ height: "1.2em", verticalAlign: "middle" }} /> Scan a photo instead
-            <input type="file" accept="image/*" onChange={scanPhoto} />
-        </label>
-    </>
-}
-
-type LoadCard = (code: string, seed?: number) => void
-
-// Each card's face shows its QR code, like the big card on the player.
-const faces = new Map<string, string>()
-function cardFace(code: string) {
-    let face = faces.get(code)
-    if (face === undefined) {
-        const canvas = document.createElement("canvas")
-        try {
-            const { size, data } = QRCode.create(cardURL(code), { errorCorrectionLevel: "L" }).modules
-            canvas.width = canvas.height = size
-            const image = new ImageData(size, size)
-            data.forEach((dark, i) => { image.data[i * 4 + 3] = dark ? 255 : 0 })
-            canvas.getContext("2d")!.putImageData(image, 0, 0)
-        } catch {
-            // Too big for a QR code: leave the face blank.
-        }
-        faces.set(code, face = canvas.toDataURL())
-    }
-    return face
-}
-
-// Settings, kept in localStorage.
-const defaultSettings = { collect: true, motion: true, volume: 1, awake: false }
-type Settings = typeof defaultSettings
-
-function loadSettings(): Settings {
-    try {
-        return { ...defaultSettings, ...JSON.parse(localStorage.getItem("scorecard-settings") ?? "{}") }
-    } catch {
-        return defaultSettings
-    }
-}
-
-// Animations can be turned off in Settings (which sets this class), or by the system.
-function motionOff() {
-    return document.documentElement.classList.contains("still") || window.matchMedia("(prefers-reduced-motion: reduce)").matches
-}
-
-function SettingsTab({ settings, setSettings, deckSize, hasStarter, freshStarter, emptyDeck }: {
-    settings: Settings, setSettings: (s: Settings) => void, deckSize: number, hasStarter: boolean, freshStarter: () => void, emptyDeck: () => void
-}) {
-    const toggle = (key: "collect" | "motion" | "awake", label: string, hint: string) =>
-        <label>
-            <input type="checkbox" checked={settings[key]} onChange={e => setSettings({ ...settings, [key]: e.target.checked })} />
-            <span>{label}<small>{hint}</small></span>
-        </label>
-    return <div className="settings">
-        <label>
-            <Volume style={{ height: "22px", flexShrink: 0 }} />
-            <span style={{ flexGrow: 1 }}>Volume
-                <input type="range" min="0" max="1" step="0.01" value={settings.volume} onChange={e => setSettings({ ...settings, volume: Number(e.target.value) })} />
-            </span>
-        </label>
-        {toggle("collect", "Collect cards", "Add cards to your deck when you scan them or open their links.")}
-        {toggle("motion", "Animations", "Cards that deal, fly and flip.")}
-        {"wakeLock" in navigator && toggle("awake", "Stay awake", "Keep the screen on while a card is playing.")}
-        <button disabled={hasStarter} onClick={freshStarter}>Get a fresh starter pack</button>
-        <button disabled={deckSize === 0} onClick={() => window.confirm(`Throw away all ${deckSize} cards in your deck, and their saved seeds?`) && emptyDeck()}>Empty my deck</button>
-    </div>
-}
-
-// Send a copy of a card flying from the deck onto the player.
-function flyToPlayer(card: HTMLElement) {
-    const table = document.getElementById("table")
-    if (!table || !card.animate || motionOff()) return
-    const from = card.getBoundingClientRect()
-    const to = table.getBoundingClientRect()
-    const copy = card.cloneNode(true) as HTMLElement
-    Object.assign(copy.style, {
-        position: "fixed", left: `${from.left}px`, top: `${from.top}px`, width: `${from.width}px`, height: `${from.height}px`,
-        margin: "0", zIndex: "100", pointerEvents: "none",
-    })
-    document.body.append(copy)
-    const move = `translate(${to.left + to.width / 2 - from.left - from.width / 2}px, ${to.top + to.height / 2 - from.top - from.height / 2}px)`
-    const scale = Math.min(to.width / from.width, to.height / from.height)
-    copy.animate([
-        { transform: "none", opacity: 1 },
-        { transform: `${move} scale(${scale * 0.9}) rotate(6deg)`, opacity: 1, offset: 0.75 },
-        { transform: `${move} scale(${scale})`, opacity: 0 },
-    ], { duration: 450, easing: "cubic-bezier(.3, 0, .2, 1)" }).onfinish = () => copy.remove()
-}
-
-function PlayingCard({ title, size, code, index, selected, loadCard, children }: {
-    title: string, size: number, code: string, index: number, selected: boolean, loadCard: LoadCard, children?: React.ReactNode
-}) {
-    // Cards sit a little crooked in the pile (each always the same way).
-    const tilt = (code.charCodeAt(1) + code.charCodeAt(2) * 3) % 7 - 3
-    const style = { "--tilt": `${tilt}deg`, "--i": Math.min(index, 12) } as React.CSSProperties
-    return <div className={"pcard" + (selected ? " selected" : "")} style={style}>
-        <button className="pcard-face" onClick={e => { flyToPlayer(e.currentTarget); loadCard(code) }}>
-            <span className="pcard-head"><b>{title}</b><span>{size}</span></span>
-            <img src={cardFace(code)} alt="" />
-        </button>
-        {selected && children}
-    </div>
-}
-
-// A sealed pack of cards, waiting in the deck to be torn open.
-function SealedPack({ pack, open }: { pack: Pack, open: () => void }) {
-    const [opening, setOpening] = useState(false)
-    const tear = () => {
-        if (opening) return
-        setOpening(true)
-        setTimeout(open, motionOff() ? 0 : 600)
-    }
-    return <button className={"pack" + (opening ? " opening" : "")} onClick={tear}>
-        <span className="pack-top"></span>
-        <span className="pack-body">
-            <span className="pack-label">
-                <b>{pack.name}</b>
-                <span>{pack.cards.length} {pack.cards.length === 1 ? "card" : "cards"}</span>
-            </span>
-            <span className="pack-hint">Open</span>
-        </span>
-    </button>
-}
-
-// Your collection of cards, which overlap in a pile; the one that's playing is pulled out.
-// Below the pile are any sealed packs (to begin with, a starter pack built from `examples/library`).
-// On wide screens the deck sits beside the player; on narrow ones it's a drawer.
-function Deck({ deck, packs, current, loadCard, discard, openPack, importPack, exportPack, open, setOpen }: {
-    deck: DeckCard[], packs: Pack[], current: string | null, loadCard: LoadCard, discard: (code: string) => void,
-    openPack: (pack: Pack) => void, importPack: (file: File) => void, exportPack: () => void, open: boolean, setOpen: (o: boolean) => void
-}) {
-    const play: LoadCard = (code, seed) => {
-        loadCard(code, seed)
-        setOpen(false)
-    }
-    return <>
-        {/* On narrow screens, the edge of the deck peeks out from the side, to be pulled out. */}
-        <button className="deck-peek" title="Deck" aria-label="Open your deck" onClick={() => setOpen(true)}><span></span><span></span><span></span></button>
-        {open && <div className="deck-scrim" onClick={() => setOpen(false)}></div>}
-        <aside className={"deck" + (open ? " open" : "")}>
-            <div>
-                <h3>
-                    <span>Deck | {deck.length} {deck.length === 1 ? "card" : "cards"}</span>
-                    <button className="deck-close" title="Close" style={{ fontSize: 0 }} onClick={() => setOpen(false)}><Close style={{ height: "18px" }} /></button>
-                </h3>
-                {deck.length === 0 && <p>Cards you scan or open from a link land here. Keep the one you're hearing with <Heart style={{ height: "1em", verticalAlign: "middle" }} />.</p>}
-                <div className="pile">
-                    {deck.map((card, index) =>
-                        <PlayingCard key={card.code} {...card} index={index} selected={card.code === current} loadCard={play}>
-                            <div className="pcard-extras">
-                                {card.description && <div>{card.description}</div>}
-                                {card.seeds.map(seed =>
-                                    <button key={seed} title="Play with this seed" onClick={() => play(card.code, seed)}>{formatSeed(seed)}</button>
-                                )}
-                                <span>{card.seeds.length === 0 && new Date(card.added).toLocaleDateString()}</span>
-                                <button title="Remove from deck" style={{ fontSize: 0 }} onClick={() => discard(card.code)}><Close style={{ height: "14px" }} /></button>
-                            </div>
-                        </PlayingCard>
-                    )}
-                </div>
-                {packs.map(pack => <SealedPack key={pack.id} pack={pack} open={() => openPack(pack)} />)}
-                <div className="deck-actions">
-                    {deck.length > 0 && <button title="Save your deck as a pack file to share" onClick={exportPack}>Wrap as a pack</button>}
-                    <label title="Add a pack from a file">
-                        Add a pack
-                        <input type="file" accept=".json,application/json" onChange={e => {
-                            if (e.target.files?.[0]) importPack(e.target.files[0])
-                            e.target.value = ""
-                        }} />
-                    </label>
-                </div>
-            </div>
-        </aside>
-    </>
-}
-
 const About = memo(function About({ setTab, openDeck }: any) {
     // TODO: Make this text fill the card on both desktop and mobile...
     return <div id="about" style={{ textAlign: "left", padding: "0 12px", containerType: "size", height: "100%" }}>
@@ -758,74 +318,6 @@ const About = memo(function About({ setTab, openDeck }: any) {
         </div>
     </div>
 })
-
-// A card's link carries the program after a "#": the base43-encoded binary, with a locked seed (if
-// any) in front of it. Everything is chosen to pack tightly into a QR code:
-// - The scheme and host are written in capitals. They mean the same either way, but capitals (like
-//   base43's characters) fit QR's compact alphanumeric mode.
-// - After a "#", the program isn't sent to the server when the link is opened, and isn't subject to
-//   the path rules that would mangle it ("/../") or to servers' limits on address length.
-// - An encoded program always begins with "0" (a WebAssembly binary starts with a zero byte), so a
-//   seed is recognizable by not beginning with one: it's six base43 digits, offset to make sure.
-const SEED_OFFSET = 43n ** 5n
-
-function cardFragment(encoded: string, seed?: number) {
-    return (seed === undefined ? "" : encode(BigInt(seed) + SEED_OFFSET)) + encoded
-}
-
-function cardURL(encoded: string, seed?: number) {
-    return `${window.location.origin.toUpperCase()}${window.location.pathname}#${cardFragment(encoded, seed)}`
-}
-
-// Read a card's link: the current form, or the older "?c=<program>&s=<seed>".
-function parseCardURL(text: string) {
-    let url
-    try {
-        url = new URL(text)
-    } catch {
-        return
-    }
-    try {
-        const fragment = url.hash.slice(1)
-        if (fragment.startsWith("0")) {
-            return { binary: decodeBlob(fragment), seed: null }
-        } else if (fragment.length > 6) {
-            return { binary: decodeBlob(fragment.slice(6)), seed: Number(decode(fragment.slice(0, 6)) - SEED_OFFSET) }
-        }
-        // (In a query string, "+" arrives as a space.)
-        const program = url.searchParams.get("c")?.replace(/ /g, "+")
-        const seed = url.searchParams.get("s")?.replace(/ /g, "+")
-        if (program) return { binary: decodeBlob(program), seed: seed ? Number(decode(seed)) : null }
-    } catch {
-        // Not base43.
-    }
-}
-
-// The largest binary (in bytes) whose URL still fits in a QR code when served from this address.
-// Found by asking the QR library directly, since the answer depends on how it packs the URL.
-let _maxCardSize: number | undefined
-function maxCardSize() {
-    if (_maxCardSize !== undefined) return _maxCardSize
-    const fits = (bytes: number) => {
-        // Longest possible encoding of this many bytes.
-        const chars = Math.ceil(bytes * 8 / Math.log2(43))
-        try {
-            QRCode.create(cardURL(":".repeat(chars)), { errorCorrectionLevel: "L" })
-            return true
-        } catch {
-            return false
-        }
-    }
-    let low = 0, high = 4096
-    while (high - low > 1) {
-        const mid = (low + high) >> 1
-        if (fits(mid)) low = mid
-        else high = mid
-    }
-    return _maxCardSize = low
-}
-
-const NO_TITLE = "untitled"
 
 interface TraceData {
     binary: Uint8Array
@@ -856,60 +348,6 @@ let handleTraceLogs: undefined | ((l: number[]) => void)
 //         </div>
 //     </div>
 // })
-
-const starterPack: Pack = { id: "starter", name: "Starter pack", cards: library.map(({ code, title, size, description }) => ({ code, title, size, description, seeds: [] })) }
-
-// Pack files: JSON, with a marker so that we can tell them from anything else.
-const PACK_FORMAT = "scorecard-pack"
-
-// Read a pack file, keeping only what checks out. (Titles and sizes come from the cards themselves.)
-function parsePack(text: string): Pack | undefined {
-    try {
-        const file = JSON.parse(text)
-        if (file?.format !== PACK_FORMAT || !Array.isArray(file.cards)) return
-        const cards = []
-        for (const { code, description, seeds } of file.cards) {
-            let binary
-            try {
-                binary = decodeBlob(code)
-                if (!WebAssembly.validate(binary as BufferSource)) continue
-            } catch {
-                continue
-            }
-            cards.push({
-                code: encodeBlob(binary),
-                title: extractTitle(new WebAssembly.Module(binary as BufferSource)) ?? NO_TITLE,
-                size: binary.length,
-                seeds: Array.isArray(seeds) ? seeds.filter(seed => Number.isInteger(seed) && seed >= 0 && seed < 2 ** 32) : [],
-                ...(typeof description === "string" ? { description: description.slice(0, 200) } : {}),
-            })
-        }
-        if (cards.length === 0) return
-        return { id: `${Date.now()}`, name: String(file.name ?? "Pack").slice(0, 40), cards }
-    } catch {
-        return
-    }
-}
-
-function extractTitle(module: WebAssembly.Module) {
-    const instance = new WebAssembly.Instance(module)
-    // Support new, short export name ("d") or legacy name ("title") for old cards.
-    // (In the future, "d" may contain additional metadata such as an artist name or description.)
-    const data = instance.exports.d ?? instance.exports.title
-    if (data === undefined) {
-        return
-    }
-    const startPtr: number = (data as WebAssembly.Global).value
-    // Support new, short export name ("m") or legacy name ("memory") for old cards.
-    const memory = (instance.exports.m ?? instance.exports.memory) as WebAssembly.Memory
-    const mem = memory.buffer
-    const heap = new Uint8Array(mem)
-    let endPtr = startPtr;
-    while (heap[endPtr] != 0 && endPtr < heap.length) endPtr++
-    const title = (new TextDecoder()).decode(new Uint8Array(mem, startPtr, endPtr - startPtr))
-    console.log("Loaded title", title, "from", startPtr, "to", endPtr)
-    return title
-}
 
 function App() {
     const [title, setTitle] = useState(NO_TITLE)
