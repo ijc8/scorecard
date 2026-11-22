@@ -200,7 +200,7 @@ track_t tracks[2] = {
     {bass_pitches, bass_order, bass_notes},
 };
 
-float clock = STEP_DUR, drum_t[3], kick_phase, hat_lp;
+float tick = STEP_DUR, drum_t[3], kick_phase, hat_lp;
 int step = -1;
 
 // Move a track on by one step, starting its next note when the current one runs out.
@@ -226,8 +226,8 @@ void advance(track_t *track, int bar, int start_of_bar) {
 }
 
 float process() {
-    if (clock >= STEP_DUR) {
-        clock -= STEP_DUR;
+    if (tick >= STEP_DUR) {
+        tick -= STEP_DUR;
         step = (step + 1) % (BARS * 16);
         int bar = step / 16, pos = step % 16;
         for (int i = 0; i < 2; i++) advance(&tracks[i], bar, !pos);
@@ -236,7 +236,7 @@ float process() {
             if (use && drum_patterns[(use - 1) * 3 + i] >> pos & 1) drum_t[i] = 0;
         }
     }
-    clock += dt;
+    tick += dt;
 
     // Lead: a hollow, slightly detuned pair of squares, fading as the note is held.
     track_t *lead = &tracks[0], *bass = &tracks[1];

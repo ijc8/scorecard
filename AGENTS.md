@@ -38,9 +38,11 @@ Other languages (`assemblyscript/`, `faust/`, `rust/`, `zig/`) each have their o
 must produce the same exports.
 
 Root-level `print.py`, `convert-score.py` (In C score importer) and `base43.py` (Python port of the
-encoder) are standalone scripts, not part of the web build. So is `scripts/song2card.py`, which
-transcribes a recording (tempo grid, lead and bass lines, typical drum patterns) into a card's C
-source; `examples/return-true.c` is its output for one song.
+encoder) are standalone scripts, not part of the web build. So are two converters that write a card's C source: `scripts/song2card.py` transcribes a recording
+(tempo grid, lead and bass lines, typical drum patterns), and `scripts/als2card.py` converts the
+MIDI arrangement of an Ableton Live set exactly (drums, being audio loops, are described by hand).
+`examples/return-true.c` is the latter's output for one song, at 2,885 bytes: it only just fits,
+so check the size after changing `deck.h` or the converter's player code.
 
 ## Score card ABI (don't break it)
 
