@@ -38,7 +38,9 @@ Other languages (`assemblyscript/`, `faust/`, `rust/`, `zig/`) each have their o
 must produce the same exports.
 
 Root-level `print.py`, `convert-score.py` (In C score importer) and `base43.py` (Python port of the
-encoder) are standalone scripts, not part of the web build.
+encoder) are standalone scripts, not part of the web build. So is `scripts/song2card.py`, which
+transcribes a recording (tempo grid, lead and bass lines, typical drum patterns) into a card's C
+source; `examples/return-true.c` is its output for one song.
 
 ## Score card ABI (don't break it)
 
@@ -75,7 +77,9 @@ that fallback in `extractTitle` (`src/App.tsx`) and in `public/worklet.js`.
   put). `SourceFace` shows C when the card's source is known (`src/sources.ts`: the starter pack's
   sources ship with the app, and anything compiled here is remembered in localStorage under
   `scorecard-sources`) and the card's disassembly otherwise. Pressing Play on the source face
-  rebuilds the card first if the editor has changed; `startAudio()` is still called synchronously
+  rebuilds the card first if the editor has changed. Syntax colours (`src/highlight.tsx`) come from a
+  highlighted copy of the text drawn behind a transparent textarea, so the two must keep identical
+  text and metrics; `startAudio()` is still called synchronously
   in that gesture, before the (asynchronous) build.
 - `src/compiler.ts` / `src/compiler.worker.ts`: compiling C for the source face. A worker runs Clang and
   LLD (`@yowasp/clang`, ~100 MB of assets, ~27 MB gzipped, fetched on the first compile) against the

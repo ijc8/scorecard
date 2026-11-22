@@ -28,6 +28,7 @@ import { MemoryTrace } from "./memoryTrace"
 import { compileCard } from "./compiler"
 import newCardSource from "./newCard.c?raw"
 import { getSource, saveSource, templates } from "./sources"
+import { highlight } from "./highlight"
 import { getWabt } from './lazyWabt'
 import { initDebug, dlog, DEBUG } from "./debug"
 import Heart from "pixelarticons/svg/heart.svg?react"
@@ -233,15 +234,23 @@ const SourceFace = forwardRef<SourceHandle, {
         }
     }
 
+    const text = mode === "C" ? source : wat
+    const highlighted = useMemo(() => highlight(text, mode), [text, mode])
+    const backdrop = useRef<HTMLPreElement>(null)
     const max = maxCardSize()
     const status = typeof busy === "number" ? `fetching compiler: ${Math.floor(busy * 100)}%`
         : busy ? "building..."
         : dirty ? (/error/.test(log) ? "has errors" : "edited: play to rebuild")
         : binary ? `${max - binary.length} bytes left` : ""
     return <div className="source">
-        <textarea spellCheck={false} autoCapitalize="off" autoCorrect="off" onKeyDown={onKeyDown}
-            value={mode === "C" ? source : wat} onChange={e => mode === "C" ? setSource(e.target.value) : setWAT(e.target.value)}></textarea>
-        {log && <pre>{log}</pre>}
+        <div className="editor">
+            {/* The colours come from a copy of the text behind the (see-through) textarea. */}
+            <pre ref={backdrop} aria-hidden>{highlighted}{"\n"}</pre>
+            <textarea spellCheck={false} autoCapitalize="off" autoCorrect="off" onKeyDown={onKeyDown}
+                onScroll={e => backdrop.current?.scrollTo(e.currentTarget.scrollLeft, e.currentTarget.scrollTop)}
+                value={text} onChange={e => mode === "C" ? setSource(e.target.value) : setWAT(e.target.value)}></textarea>
+        </div>
+        {log && <pre className="log">{log}</pre>}
         <div>
             <div className="modes">
                 {(["C", "Wasm"] as const).map(m =>
