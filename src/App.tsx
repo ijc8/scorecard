@@ -223,12 +223,13 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
         oldTraceLogs.forEach((count, id) => {
             trace!.logs[id] = Math.max(trace!.logs[id] ?? 0, count * 0.6)
         })
-        // TODO: Highlight lines of WAT in Create tab.
-        // trace.logs.forEach((count, id) => {
-        //     for (let line = trace!.map[id].start.line; line < trace!.map[id].end.line; line++) {
-        //         newCounts[line] = count
-        //     }
-        // })
+        if (face === "source") {
+            // On the source side, light up the lines of WebAssembly text that are running.
+            const lines = new Float32Array(trace.map[Object.keys(trace.map).length - 1].end.line + 1)
+            const max = Math.max(...Object.values(trace.logs))
+            trace.logs.forEach((count, id) => lines.fill(count / max, trace!.map[id].start.line, trace!.map[id].end.line))
+            source.current?.showHeat(state === "playing" ? lines : null)
+        }
         draw()
     }
 
@@ -298,7 +299,15 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
                     <Bookmark style={smallIconStyle} />
                 </button>
             </div>
-            <button style={{ fontSize: 0, marginRight: "-5cqw" }} title="Show the card's bits at work" onClick={toggleTracing}>
+            <button style={{ fontSize: 0, marginRight: "-5cqw" }} title="Show the card at work" onClick={() => {
+                // On the source side, tracing lights up lines of the card's WebAssembly text (so turn to that);
+                // otherwise it turns the card over to its bits.
+                if (face === "source") {
+                    if (!tracing) source.current?.showWasm()
+                    else source.current?.showHeat(null)
+                }
+                toggleTracing()
+            }}>
                 <TraceIcon style={{ ...smallIconStyle }} />
             </button>
         </div>
@@ -516,7 +525,13 @@ function App() {
         } else {
             sendToWorklet({ cmd: "loadModule", binary })
         }
-        if (state !== "playing") reset()
+        if (state !== "playing") {
+            reset()
+        } else {
+            // The card has to start over for the change to take hold; keep its seed, so it's the same performance.
+            setTime(0)
+            sendToWorklet({ cmd: "reset", seed })
+        }
     }
 
     const onScan = (data: string, keep = true) => {
@@ -646,11 +661,7 @@ function App() {
     // } , [])
 
     const face: Face = tab === Tab.Create ? "source" : tracing ? "bits" : "qr"
-    const toggleTracing = () => {
-        // From the source side, this turns the card to its bits.
-        if (tab === Tab.Create) setTab(Tab.Listen)
-        setTracing(tab === Tab.Create ? true : !tracing)
-    }
+    const toggleTracing = () => setTracing(!tracing)
     const tabs = [
         { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, face, code, loadBinary, kept: !!deckCard, toggleKept, seedSaved: !!deckCard?.seeds.includes(seed), toggleSeedSaved }} /> },
         { name: "Scan", Icon: Camera, component: <Scan {...{ onScan, tab }} /> },

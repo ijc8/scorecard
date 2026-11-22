@@ -83,9 +83,18 @@ that fallback in `extractTitle` (`src/card.ts`) and in `public/worklet.js`.
   a query string.
 - The big card has three faces: its QR code, its bits (the trace view, via the bullseye) and its
   source (the Create tab, which shows the Listen tab's card turned over, so the transport stays
-  put). `SourceFace` shows C when the card's source is known (`src/sources.ts`: the starter pack's
-  sources ship with the app, and anything compiled here is remembered in localStorage under
-  `scorecard-sources`) and the card's disassembly otherwise. Pressing Play on the source face
+  put). `SourceFace` shows what the card was written in when that's known (`src/sources.ts`: the
+  starter pack's sources ship with the app, and anything built here is remembered in localStorage
+  under `scorecard-sources`) and the card's disassembly otherwise. There are four modes:
+  - **C**, compiled by `src/compiler.ts` (below).
+  - **Beat** (`src/bytebeat.ts`): one bytebeat expression in `t`, translated straight to
+    WebAssembly text and assembled with wabt. No compiler download; division by zero gives 0.
+  - **Pattern** (`src/pattern.ts`): a subset of Tidal/Strudel mini-notation (sequences, `[ ]`,
+    `< >`, `,`, `~`, `*n /n !n @n`; one `sound: pattern` line per layer). The pattern is evaluated
+    in the editor for as many cycles as it takes to repeat, and written out as C (an event list
+    plus a small player) which then goes through the C compiler.
+  - **Wasm**: the tracer's own disassembly (`disassembleWasm`), so that with tracing on, the lines
+    that are running can be lit up (`showHeat`, drawn on a canvas behind the text). Pressing Play on the source face
   rebuilds the card first if the editor has changed. Syntax colours (`src/highlight.tsx`) come from a
   highlighted copy of the text drawn behind a transparent textarea, so the two must keep identical
   text and metrics; `startAudio()` is still called synchronously

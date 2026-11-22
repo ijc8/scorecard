@@ -13,6 +13,18 @@ const languages = {
         /(?<number>\b(?:0x[\da-f]+|\d+\.?\d*(?:e[+-]?\d+)?|\.\d+)[fu]?\b)/,
         new RegExp(`(?<keyword>\\b(?:${C_KEYWORDS.replace(/ /g, "|")})\\b)`),
     ].map(r => r.source).join("|"), "gim"),
+    Beat: new RegExp([
+        /(?<comment>\/\/.*)/,
+        /(?<directive>^[ \t]*@[ \t]*\d+)/,
+        /(?<number>\b(?:0x[\da-f]+|\d+)\b)/,
+        /(?<keyword>\bt\b)/,
+    ].map(r => r.source).join("|"), "gim"),
+    Pattern: new RegExp([
+        /(?<comment>\/\/.*)/,
+        /(?<directive>^[ \t]*\w+[ \t]*:|^[ \t]*(?:cps|bpm)\b)/,
+        /(?<keyword>~|\b(?:bd|sd|hh|cp)\b)/,
+        /(?<number>[*\/!@]\d*)/,
+    ].map(r => r.source).join("|"), "gim"),
     Wasm: new RegExp([
         /(?<comment>;;.*|\(;[\s\S]*?(?:;\)|$))/,
         /(?<string>"(?:\\.|[^"\\\n])*"?)/,

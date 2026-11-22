@@ -459,6 +459,13 @@
     overflow: hidden;
 }
 
+/* (Behind the text: the trace's heat, line by line.) */
+.editor > canvas {
+    padding: 0;
+    width: 100%;
+    height: 100%;
+}
+
 /* The textarea's own text is invisible; only its caret and selection show. */
 .editor > textarea {
     overflow: auto;
@@ -514,7 +521,7 @@
 }
 
 .modes > button {
-    padding: 0 8px;
+    padding: 0 5px;
 }
 
 .modes > button + button {
