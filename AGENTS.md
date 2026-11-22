@@ -54,7 +54,7 @@ that fallback in `extractTitle` (`src/App.tsx`) and in `public/worklet.js`.
 ## Architecture
 
 - `src/App.tsx`: the UI (Listen / Scan / Create / Settings / About tabs, shown as icons, plus the deck) and most app logic.
-  1. URL load, the deck, QR scan, drag-and-drop and Create-tab assembly all call `loadBinary(Uint8Array)`.
+  1. URL load, the deck, QR scan, drag-and-drop and builds from the source face all call `loadBinary(Uint8Array)`.
   2. The binary goes to the AudioWorklet (`public/worklet.js`), which instantiates it and calls
      `p` per sample. **Send the binary, not a `WebAssembly.Module`**: posting a Module breaks on
      iOS Safari.
@@ -70,7 +70,14 @@ that fallback in `extractTitle` (`src/App.tsx`) and in `public/worklet.js`.
 - `src/base43Encoder.ts` (mirrored by `base43.py`): base43 over the QR alphanumeric set minus `%`
   and space, so the binary shares the QR's dense alphanumeric mode with the URL and stays valid in
   a query string.
-- `src/compiler.ts` / `src/compiler.worker.ts`: the Create tab's C mode. A worker runs Clang and
+- The big card has three faces: its QR code, its bits (the trace view, via the bullseye) and its
+  source (the Create tab, which shows the Listen tab's card turned over, so the transport stays
+  put). `SourceFace` shows C when the card's source is known (`src/sources.ts`: the starter pack's
+  sources ship with the app, and anything compiled here is remembered in localStorage under
+  `scorecard-sources`) and the card's disassembly otherwise. Pressing Play on the source face
+  rebuilds the card first if the editor has changed; `startAudio()` is still called synchronously
+  in that gesture, before the (asynchronous) build.
+- `src/compiler.ts` / `src/compiler.worker.ts`: compiling C for the source face. A worker runs Clang and
   LLD (`@yowasp/clang`, ~100 MB of assets, ~27 MB gzipped, fetched on the first compile) against the
   repository's own `examples/deck.h` and `generator.h`, then uses `binaryen` to rename the exports
   and optimize for size, mirroring `examples/build.sh` + `strip.sh` without Emscripten. Output is

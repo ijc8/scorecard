@@ -1,4 +1,4 @@
-import { RefObject, memo, useEffect, useMemo, useRef, useState } from 'react'
+import { RefObject, forwardRef, memo, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import './App.css'
 import QRCode from "qrcode"
 import { encodeBlob, decodeBlob, encode, decode } from "./base43Encoder"
@@ -25,8 +25,9 @@ import logoUrl from "./assets/logo.png"
 import exampleCardUrl from "./assets/example-card.png"
 import { TraceMap, instrumentWasm } from "./wasmTracer"
 import { MemoryTrace } from "./memoryTrace"
-import { CompileResult, compileCard } from "./compiler"
+import { compileCard } from "./compiler"
 import newCardSource from "./newCard.c?raw"
+import { getSource, saveSource, templates } from "./sources"
 import { getWabt } from './lazyWabt'
 import { initDebug, dlog, DEBUG } from "./debug"
 import Heart from "pixelarticons/svg/heart.svg?react"
@@ -118,18 +119,178 @@ function SeedInput({ seed, setSeed }: any) {
     />
 }
 
+function loadScratch() {
+    try {
+        return localStorage.getItem("scorecard-source") ?? newCardSource
+    } catch {
+        return newCardSource
+    }
+}
+
+interface SourceHandle {
+    // Make sure the loaded card is up to date with the editor; resolves to whether it is.
+    build: () => Promise<boolean>
+}
+
+// The third side of a card: its source. That's C if we know it (the starter pack's sources ship with
+// the app, and whatever is compiled here is remembered), and otherwise the WebAssembly text that
+// the card disassembles to. Either can be edited; playing rebuilds the card if it has been.
+const SourceFace = forwardRef<SourceHandle, {
+    binary: Uint8Array | null, code: string | null, loadBinary: (b: Uint8Array) => Promise<void>, active: boolean
+}>(function SourceFace({ binary, code, loadBinary, active }, ref) {
+    const [mode, setMode] = useState<"C" | "Wasm">("C")
+    const [source, _setSource] = useState(loadScratch)
+    const [wat, setWAT] = useState("")
+    const [log, setLog] = useState("")
+    // null: idle; a number: fetching the compiler (0 to 1); true: building.
+    const [busy, setBusy] = useState<number | true | null>(null)
+    // What the loaded card was built from (in each language), to tell whether the editor has moved on.
+    const [builtSource, setBuiltSource] = useState<string | null>(null)
+    const [builtWAT, setBuiltWAT] = useState("")
+    const ownBuild = useRef<Uint8Array | null>(null)
+
+    const setSource = (source: string) => {
+        _setSource(source)
+        try {
+            localStorage.setItem("scorecard-source", source)
+        } catch {}
+    }
+
+    // When another card is loaded, show its source: C if we have it, WebAssembly otherwise.
+    useEffect(() => {
+        if (!code || binary === ownBuild.current) return
+        const known = getSource(code)
+        setLog("")
+        setBuiltSource(known ?? null)
+        if (known === undefined) return setMode("Wasm")
+        _setSource(known)
+        setMode("C")
+    }, [code])
+
+    const disassembled = useRef<Uint8Array | null>(null)
+    useEffect(() => {
+        if (!active || mode !== "Wasm" || !binary || binary === disassembled.current) return
+        disassembled.current = binary
+        getWabt().then(wabt => {
+            const module = wabt.readWasm(binary, { readDebugNames: true })
+            module.applyNames()
+            const text = module.toText({ foldExprs: false, inlineExport: true })
+            module.destroy()
+            setWAT(text)
+            setBuiltWAT(text)
+        })
+    }, [binary, active, mode])
+
+    const dirty = mode === "C" ? source !== builtSource : wat !== builtWAT
+
+    const build = async () => {
+        if (busy !== null) return false
+        if (!dirty && binary) return true
+        setBusy(true)
+        let result: { binary?: Uint8Array, log: string }
+        if (mode === "C") {
+            result = await compileCard(source, fraction => setBusy(fraction < 1 ? fraction : true))
+        } else {
+            const wabt = await getWabt()
+            let module
+            try {
+                module = wabt.parseWat("card.wat", wat)
+                result = { binary: module.toBinary({}).buffer, log: "" }
+            } catch (e: any) {
+                result = { log: String(e.message ?? e).trim() }
+            } finally {
+                module?.destroy()
+            }
+        }
+        setBusy(null)
+        const built = result.binary
+        if (built && built.length > maxCardSize()) {
+            setLog(`${result.log}\nThat makes ${built.length} bytes, which is ${built.length - maxCardSize()} too many to fit in a QR code.`.trim())
+            return false
+        }
+        setLog(result.log.trim())
+        if (!built) return false
+        ownBuild.current = built
+        if (mode === "C") {
+            saveSource(encodeBlob(built), source)
+            setBuiltSource(source)
+        } else {
+            setBuiltWAT(wat)
+            setBuiltSource(null)
+        }
+        await loadBinary(built)
+        return true
+    }
+    useImperativeHandle(ref, () => ({ build }))
+
+    const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+            build()
+        } else if (e.key === "Tab" && !e.shiftKey) {
+            // Indent, rather than leaving the editor.
+            e.preventDefault()
+            document.execCommand("insertText", false, "    ")
+        }
+    }
+
+    const max = maxCardSize()
+    const status = typeof busy === "number" ? `fetching compiler: ${Math.floor(busy * 100)}%`
+        : busy ? "building..."
+        : dirty ? (/error/.test(log) ? "has errors" : "edited: play to rebuild")
+        : binary ? `${max - binary.length} bytes left` : ""
+    return <div className="source">
+        <textarea spellCheck={false} autoCapitalize="off" autoCorrect="off" onKeyDown={onKeyDown}
+            value={mode === "C" ? source : wat} onChange={e => mode === "C" ? setSource(e.target.value) : setWAT(e.target.value)}></textarea>
+        {log && <pre>{log}</pre>}
+        <div>
+            <div className="modes">
+                {(["C", "Wasm"] as const).map(m =>
+                    <button key={m} className={m === mode ? "active" : ""} title={m === "C" ? "Write the card in C" : "The card as WebAssembly text"} onClick={() => { setMode(m); setLog("") }}>{m}</button>
+                )}
+            </div>
+            {mode === "C" && <select value="" title="Start from an example" onChange={e => {
+                if (!dirty || source.trim() === "" || window.confirm("Replace what you've written?")) {
+                    setSource(templates[e.target.value])
+                    setLog("")
+                }
+            }}>
+                <option value="" disabled>New...</option>
+                {Object.keys(templates).map(name => <option key={name}>{name}</option>)}
+            </select>}
+            <span>{status}</span>
+        </div>
+    </div>
+})
+
+type Face = "qr" | "bits" | "source"
+
 // TODO: Specify types
-function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, setTracing, kept, toggleKept, seedSaved, toggleSeedSaved }: {
+function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, kept, toggleKept, seedSaved, toggleSeedSaved, face, code, loadBinary }: {
     qrCanvas: RefObject<HTMLCanvasElement>, title: string, size: number, seed: number, setSeed: (s: number) => void, seedLock: boolean,
     setSeedLock: (l: boolean) => void, state: any, setState: any, time: number, reset: any, error: any, buffer: Uint8Array | null,
-    tracing: boolean, setTracing: (t: boolean) => void,
+    tracing: boolean, toggleTracing: () => void, face: Face, code: string | null, loadBinary: (b: Uint8Array) => Promise<void>,
     kept: boolean, toggleKept: () => void, seedSaved: boolean, toggleSeedSaved: () => void,
 }) {
     const bigIconStyle = { height: "10cqw", verticalAlign: "middle" }
     const smallIconStyle = { height: "5cqw", flexShrink: 0, verticalAlign: "middle" }
     const inlineIconStyle = { height: "11cqh", verticalAlign: "bottom" }
     const DiceIcon = seedLock ? CloseBox : Dice
-    const showMessage = error || (size === 0)
+    // (You can always write a new card, even with nothing loaded.)
+    const showMessage = (error || (size === 0)) && face !== "source"
+
+    // The card has three faces but only two sides, so the face being turned to is put on the side
+    // that's hidden, and then the card is flipped over (always the same way round).
+    const [flip, setFlip] = useState({ turns: 0, face, previous: face, sides: { qr: 0, bits: 1, source: 1 } as { [f in Face]: number } })
+    if (flip.face !== face) {
+        setFlip({ turns: flip.turns + 1, face, previous: flip.face, sides: { ...flip.sides, [face]: (flip.turns + 1) % 2 } })
+    }
+    const faceStyle = (f: Face) => ({
+        transform: `rotateY(${flip.sides[f] * 180}deg)`,
+        visibility: f === flip.face || f === flip.previous ? "inherit" : "hidden",
+    }) as const
+    const source = useRef<SourceHandle>(null)
+    const setStateRef = useRef(setState)
+    setStateRef.current = setState
     // Hacking around unwanted input latency and duplicate events... ugh.
     // We take some pains here so that reset and play/pause respond as quickly as possible,
     // so that a score card can be started in sync with others or "played" rhythmically.
@@ -242,7 +403,18 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
 
     useEffect(draw, [tracing, binary])
 
-    const togglePlay = () => { setState(state === "playing" ? "paused" : "playing") }
+    const togglePlay = async () => {
+        if (state === "playing") return setState("paused")
+        if (face === "source") {
+            // Playing from the source side rebuilds the card first, if the source has changed.
+            // Building takes a moment, so get audio going now, while we're still inside the gesture (for iOS).
+            startAudio()
+            if (!await source.current?.build()) return
+            // (Let the freshly-loaded card settle in before starting it.)
+            await new Promise(resolve => setTimeout(resolve))
+        }
+        setStateRef.current("playing")
+    }
     const TraceIcon = tracing ? BullseyeArrow : Bullseye
     return <div>
         {/* Laid out like the cards in the deck: title and size on top, picture below. */}
@@ -267,10 +439,11 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
                     </>}
                 </div>
             </div>}
-            {/* The card has two sides: the QR code on the front and, for tracing, its bits on the back. */}
-            <div className={"flip" + (tracing ? " flipped" : "")} style={{ visibility: showMessage ? "hidden" : "inherit" }}>
-                <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", display: "block", width: "100%" }} width="1" height="1"></canvas>
-                <canvas ref={traceCanvas} style={{ imageRendering: "pixelated", display: "block", width: "100%" }} width="1" height="1"></canvas>
+            {/* The card's faces: its QR code, its bits (for tracing), and its source. */}
+            <div className="flip" style={{ transform: `perspective(1200px) rotateY(${flip.turns * 180}deg)`, visibility: showMessage ? "hidden" : "inherit" }}>
+                <div style={faceStyle("qr")}><canvas ref={qrCanvas} width="1" height="1"></canvas></div>
+                <div style={faceStyle("bits")}><canvas ref={traceCanvas} width="1" height="1"></canvas></div>
+                <div style={faceStyle("source")}><SourceFace ref={source} {...{ binary, code, loadBinary }} active={face === "source"} /></div>
             </div>
         </div>
         <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", fontSize: "5cqw" }}>
@@ -294,7 +467,7 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
                     <Bookmark style={smallIconStyle} />
                 </button>
             </div>
-            <button style={{ fontSize: 0, marginRight: "-5cqw" }} onClick={() => setTracing(!tracing)}>
+            <button style={{ fontSize: 0, marginRight: "-5cqw" }} title="Show the card's bits at work" onClick={toggleTracing}>
                 <TraceIcon style={{ ...smallIconStyle }} />
             </button>
         </div>
@@ -607,143 +780,6 @@ function maxCardSize() {
     return _maxCardSize = low
 }
 
-// How full the card is, against what fits in a QR code.
-function Budget({ size, status }: { size?: number, status: string }) {
-    const max = maxCardSize()
-    const over = size !== undefined && size > max
-    return <div className={"budget" + (over ? " over" : "")} title="How much of a QR code this card fills">
-        <div style={{ width: `${Math.min((size ?? 0) / max, 1) * 100}%` }}></div>
-        <span>{size === undefined ? status : over ? `${size - max} bytes too big` : `${size} bytes | ${max - size} left`}</span>
-    </div>
-}
-
-// Sources to start from: a blank-ish card, and the starter pack.
-const templates: { [name: string]: string } = { "new card": newCardSource }
-for (const source of Object.values(import.meta.glob("../examples/library/*.c", { query: "?raw", import: "default", eager: true })) as string[]) {
-    templates[source.match(/card_title\("(.*)"\)/)?.[1] ?? "untitled"] = source
-}
-
-function loadSource() {
-    try {
-        return localStorage.getItem("scorecard-source") ?? newCardSource
-    } catch {
-        return newCardSource
-    }
-}
-
-// Write a card in C and compile it right here.
-function CreateC({ loadBinary }: { loadBinary: (b: Uint8Array) => void }) {
-    const [source, _setSource] = useState(loadSource)
-    const [result, setResult] = useState<CompileResult | null>(null)
-    // null: idle; a number: fetching the compiler (0 to 1); true: compiling.
-    const [busy, setBusy] = useState<number | true | null>(null)
-    const setSource = (source: string) => {
-        _setSource(source)
-        try {
-            localStorage.setItem("scorecard-source", source)
-        } catch {}
-    }
-
-    const compile = async () => {
-        setBusy(true)
-        const result = await compileCard(source, fraction => setBusy(fraction < 1 ? fraction : true))
-        setBusy(null)
-        setResult(result)
-        if (result.binary && result.binary.length <= maxCardSize()) loadBinary(result.binary)
-    }
-
-    const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-            compile()
-        } else if (e.key === "Tab" && !e.shiftKey) {
-            // Indent, rather than leaving the editor.
-            e.preventDefault()
-            document.execCommand("insertText", false, "    ")
-        }
-    }
-
-    return <>
-        <select value="" onChange={e => {
-            if (source.trim() === "" || Object.values(templates).includes(source) || window.confirm("Replace what you've written?")) {
-                setSource(templates[e.target.value])
-                setResult(null)
-            }
-        }}>
-            <option value="" disabled>Start from...</option>
-            {Object.keys(templates).map(name => <option key={name}>{name}</option>)}
-        </select>
-        <textarea className="editor" spellCheck={false} autoCapitalize="off" autoCorrect="off" value={source} onChange={e => setSource(e.target.value)} onKeyDown={onKeyDown}></textarea>
-        {result?.log && <pre className="assembler-error">{result.log.trim()}</pre>}
-        <Budget size={result?.binary?.length} status={
-            typeof busy === "number" ? `fetching compiler: ${Math.floor(busy * 100)}%` : busy ? "compiling..." : result ? "can't compile" : "not compiled yet"
-        } />
-        <button disabled={busy !== null} title="Compiling fetches a 27 MB compiler the first time" onClick={compile}>Compile & play</button>
-    </>
-}
-
-// Inspect the loaded card as WebAssembly text, and tweak it.
-function CreateWAT({ binary, loadBinary, wat, setWAT, active }: {
-    binary: Uint8Array | null, loadBinary: (b: Uint8Array) => void, wat: string, setWAT: (w: string) => void, active: boolean
-}) {
-    const oldBinary = useRef<Uint8Array | null>(null)
-    useEffect(() => {
-        if (!active || !binary || binary === oldBinary.current) return
-        oldBinary.current = binary
-        getWabt().then(wabt => {
-            const disassembled = wabt.readWasm(binary, { readDebugNames: true })
-            disassembled.applyNames()
-            setWAT(disassembled.toText({ foldExprs: false, inlineExport: true }))
-        })
-    }, [binary, active])
-
-    // Assemble as you type (after a pause), to show the size budget and any errors.
-    const [assembled, setAssembled] = useState<{ buffer?: Uint8Array, error?: string }>({})
-    useEffect(() => {
-        if (!active) return
-        if (!wat.trim()) return setAssembled({})
-        let current = true
-        const timeout = setTimeout(async () => {
-            const wabt = await getWabt()
-            if (!current) return
-            let module
-            try {
-                module = wabt.parseWat("card.wat", wat)
-                setAssembled({ buffer: module.toBinary({}).buffer })
-            } catch (e: any) {
-                setAssembled({ error: String(e.message ?? e).trim() })
-            } finally {
-                module?.destroy()
-            }
-        }, 300)
-        return () => {
-            current = false
-            clearTimeout(timeout)
-        }
-    }, [wat, active])
-
-    const { buffer, error } = assembled
-    return <>
-        <textarea className="editor" spellCheck={false} autoCapitalize="off" autoCorrect="off" value={wat} onChange={e => setWAT(e.target.value)}></textarea>
-        {error && <pre className="assembler-error">{error}</pre>}
-        <Budget size={buffer?.length} status={error ? "can't assemble" : "nothing to assemble"} />
-        <button id="assemble" disabled={!buffer} onClick={() => loadBinary(buffer!)}>Assemble & play</button>
-    </>
-}
-
-function Create({ binary, loadBinary, wat, setWAT, tab }: {
-    binary: Uint8Array | null, loadBinary: (b: Uint8Array) => void, wat: string, setWAT: (w: string) => void, tab: number
-}) {
-    const [mode, setMode] = useState<"C" | "WebAssembly">("C")
-    return <div className="create">
-        <div className="modes">
-            {(["C", "WebAssembly"] as const).map(m =>
-                <button key={m} className={m === mode ? "active" : ""} title={m === "C" ? "Write a card in C" : "Inspect and tweak the loaded card"} onClick={() => setMode(m)}>{m}</button>
-            )}
-        </div>
-        {mode === "C" ? <CreateC loadBinary={loadBinary} /> : <CreateWAT {...{ binary, loadBinary, wat, setWAT, active: tab === Tab.Create }} />}
-    </div>
-}
-
 const NO_TITLE = "untitled"
 
 interface TraceData {
@@ -836,7 +872,6 @@ function App() {
     const [seed, setSeed] = useState(0)
     const [seedLock, setSeedLock] = useState(false)
     const [binary, setBinary] = useState<Uint8Array | null>(null)
-    const [wat, setWAT] = useState("")
     // const [link, setLink] = useState("")
     // const [download, setDownload] = useState("")
     const [state, _setState] = useState("stopped")
@@ -954,7 +989,8 @@ function App() {
         }
         // setLink(url)
         // setDownload(window.URL.createObjectURL(new Blob([buffer])))
-        setTab(Tab.Listen)
+        // Show the card (unless it's being worked on, in which case stay on its source side).
+        setTab(tab => tab === Tab.Create ? tab : Tab.Listen)
         qrContents.current = seedLock ? [binary, seed] : [binary]
     }, [binary, seed, seedLock])
 
@@ -1138,10 +1174,17 @@ function App() {
     //     })();
     // } , [])
 
+    const face: Face = tab === Tab.Create ? "source" : tracing ? "bits" : "qr"
+    const toggleTracing = () => {
+        // From the source side, this turns the card to its bits.
+        if (tab === Tab.Create) setTab(Tab.Listen)
+        setTracing(tab === Tab.Create ? true : !tracing)
+    }
     const tabs = [
-        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, setTracing, kept: !!deckCard, toggleKept, seedSaved: !!deckCard?.seeds.includes(seed), toggleSeedSaved }} /> },
+        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, face, code, loadBinary, kept: !!deckCard, toggleKept, seedSaved: !!deckCard?.seeds.includes(seed), toggleSeedSaved }} /> },
         { name: "Scan", Icon: Camera, component: <Scan {...{ onScan, tab }} /> },
-        { name: "Create", Icon: EditBox, component: <Create {...{ binary, loadBinary, wat, setWAT, tab }} /> },
+        // Creating happens on the back of the card, so this tab shows the Listen tab's card turned over.
+        { name: "Create", Icon: EditBox, component: null },
         { name: "Settings", Icon: Sliders, component: <SettingsTab {...{
             settings, setSettings, deckSize: deck.length, hasStarter: packs.some(pack => pack.id === starterPack.id),
             freshStarter: () => { setPacks(savePacks([...packs, starterPack])); setDeckOpen(true) },
@@ -1158,8 +1201,8 @@ function App() {
             <div style={{ margin: "20px" }} >
                 <h1 style={{ margin: "0 0 20px 0" }}><a href="/"><img src={logoUrl} style={{ imageRendering: "pixelated", width: "100%" }} /></a></h1>
                 <div style={{ display: "flex" }}>
-                    {tabs.map(({ component }, index) =>
-                        <div key={index} style={{ display: "flex", flexDirection: "column", justifyContent: "center", visibility: index === tab ? "visible" : "hidden", width: "100%", marginRight: "-100%" }}>{component}</div>
+                    {tabs.map(({ component }, index) => component &&
+                        <div key={index} style={{ display: "flex", flexDirection: "column", justifyContent: "center", visibility: index === tab || (index === Tab.Listen && tab === Tab.Create) ? "visible" : "hidden", width: "100%", marginRight: "-100%" }}>{component}</div>
                     )}
                 </div>
             </div>

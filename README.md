@@ -26,7 +26,7 @@ Score cards can be created in the web app directly in the "Create" tab, which al
 It also shows you the disassembly of any program that's currently loaded, allowing you to tweak it by hacking the assembly.
 (In the future, we may include some higher-level ways of creating ScoreCards inside the app.)
 
-Score cards can also be written in C, as are most of the examples in this repository. The player's Create tab includes a C editor and compiler (with `deck.h` available), so you can write, compile and play a card without installing anything.
+Score cards can also be written in C, as are most of the examples in this repository. The player's Create tab turns the card over to its source, with a C editor and compiler built in (and `deck.h` available), so you can write, compile and play a card without installing anything.
 Writing score cards in C requires a compiler toolchain that can target WebAssembly such as [emscripten](https://emscripten.org/).
 Fortunately, **the [ScoreCard Creator](https://ijc8.me/scorecard-creator/) allows you to write score cards in C directly in your browser**, without installing anything, thanks to [emception](https://github.com/jprendes/emception)!
 
