@@ -8,7 +8,7 @@ Every MIDI track's arrangement clips are unrolled (loops included) and snapped t
 track is given one of four built-in instruments by its name (organ, bass, horns, lead). Audio
 tracks can't be read (the samples aren't in the set), so drums are described by hand:
 
-    --loop KICK,SNARE,HAT   a two-bar drum pattern, as three 32-bit hit masks (bit 0 = first sixteenth)
+    --loop KICK,SNARE,HAT   a four-bar drum pattern, as three 64-bit hit masks (bit 0 = first sixteenth)
     --loop-bars 3-12,19-28  the bars (from 0, end exclusive) in which that pattern plays
     --shaker-bars 4-44      bars with a steady shaker
 
@@ -195,7 +195,7 @@ def main():
         c_array("bars", "uint8_t", data),
         "// Notes that repeat at a steady interval: instrument and pitch; first step (11 bits) and interval - 1 (5 bits); count.",
         c_array("streams", "uint8_t", streams),
-        c_array("drum_loop", "uint32_t", [int(x, 0) for x in args.loop.split(",")], "0x{:x}"),
+        c_array("drum_loop", "uint64_t", [int(x, 0) for x in args.loop.split(",")], "0x{:x}"),
         c_array("drum_bars", "uint8_t", [sum(drums[b + i] << 2 * i for i in range(4) if b + i < bars) for b in range(0, bars, 4)]),
         PLAYER]))
 
@@ -215,7 +215,8 @@ typedef struct {
 
 voice_t voices[VOICES];
 int next_voice, step = -1;
-float tick = STEP_DUR, drum_t[3] = {9, 9, 9}, kick_phase;
+// Each drum's level falls from 1 (when it's hit) to 0.
+float tick = STEP_DUR, drums[3], kick_phase;
 unsigned int rng;
 
 void play(int item, int steps) {
@@ -256,12 +257,12 @@ float process() {
             int since = step - (s[1] | (s[2] & 7) << 8), every = (s[2] >> 3) + 1;
             if (since >= 0 && since % every == 0 && since / every < s[3]) play(*s, 1);
         }
-        int drums = drum_bars[bar / 4] >> bar % 4 * 2;
+        int on = drum_bars[bar / 4] >> bar % 4 * 2;
         for (int i = 0; i < 3; i++) {
-            if (drums & 1 && drum_loop[i] >> step % 32 & 1) drum_t[i] = 0;
+            if (on & 1 && drum_loop[i] >> step % 64 & 1) drums[i] = 1;
         }
         // The shaker: every sixteenth, leaning on the eighths.
-        if (drums & 2) drum_t[2] = pos % 2 ? 0.025f : 0.01f;
+        if (on & 2 && drums[2] < 0.5f) drums[2] = pos % 2 ? 0.4f : 0.7f;
     }
     tick += dt;
 
@@ -281,14 +282,14 @@ float process() {
     // Drums: a falling triangle for the kick, and noise bursts (a short one for the hat).
     // (A tiny random number generator of our own is smaller than the C library's.)
     rng = rng * 1664525 + 1013904223;
-    float n = (int)rng * 4.656613e-10f, e;
-    if (drum_t[0] < 0.2f) {
-        e = env(drum_t[0], 0.2f);
-        out += (fabsf(saw(&kick_phase, 45 + 160 * e * e)) * 2 - 1) * e * 0.35f;
+    float n = (int)rng * 4.656613e-10f, e = drums[0] * drums[0];
+    out += (fabsf(saw(&kick_phase, 45 + 160 * e * e)) * 2 - 1) * e * 0.35f;
+    out += n * (drums[1] * drums[1] * 0.12f + drums[2] * drums[2] * 0.06f);
+    for (int i = 0; i < 3; i++) {
+        // (They die away at different rates: kick, snare, hat.)
+        drums[i] -= dt * (5 + i * i * 5);
+        if (drums[i] < 0) drums[i] = 0;
     }
-    if (drum_t[1] < 0.12f) out += n * env(drum_t[1], 0.12f) * 0.12f;
-    if (drum_t[2] < 0.04f) out += n * env(drum_t[2], 0.04f) * 0.06f;
-    for (int i = 0; i < 3; i++) drum_t[i] += dt;
     return out;
 }
 """
