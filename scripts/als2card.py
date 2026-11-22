@@ -10,7 +10,10 @@ tracks can't be read (the samples aren't in the set), so drums are described by 
 
     --loop KICK,SNARE,HAT   a four-bar drum pattern, as three 64-bit hit masks (bit 0 = first sixteenth)
     --loop-bars 3-12,19-28  the bars (from 0, end exclusive) in which that pattern plays
-    --shaker-bars 4-44      bars with a steady shaker
+    --shaker-bars 4-44      bars with a steady shaker (eighth notes)
+
+The masks can be read off the loop's audio: slice it into sixteenths and look at which slices
+have a burst of low (kick), mid (snare) or only high (hat) energy.
 
 To fit, bars that repeat are stored once; a note is two bytes, and a pitch that's hit several
 times in a bar with short notes is stored as a three-byte hit mask instead.
@@ -261,8 +264,8 @@ float process() {
         for (int i = 0; i < 3; i++) {
             if (on & 1 && drum_loop[i] >> step % 64 & 1) drums[i] = 1;
         }
-        // The shaker: every sixteenth, leaning on the eighths.
-        if (on & 2 && drums[2] < 0.5f) drums[2] = pos % 2 ? 0.4f : 0.7f;
+        // The shaker: every eighth, leaning on the beats.
+        if (on & 2 && pos % 2 == 0 && drums[2] < 0.5f) drums[2] = pos % 4 ? 0.4f : 0.7f;
     }
     tick += dt;
 
