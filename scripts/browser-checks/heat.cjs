@@ -1,0 +1,25 @@
+const { chromium } = require('playwright');
+(async () => {
+  const S = process.argv[2]
+  const lib = require(require('path').join(__dirname, '../../src/library.json'))
+  const browser = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] })
+  const page = await browser.newPage({ viewport: { width: 1000, height: 860 }, deviceScaleFactor: 2 })
+  page.on("pageerror", e => console.log("ERR", e.message))
+  const play = async () => { const b = await page.locator("#start").boundingBox(); await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2); await page.mouse.down(); await page.mouse.up() }
+  const lit = () => page.evaluate(() => { const c = document.querySelector(".editor canvas"); const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return n })
+  await page.goto("http://localhost:4173/#" + lib[2].code); await page.waitForTimeout(700)
+  await page.click(".tabs button[title='Create']"); await page.waitForTimeout(600)
+  await play(); await page.waitForTimeout(800)
+  console.log("mode before:", await page.locator(".modes .active").innerText(), "| lit:", await lit())
+  await page.locator(".play-controls > button").last().click(); await page.waitForTimeout(2500)
+  console.log("tracing on while playing -> mode:", await page.locator(".modes .active").innerText(), "| lit pixels:", await lit(), "| tab:", await page.locator(".tabs button.active").getAttribute("title"))
+  await page.locator("#table").screenshot({ path: `${S}/m-heat.png` })
+  await page.locator(".editor textarea").evaluate(t => { t.scrollTop = 900; t.dispatchEvent(new Event("scroll")) }); await page.waitForTimeout(300)
+  console.log("scrolled, lit:", await lit())
+  await page.locator(".play-controls > button").last().click(); await page.waitForTimeout(500)
+  console.log("tracing off, lit:", await lit())
+  await page.click(".tabs button[title='Listen']"); await page.waitForTimeout(800)
+  await page.locator(".play-controls > button").last().click(); await page.waitForTimeout(1500)
+  await page.locator("#table").screenshot({ path: `${S}/m-bits.png` })
+  await browser.close()
+})()

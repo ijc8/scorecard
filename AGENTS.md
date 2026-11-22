@@ -48,7 +48,11 @@ so check the size after changing `deck.h` or the converter's player code.
 ## Score card ABI (don't break it)
 
 A scorecard `.wasm` exports:
-- `p`: `() -> f32`, called once per sample at 44.1 kHz. **Required.**
+- `p`: `() -> f32`, called once per sample at 44.1 kHz. **Required.** It may instead be
+  `(f32) -> f32`, which makes the card an effect: the argument is a sample from the microphone
+  (in C: `#define INPUT` before including `deck.h`). The player tells the two apart by the
+  exported function's `length`, and only asks for the microphone for cards that take input,
+  while they're playing (`setInputWanted` in `src/audio.ts`).
 - `s`: `(i32) -> ()`, optional setup taking a seed.
 - `d`: optional `i32` global pointing to a zero-terminated UTF-8 title. If present, memory must be
   exported as `m`.

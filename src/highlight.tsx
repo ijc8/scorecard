@@ -23,7 +23,7 @@ const languages = {
         /(?<comment>\/\/.*)/,
         /(?<directive>^[ \t]*\w+[ \t]*:|^[ \t]*(?:cps|bpm)\b)/,
         /(?<keyword>~|\b(?:bd|sd|hh|cp)\b)/,
-        /(?<number>[*\/!@]\d*)/,
+        /(?<number>[*/!@]\d*)/,
     ].map(r => r.source).join("|"), "gim"),
     Wasm: new RegExp([
         /(?<comment>;;.*|\(;[\s\S]*?(?:;\)|$))/,

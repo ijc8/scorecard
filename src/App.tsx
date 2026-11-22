@@ -1,7 +1,8 @@
 import { RefObject, memo, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import { Tab } from "./tabs"
-import { NO_TITLE, cardFragment, cardURL, extractTitle, formatTime, formatSeed, generateSeed, parseCardURL } from "./card"
+import { NO_TITLE, cardFragment, cardURL, extractTitle, formatTime, formatSeed, generateSeed, parseCardURL, takesInput } from "./card"
+import AudioDevice from "pixelarticons/svg/audio-device.svg?react"
 import { Face, SourceFace, SourceHandle } from "./SourceFace"
 import { Scan } from "./Scan"
 import { Settings, SettingsTab, loadSettings } from "./Settings"
@@ -37,7 +38,7 @@ import Headphone from "pixelarticons/svg/headphone.svg?react"
 import Sliders from "pixelarticons/svg/sliders.svg?react"
 import InfoBox from "pixelarticons/svg/info-box.svg?react"
 import { Pack, addCard, addPack, clearDeck, loadDeck, loadPacks, removeCard, savePacks, toggleSeed } from "./deck"
-import { audioDebugSnapshot, audioHealthy, onStall, sendToWorklet, setWorkletMessageHandler, startAudio } from "./audio"
+import { audioDebugSnapshot, audioHealthy, onStall, sendToWorklet, setEchoCancellation, setInputWanted, setWorkletMessageHandler, startAudio } from "./audio"
 
 
 initDebug(audioDebugSnapshot)
@@ -96,8 +97,8 @@ function SeedInput({ seed, setSeed }: any) {
 }
 
 // TODO: Specify types
-function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, kept, toggleKept, seedSaved, toggleSeedSaved, face, code, loadBinary }: {
-    qrCanvas: RefObject<HTMLCanvasElement>, title: string, size: number, seed: number, setSeed: (s: number) => void, seedLock: boolean,
+function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, kept, toggleKept, seedSaved, toggleSeedSaved, face, code, loadBinary }: {
+    qrCanvas: RefObject<HTMLCanvasElement>, title: string, listens: boolean, size: number, seed: number, setSeed: (s: number) => void, seedLock: boolean,
     setSeedLock: (l: boolean) => void, state: any, setState: any, time: number, reset: any, error: any, buffer: Uint8Array | null,
     tracing: boolean, toggleTracing: () => void, face: Face, code: string | null, loadBinary: (b: Uint8Array) => Promise<void>,
     kept: boolean, toggleKept: () => void, seedSaved: boolean, toggleSeedSaved: () => void,
@@ -252,7 +253,9 @@ function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, s
         {/* Laid out like the cards in the deck: title and size on top, picture below. */}
         <h2 style={{ userSelect: "none", margin: "0 0 12px", fontSize: "6cqw", fontWeight: "normal", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", textAlign: "left", lineHeight: 1.2 }}>
             <span>{title}</span>
-            <span style={{ whiteSpace: "nowrap" }}>{size} bytes {/* TODO: add link and perhaps download buttons with icons */}
+            <span style={{ whiteSpace: "nowrap" }}>
+                {listens && <span title="This card listens: it plays what the microphone hears, changed"><AudioDevice style={{ height: "6cqw", verticalAlign: "middle" }} /> </span>}
+                {size} bytes {/* TODO: add link and perhaps download buttons with icons */}
                 {binary && <button className={"toggle" + (kept ? " on" : "")} title={kept ? "Remove from deck" : "Keep in deck"} style={{ fontSize: 0, border: "none", padding: "0 0 0 6px" }} onClick={toggleKept}>
                     <Heart style={{ height: "6cqw", verticalAlign: "middle" }} />
                 </button>}
@@ -360,6 +363,7 @@ let handleTraceLogs: undefined | ((l: number[]) => void)
 
 function App() {
     const [title, setTitle] = useState(NO_TITLE)
+    const [listens, setListens] = useState(false)
     const [size, setSize] = useState(0)
     const [seed, setSeed] = useState(0)
     const [seedLock, setSeedLock] = useState(false)
@@ -387,6 +391,7 @@ function App() {
     useEffect(() => {
         document.documentElement.classList.toggle("still", !settings.motion)
     }, [settings.motion])
+    useEffect(() => setEchoCancellation(settings.echo), [settings.echo])
     useEffect(() => {
         // Squared, so the slider feels even to the ear.
         sendToWorklet({ cmd: "volume", value: settings.volume ** 2 })
@@ -432,6 +437,10 @@ function App() {
         console.log("loaded wasm", module)
         const title = extractTitle(module) ?? NO_TITLE
         setTitle(title)
+        // A card whose process function takes a sample in is an effect, and gets the microphone.
+        const listens = takesInput(module)
+        setListens(listens)
+        setInputWanted(listens)
         if (keep && settings.collect) setDeck(deck => addCard(deck, binary, title))
         if (seed !== undefined) setSeedLock(seed !== null)
 
@@ -663,7 +672,7 @@ function App() {
     const face: Face = tab === Tab.Create ? "source" : tracing ? "bits" : "qr"
     const toggleTracing = () => setTracing(!tracing)
     const tabs = [
-        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, face, code, loadBinary, kept: !!deckCard, toggleKept, seedSaved: !!deckCard?.seeds.includes(seed), toggleSeedSaved }} /> },
+        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, listens, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, face, code, loadBinary, kept: !!deckCard, toggleKept, seedSaved: !!deckCard?.seeds.includes(seed), toggleSeedSaved }} /> },
         { name: "Scan", Icon: Camera, component: <Scan {...{ onScan, tab }} /> },
         // Creating happens on the back of the card, so this tab shows the Listen tab's card turned over.
         { name: "Create", Icon: EditBox, component: null },

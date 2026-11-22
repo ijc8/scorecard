@@ -130,3 +130,10 @@ export function extractTitle(module: WebAssembly.Module) {
     return title
 }
 
+
+// Does the card take sound in? That is: does its process function take a sample, as well as returning one?
+export function takesInput(module: WebAssembly.Module) {
+    const instance = new WebAssembly.Instance(module)
+    const process = (instance.exports.p ?? instance.exports.process) as ((...args: number[]) => number) | undefined
+    return !!process && process.length > 0
+}

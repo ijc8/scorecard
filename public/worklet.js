@@ -36,6 +36,7 @@ class CustomProcessor extends AudioWorkletProcessor {
         this.playing = false
         this.pos = 0
         this.volume = 1
+        this.inputPeak = 0
         this.port.onmessage = async e => {
             if (e.data.cmd === "loadModule") {
                 this.module = new WebAssembly.Module(e.data.binary)
@@ -97,16 +98,22 @@ class CustomProcessor extends AudioWorkletProcessor {
         // Support new, short export name ("p") or legacy name ("process") for old cards.
         const process = this.wasm.exports.p ?? this.wasm.exports.process
         const speakers = outputs[0]
+        // Incoming sound (the microphone), for cards whose process function takes a sample in.
+        // It's only connected for those; other cards just ignore the argument.
+        const input = inputs[0]?.[0]
 
         for (let i = 0; i < speakers[0].length; i++) {
-            const x = process() * this.volume
+            const x = process(input ? input[i] : 0) * this.volume
             for (const channel of speakers) {
                 channel[i] = x
             }
+            if (input && Math.abs(input[i]) > this.inputPeak) this.inputPeak = Math.abs(input[i])
         }
 
         this.pos += 128
         if (this.pos % 1024 === 0) {
+            if (input) this.port.postMessage({ inputPeak: this.inputPeak })
+            this.inputPeak = 0
             this.port.postMessage(this.pos)
             if (this.traceLogs) this.postTrace()
         }

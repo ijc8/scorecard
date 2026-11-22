@@ -35,6 +35,8 @@ A modest library for writing scorecards in C is provided in the form of [`deck.h
 
 The player's deck collects the cards you scan, and comes with a starter pack of ready-made ones. Their sources live in [`examples/library`](examples/library); after adding or changing one, run [`examples/library/build.sh`](examples/library/build.sh) to rebuild them all and regenerate the index the deck reads (`src/library.json`).
 
+A card can also be an effect: if its process function takes a sample as well as returning one, the player feeds it the microphone ([`examples/canyon.c`](examples/canyon.c)).
+
 Other languages you might be interested in exploring for use with ScoreCard include Zig, Rust, Go, and Faust. [`strip.sh`](examples/strip.sh) may also be helpful in these cases for removing or renaming exports.
 
 ## Links

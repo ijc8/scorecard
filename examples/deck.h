@@ -4,7 +4,13 @@
     #include <emscripten.h>
 
     EMSCRIPTEN_KEEPALIVE void setup(unsigned int seed);
-    EMSCRIPTEN_KEEPALIVE float process();
+    // A card that defines INPUT before including this file is an effect: its process() is handed
+    // a sample of incoming sound (from the microphone) each time, as `float process(float in)`.
+    #ifdef INPUT
+        EMSCRIPTEN_KEEPALIVE float process(float in);
+    #else
+        EMSCRIPTEN_KEEPALIVE float process();
+    #endif
 
     #define debug(...)
 #else
@@ -19,14 +25,25 @@
     #define debug(...) fprintf(stderr, __VA_ARGS__)
 
     void setup(unsigned int seed) __attribute__((weak));
-    float process();
+    #ifdef INPUT
+        float process(float in);
+    #else
+        float process();
+    #endif
 
     int main() {
         if (setup) {
             setup(time(NULL));
         }
         for (;;) {
-            float x = process();
+            #ifdef INPUT
+                // An effect reads its input (raw f32 samples, like its output) from stdin.
+                float in = 0;
+                if (!fread(&in, 4, 1, stdin)) return 0;
+                float x = process(in);
+            #else
+                float x = process();
+            #endif
             fwrite(&x, 4, 1, stdout);
         }
         return 0;

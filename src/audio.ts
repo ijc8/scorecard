@@ -27,6 +27,13 @@ let moduleMessage: any = null
 let wantPlaying = false
 let seed = 0
 let volume = 1
+// For cards that take sound in: whether the loaded card does, and the microphone while it's in use.
+let inputWanted = false
+let echoCancellation = true
+let micStream: MediaStream | null = null
+let micRequest = 0
+let micSource: MediaStreamAudioSourceNode | null = null
+let inputPeak = 0
 let lastPos = 0
 let onWorkletMessage: (e: MessageEvent) => void = () => {}
 // Last sample of the audio clock, taken by the watchdog.
@@ -61,6 +68,10 @@ function createContext() {
         node.connect(c.destination)
         node.port.onmessage = e => {
             if (typeof e.data === "number") lastPos = e.data
+            if (e.data?.inputPeak !== undefined) {
+                inputPeak = e.data.inputPeak
+                return
+            }
             onWorkletMessage(e)
         }
         // Bring a replacement node to where the old one was: same binary, same seed.
@@ -69,6 +80,58 @@ function createContext() {
         if (moduleMessage && wantPlaying) node.port.postMessage({ cmd: "play", seed })
         return node
     })
+    // A microphone that was feeding the old context has to be plugged into the new one.
+    micSource = null
+    attachMic()
+}
+
+function attachMic() {
+    const stream = micStream, c = ctx, p = nodePromise
+    if (!stream) return
+    p.then(node => {
+        if (p !== nodePromise || stream !== micStream) return
+        micSource?.disconnect()
+        micSource = c.createMediaStreamSource(stream)
+        micSource.connect(node)
+    })
+}
+
+function releaseMic() {
+    micRequest++ // (so that a request still in flight is dropped when it arrives)
+    micSource?.disconnect()
+    micSource = null
+    micStream?.getTracks().forEach(track => track.stop())
+    micStream = null
+    inputPeak = 0
+}
+
+// The microphone is only held while a card that listens is playing.
+function acquireMic() {
+    if (micStream || !navigator.mediaDevices?.getUserMedia) return
+    const request = ++micRequest
+    // Echo cancellation keeps the card from hearing itself through the speaker (and howling). The
+    // other "call" processing would only get in the way of sound that isn't speech.
+    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation, noiseSuppression: false, autoGainControl: false } }).then(stream => {
+        if (request !== micRequest) return stream.getTracks().forEach(track => track.stop())
+        micStream = stream
+        attachMic()
+    }).catch(e => dlog("microphone unavailable", String(e)))
+}
+
+// Tell the engine whether the loaded card takes sound in.
+export function setInputWanted(wanted: boolean) {
+    inputWanted = wanted
+    if (!wanted) releaseMic()
+    else if (wantPlaying) acquireMic()
+}
+
+export function setEchoCancellation(on: boolean) {
+    if (on === echoCancellation) return
+    echoCancellation = on
+    if (micStream) {
+        releaseMic()
+        acquireMic()
+    }
 }
 
 function tryResume() {
@@ -106,7 +169,9 @@ function iOS() {
 let unmuteTag: HTMLAudioElement | null = null
 function unmute() {
     const session = (navigator as any).audioSession
-    if (session && session.type !== "playback") session.type = "playback"
+    // (Listening as well as playing needs the other kind of session.)
+    const type = inputWanted ? "play-and-record" : "playback"
+    if (session && session.type !== type) session.type = type
     if (!iOS()) return
     if (!unmuteTag) {
         unmuteTag = document.createElement("audio")
@@ -135,8 +200,10 @@ export function sendToWorklet(message: any) {
     if (message.cmd === "play") {
         wantPlaying = true
         frozenSince = null
+        if (inputWanted) acquireMic()
     } else if (message.cmd === "pause") {
         wantPlaying = false
+        releaseMic()
     }
     const p = nodePromise
     p.then(node => {
@@ -159,6 +226,7 @@ export function audioDebugSnapshot() {
     return {
         state: ctx.state, currentTime: ctx.currentTime, advancing: sample.advancing, workletPos: lastPos,
         wantPlaying, wasInterrupted, session: (navigator as any).audioSession?.type,
+        mic: micStream ? `live (peak ${inputPeak.toFixed(3)})` : inputWanted ? "wanted" : "none",
         unmuteTag: unmuteTag ? (unmuteTag.paused ? "paused" : "playing") : "none",
     }
 }
