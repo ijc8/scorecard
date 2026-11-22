@@ -22,7 +22,7 @@ Verify changes by building and by playing a card in a browser.
 
 Fastest dev loop: `npm run dev`, then drag a `.wasm` from `examples/` onto the page. Scan, Create
 and drag-and-drop all go through the same `loadBinary` path. To make a card URL from a `.wasm`,
-base43-encode it (`base43.py`) into `?c=…`.
+base43-encode it (`base43.py`) and put it after a `#`.
 
 C examples (`examples/`):
 - `./build.sh foo.c`: emscripten (`-Oz`, no entry, only `_process` exported), then `strip.sh`.
@@ -62,8 +62,11 @@ that fallback in `extractTitle` (`src/App.tsx`) and in `public/worklet.js`.
   2. The binary goes to the AudioWorklet (`public/worklet.js`), which instantiates it and calls
      `p` per sample. **Send the binary, not a `WebAssembly.Module`**: posting a Module breaks on
      iOS Safari.
-  3. The binary is base43-encoded back into the URL (`?c=…`, plus `s=…` for a locked seed) and
-     rendered as a QR (`qrcode` lib); `history.pushState` keeps the address bar in sync, so the
+  3. The binary is base43-encoded back into the URL and rendered as a QR (`qrcode` lib). The link
+     is `SCHEME://HOST/path#[seed]program`: scheme and host in capitals so they share QR's
+     alphanumeric mode, and the program after `#` so it isn't sent to the server. A locked seed is
+     six base43 digits in front (offset so it never starts with `0`, which every program does).
+     The older `?c=program&s=seed` links, as on printed cards, must keep working (`parseCardURL`); `history.pushState` keeps the address bar in sync, so the
      page itself is the shareable card.
   4. The title is read by instantiating the module a second time on the main thread.
 - `src/audio.ts`: owns the AudioContext and worklet node, and keeps playback working on iOS.

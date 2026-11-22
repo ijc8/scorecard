@@ -759,10 +759,46 @@ const About = memo(function About({ setTab, openDeck }: any) {
     </div>
 })
 
+// A card's link carries the program after a "#": the base43-encoded binary, with a locked seed (if
+// any) in front of it. Everything is chosen to pack tightly into a QR code:
+// - The scheme and host are written in capitals. They mean the same either way, but capitals (like
+//   base43's characters) fit QR's compact alphanumeric mode.
+// - After a "#", the program isn't sent to the server when the link is opened, and isn't subject to
+//   the path rules that would mangle it ("/../") or to servers' limits on address length.
+// - An encoded program always begins with "0" (a WebAssembly binary starts with a zero byte), so a
+//   seed is recognizable by not beginning with one: it's six base43 digits, offset to make sure.
+const SEED_OFFSET = 43n ** 5n
+
+function cardFragment(encoded: string, seed?: number) {
+    return (seed === undefined ? "" : encode(BigInt(seed) + SEED_OFFSET)) + encoded
+}
+
 function cardURL(encoded: string, seed?: number) {
-    const prefix = window.location.origin + window.location.pathname.replace(/\/$/, "") // trim trailing slash
-    const seedParam = seed === undefined ? "" : `s=${encode(BigInt(seed))}&`
-    return `${prefix}?${seedParam}c=${encoded}`
+    return `${window.location.origin.toUpperCase()}${window.location.pathname}#${cardFragment(encoded, seed)}`
+}
+
+// Read a card's link: the current form, or the older "?c=<program>&s=<seed>".
+function parseCardURL(text: string) {
+    let url
+    try {
+        url = new URL(text)
+    } catch {
+        return
+    }
+    try {
+        const fragment = url.hash.slice(1)
+        if (fragment.startsWith("0")) {
+            return { binary: decodeBlob(fragment), seed: null }
+        } else if (fragment.length > 6) {
+            return { binary: decodeBlob(fragment.slice(6)), seed: Number(decode(fragment.slice(0, 6)) - SEED_OFFSET) }
+        }
+        // (In a query string, "+" arrives as a space.)
+        const program = url.searchParams.get("c")?.replace(/ /g, "+")
+        const seed = url.searchParams.get("s")?.replace(/ /g, "+")
+        if (program) return { binary: decodeBlob(program), seed: seed ? Number(decode(seed)) : null }
+    } catch {
+        // Not base43.
+    }
 }
 
 // The largest binary (in bytes) whose URL still fits in a QR code when served from this address.
@@ -886,7 +922,7 @@ function App() {
     const [state, _setState] = useState("stopped")
     const [time, setTime] = useState(0)
     const [error, setError] = useState(false)
-    const encoded = new URLSearchParams(window.location.search).get("c")
+    const encoded = parseCardURL(window.location.href)
     const [tab, setTab] = useState(encoded ? Tab.Listen : Tab.About)
     const [dragging, setDragging] = useState(false)
     const qrCanvas = useRef<HTMLCanvasElement>(null)
@@ -992,7 +1028,7 @@ function App() {
         canvas.style.cssText = style
         // (The state marks this entry as ours, so that reloading the page doesn't count as following a link.)
         try {
-            window.history.pushState({ loaded: true }, "", DEBUG ? url.replace("?", "?debug&") : url)
+            window.history.pushState({ loaded: true }, "", `${window.location.pathname}${DEBUG ? "?debug" : ""}#${cardFragment(encodeBlob(binary), seedLock ? seed : undefined)}`)
         } catch {
             // Some embeddings don't allow changing the address; the card still plays.
         }
@@ -1047,25 +1083,9 @@ function App() {
 
     const onScan = (data: string, keep = true) => {
         // Return value indicates whether the string contains a valid ScoreCard URL.
-        let url
-        try {
-            url = new URL(data)
-        } catch {
-            return false
-        }
-        const encodedBlob = url.searchParams.get("c")
-        if (!encodedBlob) return false
-
-        const encodedSeed = url.searchParams.get("s")
-        const seed = encodedSeed ? Number(decode(encodedSeed.replace(/ /g, "+"))) : null
-        let buffer
-        try {
-            buffer = decodeBlob(encodedBlob.replace(/ /g, "+"))
-        } catch {
-            return false
-        }
-        if (!WebAssembly.validate(buffer as BufferSource)) return false
-        loadBinary(buffer, { keep, seed })
+        const card = parseCardURL(data)
+        if (!card || !WebAssembly.validate(card.binary as BufferSource)) return false
+        loadBinary(card.binary, { keep, seed: card.seed })
         return true
     }
 
@@ -1073,6 +1093,10 @@ function App() {
         // Collect the card if we got here by following a link (or scanning with another app),
         // but not if this is just a reload of a card that was loaded some other way.
         onScan(window.location.href, !window.history.state?.loaded)
+        // Following a link to another card from here only changes what's after the "#", which doesn't reload the page.
+        const onHashChange = () => onScanRef.current(window.location.href)
+        window.addEventListener("hashchange", onHashChange)
+        return () => window.removeEventListener("hashchange", onHashChange)
     }, [])
 
     const openPack = (pack: Pack) => {
