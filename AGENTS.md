@@ -61,6 +61,17 @@ A scorecard `.wasm` exports:
 - `d`: optional `i32` global pointing to a zero-terminated UTF-8 title. If present, memory must be
   exported as `m`.
 
+- `g`: `(i32) -> i32`, optional and **experimental** (11-24): the card generates another card, which
+  is played in its place. `g` takes the seed and returns an address in `m`: a 32-bit little-endian
+  length, then that many bytes of WebAssembly. The result may export `g` in turn (up to 8 times);
+  the last one is the card (`p`, `s`, `d` as above), and nothing carries over to it but the seed
+  and whatever the generator wrote into it. It happens afresh at each setup. A card with `g` needn't
+  have `p`. `generateCard` (`src/card.ts`) and `public/worklet.js` implement it; the title, the
+  trace view and the Wasm source shown are the generated card's, the size and QR code the
+  generator's. `scripts/pack-card.mjs` uses it to pack a card smaller: a ~450-byte unpacker
+  (context-mixing arithmetic decoder, in WebAssembly text in that script) plus the packed card.
+  Not settled: whether this stays, the name, and generating during play.
+
 The player also accepts the legacy names (`process`/`setup`/`title`/`memory`) for old cards. Keep
 that fallback in `extractTitle` (`src/card.ts`) and in `public/worklet.js`.
 

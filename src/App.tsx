@@ -1,7 +1,7 @@
 import { RefObject, memo, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import { Tab } from "./tabs"
-import { NO_TITLE, cardFragment, cardURL, extractTitle, formatTime, formatSeed, generateSeed, parseCardURL, takesInput } from "./card"
+import { NO_TITLE, cardFragment, cardURL, extractTitle, generateCard, formatTime, formatSeed, generateSeed, parseCardURL, takesInput } from "./card"
 import AudioDevice from "pixelarticons/svg/audio-device.svg?react"
 import { Face, SourceFace, SourceHandle } from "./SourceFace"
 import { Scan } from "./Scan"
@@ -110,9 +110,9 @@ function SeedInput({ seed, setSeed }: any) {
 }
 
 // TODO: Specify types
-function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, kept, toggleKept, face, code, loadBinary, rolodex, loadCard, lockSeed, printed, description, turnOver, pile }: {
+function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, played, tracing, toggleTracing, kept, toggleKept, face, code, loadBinary, rolodex, loadCard, lockSeed, printed, description, turnOver, pile }: {
     qrCanvas: RefObject<HTMLCanvasElement>, title: string, listens: boolean, size: number, seed: number, setSeed: (s: number) => void, seedLock: boolean,
-    state: any, setState: any, time: number, reset: any, error: any, buffer: Uint8Array | null,
+    state: any, setState: any, time: number, reset: any, error: any, buffer: Uint8Array | null, played: Uint8Array | null,
     tracing: boolean, toggleTracing: () => void, face: Face, code: string | null, loadBinary: (b: Uint8Array) => Promise<void>,
     kept: boolean, toggleKept: () => void, lockSeed: (lock: boolean) => void,
     rolodex: DeckCard[] | null, loadCard: LoadCard,
@@ -206,10 +206,12 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
     const draw = () => {
         if (trace && !tracing) trace.logs.length = 0
         if (!tracing || !traceCanvas.current || !binary) return
+        // (The bits shown are those of the card that's running: for a card that generates another, the other.)
+        const shown = played ?? binary
         const canvas = traceCanvas.current
         const context = canvas.getContext("2d")!
         // Arrange the bits in the top four-fifths of a square, leaving the rest for memory.
-        const bits = binary.length * 8
+        const bits = shown.length * 8
         const size = Math.ceil(Math.sqrt(bits / 0.8))
         const bandStart = (Math.ceil(bits / size) + 1) * size
         canvas.width = size
@@ -227,7 +229,7 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
         const paintRead = (i: number, heat: number) => heat && paint(i, 0, 110, 255, heat * 0.7)
         const paintWrite = (i: number, heat: number) => heat && paint(i, 255, 50, 0, heat * 0.7)
         for (let i = 0; i < bits; i++) {
-            if ((binary[i >> 3] >> (i % 8)) & 1) paint(i, 204, 204, 255)
+            if ((shown[i >> 3] >> (i % 8)) & 1) paint(i, 204, 204, 255)
         }
         if (trace && state === "playing") {
             const max = Math.max(...Object.values(trace.logs))
@@ -274,7 +276,7 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
         draw()
     }
 
-    useEffect(draw, [tracing, binary])
+    useEffect(draw, [tracing, binary, played])
 
     const togglePlay = async () => {
         if (state === "playing") return setState("paused")
@@ -345,7 +347,7 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
             </div>
             <div className="side back" style={{ visibility: side ? "inherit" : "hidden" }} {...(side ? {} : { inert: "" })}>
                 {printed ? <div className="card-foot"><div className="card-name"><span>{title}</span><span>|&nbsp;{size}</span></div></div> : header}
-                <div className="square"><SourceFace ref={source} {...{ binary, code, loadBinary }} active={face === "source"} /></div>
+                <div className="square"><SourceFace ref={source} {...{ binary: played ?? binary, code, loadBinary }} active={face === "source"} /></div>
             </div>
         </div>
         {/* The player's own controls (in the printed look, on a console the tabs hang from). */}
@@ -503,6 +505,8 @@ function App() {
     const [seed, setSeed] = useState(0)
     const [seedLock, setSeedLock] = useState(false)
     const [binary, setBinary] = useState<Uint8Array | null>(null)
+    // The card that's running: `binary`, or what that generated.
+    const [played, setPlayed] = useState<Uint8Array | null>(null)
     // const [link, setLink] = useState("")
     // const [download, setDownload] = useState("")
     const [state, _setState] = useState("stopped")
@@ -577,9 +581,12 @@ function App() {
     // `keep` adds the card to the deck. `seed` loads the card with that seed locked in, or (if null)
     // unlocked with a fresh seed; by default the seed lock is left as it is.
     const loadBinary = async (binary: Uint8Array, { keep, seed }: { keep?: boolean, seed?: number | null } = {}) => {
-        const module = new WebAssembly.Module(binary as BufferSource)
+        // The card that plays is the one given, unless it generates another (see `generateCard`):
+        // then its title, and what tracing shows, are those of the card it writes.
+        const played = await generateCard(binary, seed ?? 0)
+        const module = await WebAssembly.compile(played as BufferSource)
         setSize(binary.length)
-        console.log("loaded wasm", module)
+        console.log("loaded wasm", module, played === binary ? "" : `(generated: ${played.length} bytes from ${binary.length})`)
         const title = extractTitle(module) ?? NO_TITLE
         setTitle(title)
         // A card whose process function takes a sample in is an effect, and gets the microphone.
@@ -592,13 +599,15 @@ function App() {
         // Send to AudioWorklet
         // NOTE: We send the binary here because sending the WebAssembly.Module doesn't work in iOS Safari...
         if (tracing) {
-            await setupTracing(binary)
+            await setupTracing(played)
             sendToWorklet({ cmd: "loadModule", binary: trace!.binary, trace: true })
         } else {
             trace = null
+            // (The worklet has the card generate again for each performance, with that performance's seed.)
             sendToWorklet({ cmd: "loadModule", binary })
         }
         setBinary(binary)
+        setPlayed(played)
         reset(seed)
     }
     const loadBinaryRef = useRef(loadBinary)
@@ -674,7 +683,7 @@ function App() {
         if (!binary) return
         if (tracing) {
             if (!trace) {
-                await setupTracing(binary)
+                await setupTracing(played ?? binary)
             }
             sendToWorklet({ cmd: "loadModule", binary: trace!.binary, trace: true })
         } else {
@@ -866,7 +875,7 @@ function App() {
     const face: Face = tab === Tab.Create ? "source" : tracing ? "bits" : "qr"
     const toggleTracing = () => setTracing(!tracing)
     const tabs = [
-        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, face, code, loadBinary, kept: !!deckCard, toggleKept, lockSeed, printed: settings.look === "printed", description: deckCard?.description ?? library.find(card => card.code === code)?.description, turnOver: () => setTab(tab === Tab.Create ? Tab.Listen : Tab.Create), rolodex: settings.deckStyle === "rolodex" && !pile ? deck : null, loadCard, pile }} /> },
+        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, played, tracing, toggleTracing, face, code, loadBinary, kept: !!deckCard, toggleKept, lockSeed, printed: settings.look === "printed", description: deckCard?.description ?? library.find(card => card.code === code)?.description, turnOver: () => setTab(tab === Tab.Create ? Tab.Listen : Tab.Create), rolodex: settings.deckStyle === "rolodex" && !pile ? deck : null, loadCard, pile }} /> },
         { name: "Scan", Icon: Camera, component: <Scan {...{ onScan, tab }} /> },
         // Creating happens on the back of the card, so this tab shows the Listen tab's card turned over.
         { name: "Create", Icon: EditBox, component: null },

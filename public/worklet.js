@@ -86,6 +86,15 @@ class CustomProcessor extends AudioWorkletProcessor {
         } else {
             this.traceLogs = null
             this.wasm = await WebAssembly.instantiate(this.module)
+            // A card may write another card, to be played in its place (and that one another, a few
+            // times over): `g` takes the seed and says where in memory the new card is, as a 32-bit
+            // length followed by that many bytes. (When tracing, this has been done already.)
+            for (let generation = 0; this.wasm.exports.g && generation < 8; generation++) {
+                const memory = (this.wasm.exports.m ?? this.wasm.exports.memory).buffer
+                const at = this.wasm.exports.g(seed) >>> 0
+                const length = new DataView(memory).getUint32(at, true)
+                this.wasm = await WebAssembly.instantiate(new WebAssembly.Module(memory.slice(at + 4, at + 4 + length)))
+            }
         }
 
         // Support new, short export name ("s") or legacy name ("setup") for old cards.
@@ -112,6 +121,7 @@ class CustomProcessor extends AudioWorkletProcessor {
 
         // Support new, short export name ("p") or legacy name ("process") for old cards.
         const process = this.wasm.exports.p ?? this.wasm.exports.process
+        if (!process) return true
         const speakers = outputs[0]
         // Incoming sound (the microphone), for cards whose process function takes a sample in.
         // It's only connected for those; other cards just ignore the argument.

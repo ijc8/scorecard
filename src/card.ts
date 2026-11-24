@@ -137,3 +137,25 @@ export function takesInput(module: WebAssembly.Module) {
     const process = (instance.exports.p ?? instance.exports.process) as ((...args: number[]) => number) | undefined
     return !!process && process.length > 0
 }
+
+// A card may write another card and have that played in its place: if it exports `g`, a function
+// from the seed to an address in its memory, the player calls it and takes what's there (a 32-bit
+// length, then that many bytes of WebAssembly) as the card. That one may do the same, a few times
+// over. (So a card can carry a program packed smaller than the program itself, along with what
+// unpacks it; or write a different program for each seed.) Returns the card that ends up playing:
+// the one given, unless it generates another.
+export const MAX_GENERATIONS = 8
+const MAX_GENERATED = 1 << 20
+export async function generateCard(binary: Uint8Array, seed: number): Promise<Uint8Array> {
+    for (let generation = 0; generation <= MAX_GENERATIONS; generation++) {
+        // (Asynchronously: browsers won't compile more than 4 KB at once on the main thread.)
+        const { exports } = (await WebAssembly.instantiate(binary as BufferSource)).instance
+        if (typeof exports.g !== "function") return binary
+        const memory = (exports.m ?? exports.memory) as WebAssembly.Memory
+        const at = (exports.g as (seed: number) => number)(seed) >>> 0
+        const length = new DataView(memory.buffer).getUint32(at, true)
+        if (length > MAX_GENERATED) throw new Error("The card generated too large a card")
+        binary = new Uint8Array(memory.buffer.slice(at + 4, at + 4 + length))
+    }
+    throw new Error("The card kept generating cards")
+}
