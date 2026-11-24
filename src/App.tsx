@@ -9,6 +9,7 @@ import { Settings, SettingsTab, loadSettings } from "./Settings"
 import { Deck, LoadCard, PACK_FORMAT, parsePack, starterPack } from "./Deck"
 import library from "./library.json"
 import { RolodexTops, neighbour, useRolodex } from "./Rolodex"
+import { StackNav, useDissolve, useSwipe, wipe } from "./Stack"
 import { holdMediaSession, useMediaSession } from "./mediaSession"
 import { DeckCard } from "./deck"
 import QRCode from "qrcode"
@@ -103,21 +104,25 @@ function SeedInput({ seed, setSeed }: any) {
 }
 
 // TODO: Specify types
-function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, kept, toggleKept, face, code, loadBinary, rolodex, loadCard, lockSeed, printed, description, turnOver }: {
+function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, kept, toggleKept, face, code, loadBinary, rolodex, loadCard, lockSeed, printed, description, turnOver, stack, openDeck }: {
     qrCanvas: RefObject<HTMLCanvasElement>, title: string, listens: boolean, size: number, seed: number, setSeed: (s: number) => void, seedLock: boolean,
     state: any, setState: any, time: number, reset: any, error: any, buffer: Uint8Array | null,
     tracing: boolean, toggleTracing: () => void, face: Face, code: string | null, loadBinary: (b: Uint8Array) => Promise<void>,
     kept: boolean, toggleKept: () => void, lockSeed: (lock: boolean) => void,
     rolodex: DeckCard[] | null, loadCard: LoadCard,
     printed: boolean, description?: string, turnOver: () => void,
+    stack: { deck: DeckCard[], step: (direction: 1 | -1) => void } | null, openDeck: () => void,
 }) {
     const { swipe } = useRolodex(rolodex ?? [], code, loadCard)
+    const sideSwipe = useSwipe(direction => stack?.step(direction))
     const bigIconStyle = { height: "10cqw", verticalAlign: "middle" }
     const smallIconStyle = { height: "5cqw", flexShrink: 0, verticalAlign: "middle" }
     const inlineIconStyle = { height: "11cqh", verticalAlign: "bottom" }
     const DiceIcon = seedLock ? CloseBox : Dice
     // (You can always write a new card, even with nothing loaded.)
     const showMessage = (error || (size === 0)) && face !== "source"
+    // (In the stack look, the QR code dissolves into the card's bits.)
+    const dissolve = useDissolve(tracing && !showMessage)
 
     // The card has two sides: the front (its QR code, which tracing sees through to its bits) and
     // the back (its source). Turning it over always goes the same way round.
@@ -287,10 +292,10 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
         <div className="card3d" style={{ transform: `perspective(2000px) rotateY(${flip.turns * 180}deg)` }}>
             <div className="side" style={{ visibility: side ? "hidden" : "inherit" }} {...(side ? { inert: "" } : {})}>
                 {printed ? <img className="wordmark" src={logoUrl} alt="ScoreCard" /> : header}
-                <div className="square" {...(rolodex ? { ...swipe, style: { touchAction: "none" } } : {})}>
+                <div className="square" {...(rolodex ? { ...swipe, style: { touchAction: "none" } } : stack ? sideSwipe : {})}>
                     <canvas ref={qrCanvas} width="1" height="1" style={{ visibility: showMessage ? "hidden" : "inherit" }}></canvas>
                     {/* Tracing: the card's bits, seen through the QR code. */}
-                    <canvas ref={traceCanvas} width="1" height="1" className="xray" style={{ opacity: tracing && !showMessage ? 1 : 0 }}></canvas>
+                    <canvas ref={traceCanvas} width="1" height="1" className="xray" style={stack ? dissolve : { opacity: tracing && !showMessage ? 1 : 0 }}></canvas>
                 {showMessage && <div style={{ position: "absolute", fontSize: "48px", height: "100%", width: "100%", userSelect: "none" }}>
                     <div style={{ border: "16px solid black", height: "100%", containerType: "size", lineHeight: 1, display: "flex", flexDirection: "column", justifyContent: "space-evenly" }}>
                         {error ? <>
@@ -335,6 +340,7 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
                 <button className={printing !== null ? "on" : ""} title="Print this card, or save it as a picture" onClick={() => setPrinting(printing === null ? "" : null)}><Printer />Print</button>
                 {listens && <span title="This card listens: it plays what the microphone hears, changed"><AudioDevice />Listens</span>}
             </div>}
+            {stack && <StackNav deck={stack.deck} current={code} step={stack.step} openDeck={openDeck} />}
             {printed && binary && printing !== null && <div className="tray">
                 {canPrintDirectly() && <button title="Print on a Bluetooth thermal printer (paired with this device)" onClick={async () => {
                     try {
@@ -692,7 +698,9 @@ function App() {
     const loadCard: LoadCard = (code, seed) => loadBinary(decodeBlob(code), { seed: seed ?? null })
     const stepDeck = (direction: number) => {
         const card = neighbour(deck, code, direction)
-        if (card && card.code !== code) loadCard(card.code)
+        if (!card || card.code === code) return
+        if (settings.look === "stack") wipe(direction > 0 ? 1 : -1)
+        loadCard(card.code)
     }
     useMediaSession(title, state === "playing", qrCanvas.current, binary, {
         play: () => setState("playing"),
@@ -791,7 +799,7 @@ function App() {
     const face: Face = tab === Tab.Create ? "source" : tracing ? "bits" : "qr"
     const toggleTracing = () => setTracing(!tracing)
     const tabs = [
-        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, face, code, loadBinary, kept: !!deckCard, toggleKept, lockSeed, printed: settings.look === "printed", description: deckCard?.description ?? library.find(card => card.code === code)?.description, turnOver: () => setTab(tab === Tab.Create ? Tab.Listen : Tab.Create), rolodex: settings.deckStyle === "rolodex" ? deck : null, loadCard }} /> },
+        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, face, code, loadBinary, kept: !!deckCard, toggleKept, lockSeed, printed: settings.look === "printed", description: deckCard?.description ?? library.find(card => card.code === code)?.description, turnOver: () => setTab(tab === Tab.Create ? Tab.Listen : Tab.Create), rolodex: settings.deckStyle === "rolodex" ? deck : null, loadCard, stack: settings.look === "stack" ? { deck, step: stepDeck } : null, openDeck }} /> },
         { name: "Scan", Icon: Camera, component: <Scan {...{ onScan, tab }} /> },
         // Creating happens on the back of the card, so this tab shows the Listen tab's card turned over.
         { name: "Create", Icon: EditBox, component: null },
@@ -806,7 +814,7 @@ function App() {
     const border = `1px ${dragging ? "dashed" : "solid"} black`
     return <div id="layout">
     <Deck {...{ deck, packs, openPack, importPack, exportPack, current: code, loadCard, discard: (code: string) => setDeck(removeCard(deck, code)), open: deckOpen, setOpen: setDeckOpen }} />
-    <div id="app" className={settings.look === "printed" ? "printed" + (new URLSearchParams(location.search).has("console") ? " console-look" : "") : ""} style={{ display: "flex", flexDirection: "column", alignItems: "stretch", containerType: "inline-size", borderTop: border }}>
+    <div id="app" className={settings.look === "printed" ? "printed" + (new URLSearchParams(location.search).has("console") ? " console-look" : "") : settings.look === "stack" ? "stack" : ""} style={{ display: "flex", flexDirection: "column", alignItems: "stretch", containerType: "inline-size", borderTop: border }}>
         <div style={{ borderLeft: border, borderRight: border, margin: "0 -1px" }}>
             <div style={{ margin: "20px" }} >
                 <h1 className="app-logo" style={{ margin: "0 0 20px 0" }}><a href="/"><img src={logoUrl} style={{ imageRendering: "pixelated", width: "100%" }} /></a></h1>

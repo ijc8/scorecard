@@ -979,3 +979,51 @@
     border-bottom: none;
     border-radius: 3cqw 3cqw 0 0;
 }
+
+/* The stack look (a mock): the classic panel as one card of a stack, after HyperCard. Arrows on its
+   background step through the deck; see Stack.tsx. */
+.stack-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 3cqw;
+    font-size: 5cqw;
+    line-height: 1;
+    user-select: none;
+}
+
+.stack-nav > button {
+    border: none;
+    padding: 0;
+    background: none;
+    font: inherit;
+    cursor: pointer;
+}
+
+.stack-nav svg {
+    display: block;
+    height: 9cqw;
+    width: 9cqw;
+}
+
+.stack-nav > button:disabled {
+    opacity: 0.25;
+    cursor: default;
+}
+
+/* (A button as the old Mac drew them: a round-cornered box.) */
+.stack-nav > .stack-count {
+    padding: 0.25em 0.9em;
+    border: 1px solid black;
+    border-radius: 0.5em;
+}
+
+.stack-nav > .stack-count:active {
+    background: black;
+    color: white;
+}
+
+/* The count opens the deck, so the pile peeking from the side of the screen isn't needed. */
+#layout:has(#app.stack) .deck-peek {
+    display: none;
+}
