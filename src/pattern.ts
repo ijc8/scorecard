@@ -11,9 +11,10 @@
 // After any step: *n plays it n times as fast, /n slows it, !n repeats it, @n makes it n times as long.
 // Notes are names (c, eb3, f#4; octave 3 unless given) or MIDI numbers; drums are bd, sd, hh, cp.
 //
-// The pattern is worked out here, for as many cycles as it takes to come back round, and written
-// out as a list of events with a small player, in C. That goes through the same compiler as any
-// other card (so the first one needs the compiler fetched).
+// The pattern is worked out here, for as many cycles as it takes to come back round, as a list of
+// events. They're added as data to a player that's built ahead of time (examples/pattern-player.c),
+// so patterns don't need the C compiler.
+import playerBase64 from "./patternPlayer"
 
 class PatternError extends Error {}
 
@@ -152,8 +153,8 @@ function parse(text: string, drums: boolean): Pattern {
 const SOUNDS = ["saw", "sqr", "tri", "sine", "drums"]
 const MAX_CYCLES = 64, MAX_TICKS = 65535
 
-// Returns the card's C source, or throws a PatternError describing what's wrong.
-export function patternToC(source: string) {
+// Works out the pattern's events, or throws a PatternError describing what's wrong.
+function patternEvents(source: string) {
     let title = "", cps = 0.5
     const layers: { sound: number, pattern: Pattern }[] = []
     for (const line of source.split("\n")) {
@@ -186,86 +187,85 @@ export function patternToC(source: string) {
         length: Math.min(Math.max(Math.round(e.length[0] * ticks / e.length[1]), 1), 255),
         sound: e.sound, value: e.value,
     })).sort((a, b) => a.tick - b.tick)
-    const list = (values: number[]) => values.join(",")
-    return `// Written by the ScoreCard player, from this pattern:
-${source.trim().split("\n").map(line => "//   " + line).join("\n")}
-#include "deck.h"
-${title ? `\ncard_title(${JSON.stringify(title)});\n` : ""}
-#define TICK_DUR ${(1 / cps / ticks).toFixed(7)}f
-#define TICKS ${ticks * cycles}
-#define VOICES 8
-enum { SAW, SQR, TRI, SINE, DRUMS };
-
-// Every event, in order: when it starts (in ticks), what it is (a pitch or a drum), how long it lasts and how it sounds.
-const uint16_t when[] = {${list(timed.map(e => e.tick))}};
-const uint8_t what[] = {${list(timed.map(e => e.value))}};
-const uint8_t lengths[] = {${list(timed.map(e => e.length))}};
-const uint8_t sounds[] = {${list(timed.map(e => e.sound))}};
-
-typedef struct {
-    float freq, phase, t, dur;
-    int sound;
-} voice_t;
-
-voice_t voices[VOICES];
-// Each drum's level falls from 1 (when it's hit) to 0.
-float timer = TICK_DUR, drums[4], kick_phase;
-int next_voice, tick = -1, event;
-unsigned int rng;
-
-float process() {
-    if (timer >= TICK_DUR) {
-        timer -= TICK_DUR;
-        if (++tick == TICKS) tick = event = 0;
-        for (; event < SIZEOF(when) && when[event] == tick; event++) {
-            if (sounds[event] == DRUMS) {
-                drums[what[event]] = 1;
-            } else {
-                voice_t *v = &voices[next_voice++ % VOICES];
-                v->sound = sounds[event];
-                v->freq = m2f(what[event]);
-                v->dur = lengths[event] * TICK_DUR;
-                v->t = 0;
-            }
-        }
-    }
-    timer += dt;
-
-    float out = 0;
-    for (int i = 0; i < VOICES; i++) {
-        voice_t *v = &voices[i];
-        float left = (v->dur - v->t) * 30;
-        if (left <= 0) continue;
-        float x = v->sound == SINE ? sine(&v->phase, v->freq) : saw(&v->phase, v->freq);
-        if (v->sound == SQR) x = x < 0 ? -0.6f : 0.6f;
-        if (v->sound == TRI) x = fabsf(x) * 2 - 1;
-        // Fade in quickly, and out at the end of the note.
-        float e = v->t * 200;
-        if (e > 1) e = 1;
-        if (left < 1) e *= left;
-        out += x * e * 0.15f;
-        v->t += dt;
-    }
-
-    // Drums: a falling triangle for the kick, and noise bursts of different lengths for the rest.
-    rng = rng * 1664525 + 1013904223;
-    float n = (int)rng * 4.656613e-10f, e = drums[0] * drums[0];
-    out += (fabsf(saw(&kick_phase, 45 + 160 * e * e)) * 2 - 1) * e * 0.4f;
-    out += n * (drums[1] * drums[1] * 0.2f + drums[2] * drums[2] * 0.08f + drums[3] * drums[3] * 0.15f);
-    const float fall[] = {5, 9, 25, 14};
-    for (int i = 0; i < 4; i++) {
-        drums[i] -= dt * fall[i];
-        if (drums[i] < 0) drums[i] = 0;
-    }
-    return out;
-}
-`
+    return { title, tickDur: 1 / cps / ticks, ticks: ticks * cycles, events: timed }
 }
 
-// For callers: the C source, or what's wrong with the pattern.
-export function compilePattern(source: string): { c?: string, log: string } {
+// The player, and where it expects to find the pattern (see examples/pattern-player.c).
+const player = Uint8Array.from(atob(playerBase64), c => c.charCodeAt(0))
+const PATTERN = 0x20000
+
+const leb = (n: number) => {
+    const bytes = []
+    do {
+        bytes.push(n & 0x7f | (n >= 0x80 ? 0x80 : 0))
+        n >>>= 7
+    } while (n)
+    return bytes
+}
+const sleb = (n: number) => {
+    const bytes = []
+    for (;;) {
+        const byte = n & 0x7f
+        n >>= 7
+        if ((n === 0 && !(byte & 0x40)) || (n === -1 && byte & 0x40)) return [...bytes, byte]
+        bytes.push(byte | 0x80)
+    }
+}
+
+// Adds the pattern to the player: a data segment, and a global pointing at its title, exported as "d".
+// (This leans on the player as built: it has no globals and no title, but a data count section.)
+function addPattern(data: Uint8Array, titleOffset: number | null) {
+    const sections: { id: number, body: number[] }[] = []
+    for (let p = 8; p < player.length;) {
+        const id = player[p++]
+        let size = 0, shift = 0, byte
+        do {
+            byte = player[p++]
+            size |= (byte & 0x7f) << shift
+            shift += 7
+        } while (byte & 0x80)
+        sections.push({ id, body: [...player.subarray(p, p + size)] })
+        p += size
+    }
+    // Vectors here have fewer than 128 entries, so their counts are one byte.
+    const append = (id: number, entry: number[]) => {
+        const section = sections.find(s => s.id === id)!
+        section.body[0]++
+        section.body.push(...entry)
+    }
+    const order = [1, 2, 3, 4, 5, 13, 6, 7, 8, 9, 12, 10, 11]
+    if (titleOffset !== null) sections.splice(sections.findIndex(s => order.indexOf(s.id) > order.indexOf(6)), 0, { id: 6, body: [0] })
+    if (titleOffset !== null) {
+        append(6, [0x7f, 0, 0x41, ...sleb(PATTERN + titleOffset), 0x0b])
+        append(7, [1, "d".charCodeAt(0), 3, 0])
+    }
+    append(12, [])
+    append(11, [0, 0x41, ...sleb(PATTERN), 0x0b, ...leb(data.length), ...data])
+    return new Uint8Array([...player.subarray(0, 8), ...sections.flatMap(({ id, body }) => [id, ...leb(body.length), ...body])])
+}
+
+export function patternToCard(source: string) {
+    const { title, tickDur, ticks, events } = patternEvents(source)
+    const titleBytes = new TextEncoder().encode(title)
+    const n = events.length
+    if (n > 0xffff) throw new PatternError("there are too many notes in this")
+    const data = new Uint8Array(8 + 5 * n + (title ? titleBytes.length + 1 : 0))
+    const view = new DataView(data.buffer)
+    view.setFloat32(0, tickDur, true)
+    view.setUint16(4, ticks, true)
+    view.setUint16(6, n, true)
+    events.forEach((e, i) => {
+        view.setUint16(8 + 5 * i, e.tick, true)
+        data.set([e.value, e.length, e.sound], 8 + 5 * i + 2)
+    })
+    data.set(titleBytes, 8 + 5 * n)
+    return addPattern(data, title ? 8 + 5 * n : null)
+}
+
+// For callers: the card, or what's wrong with the pattern.
+export function compilePattern(source: string): { binary?: Uint8Array, log: string } {
     try {
-        return { c: patternToC(source), log: "" }
+        return { binary: patternToCard(source), log: "" }
     } catch (e: any) {
         if (e instanceof PatternError) return { log: e.message }
         throw e

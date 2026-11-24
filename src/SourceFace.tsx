@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react"
 import { encodeBlob } from "./base43Encoder"
-import { compileCard } from "./compiler"
+import { CompileStage, cancelCompile, compileCard } from "./compiler"
 import { compileBytebeat } from "./bytebeat"
 import { compilePattern } from "./pattern"
 import { Language, getSource, saveSource, templates } from "./sources"
@@ -56,8 +56,15 @@ export const SourceFace = forwardRef<SourceHandle, {
     const [texts, setTexts] = useState(loadScratch)
     const [wat, setWAT] = useState("")
     const [log, setLog] = useState("")
-    // null: idle; a number: fetching the compiler (0 to 1); true: building.
-    const [busy, setBusy] = useState<number | true | null>(null)
+    // null: idle; otherwise, what the build is up to, and since when.
+    const [busy, setBusy] = useState<CompileStage | null>(null)
+    const [busySince, setBusySince] = useState(0)
+    const [, tick] = useState(0)
+    useEffect(() => {
+        if (busy === null) return
+        const timer = setInterval(() => tick(t => t + 1), 1000)
+        return () => clearInterval(timer)
+    }, [busy !== null])
     // What the loaded card was built from, to tell whether the editor has moved on.
     const [built, setBuilt] = useState<{ language: Language, text: string } | null>(null)
     const [builtWAT, setBuiltWAT] = useState("")
@@ -96,19 +103,25 @@ export const SourceFace = forwardRef<SourceHandle, {
     const dirty = mode === "Wasm" ? wat !== builtWAT : !(built && built.language === mode && built.text === text)
 
     const build = async () => {
-        if (busy !== null) return false
+        if (busy !== null) {
+            // Pressing play again while building stops the build.
+            cancelCompile()
+            return false
+        }
         if (!dirty && binary) return true
-        setBusy(true)
-        const progress = (fraction: number) => setBusy(fraction < 1 ? fraction : true)
+        setBusy("compiling")
+        setBusySince(Date.now())
+        const progress = (stage: CompileStage) => {
+            setBusy(stage)
+            if (stage === "compiling") setBusySince(Date.now())
+        }
         let result: { binary?: Uint8Array, log: string }
         if (mode === "C") {
             result = await compileCard(text, progress)
         } else if (mode === "Beat") {
             result = await compileBytebeat(text)
         } else if (mode === "Pattern") {
-            // A pattern becomes C, which is then compiled like any other.
-            const pattern = compilePattern(text)
-            result = pattern.c ? await compileCard(pattern.c, progress) : pattern
+            result = compilePattern(text)
         } else {
             const wabt = await getWabt()
             let module
@@ -184,8 +197,10 @@ export const SourceFace = forwardRef<SourceHandle, {
     const highlighted = useMemo(() => highlight(text, mode), [text, mode])
     const backdrop = useRef<HTMLPreElement>(null)
     const max = maxCardSize()
+    const seconds = Math.floor((Date.now() - busySince) / 1000)
     const status = typeof busy === "number" ? `fetching compiler: ${Math.floor(busy * 100)}%`
-        : busy ? "building..."
+        : busy === "loading" ? "loading compiler..."
+        : busy ? `building...${seconds >= 3 ? ` ${seconds}s (play again to stop)` : ""}`
         : dirty ? (log ? "has errors" : "edited: play to rebuild")
         : binary ? `${max - binary.length} bytes left` : ""
     return <div className="source">

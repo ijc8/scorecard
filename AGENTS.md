@@ -95,8 +95,11 @@ that fallback in `extractTitle` (`src/card.ts`) and in `public/worklet.js`.
     WebAssembly text and assembled with wabt. No compiler download; division by zero gives 0.
   - **Pattern** (`src/pattern.ts`): a subset of Tidal/Strudel mini-notation (sequences, `[ ]`,
     `< >`, `,`, `~`, `*n /n !n @n`; one `sound: pattern` line per layer). The pattern is evaluated
-    in the editor for as many cycles as it takes to repeat, and written out as C (an event list
-    plus a small player) which then goes through the C compiler.
+    in the editor for as many cycles as it takes to repeat, into a list of events. These are added
+    as a data segment (plus the title export) to a prebuilt player, `examples/pattern-player.c`,
+    which ships as `src/patternPlayer.ts` (rebuild with `examples/build-pattern-player.sh`). No
+    compiler download. The player reads the pattern from a fixed address (`PATTERN`); keep that
+    and the layout in step with `patternToCard`.
   - **Wasm**: the tracer's own disassembly (`disassembleWasm`), so that with tracing on, the lines
     that are running can be lit up (`showHeat`, drawn on a canvas behind the text). Pressing Play on the source face
   rebuilds the card first if the editor has changed. Syntax colours (`src/highlight.tsx`) come from a
@@ -104,7 +107,9 @@ that fallback in `extractTitle` (`src/card.ts`) and in `public/worklet.js`.
   text and metrics; `startAudio()` is still called synchronously
   in that gesture, before the (asynchronous) build.
 - `src/compiler.ts` / `src/compiler.worker.ts`: compiling C for the source face. A worker runs Clang and
-  LLD (`@yowasp/clang`, ~100 MB of assets, ~27 MB gzipped, fetched on the first compile) against the
+  LLD (`@yowasp/clang`, ~100 MB of assets, ~27 MB gzipped, fetched on the first compile; the
+  worker fetches it with `runLLVM` on its own first, because `clang` drops `fetchProgress`; a
+  download with no progress for 30 s is abandoned, and Play pressed again stops a build) against the
   repository's own `examples/deck.h` and `generator.h`, then uses `binaryen` to rename the exports
   and optimize for size, mirroring `examples/build.sh` + `strip.sh` without Emscripten. Output is
   within a few percent of the Emscripten build. Keep the two pipelines' flags and export names in

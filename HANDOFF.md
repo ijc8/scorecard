@@ -32,7 +32,7 @@ Roughly in the order it was built:
 - **Writing cards in the player**, on the source face:
   - C, compiled in the browser by `@yowasp/clang` and `binaryen` (no Emscripten);
   - Beat: a bytebeat expression, straight to WebAssembly;
-  - Pattern: a subset of Tidal/Strudel mini-notation, via generated C;
+  - Pattern: a subset of Tidal/Strudel mini-notation, as data for a prebuilt player;
   - Wasm: the card's disassembly, editable.
   Play on the source face rebuilds first if the text has changed.
 - **Links**: `SCHEME://HOST/path#[seed]program`, capitals for scheme and host. Old `?c=&s=` links
@@ -87,7 +87,8 @@ Roughly in the order it was built:
   not need it, and gives sizes within a few percent of Emscripten's.
 - **Toggling tracing while a card plays restarts the card** (same seed), because the
   instrumented module only takes hold on a reset.
-- **Pattern mode needs the C compiler**, so its first build is a 27 MB download. Bytebeat doesn't.
+- **C mode's first build is a 27 MB download** (104 MB if the server doesn't compress, as `vite
+  preview` doesn't). Pattern and Bytebeat don't need it.
 - The Ableton drum loops used to read Return True's drum pattern are Ableton's and are not in
   the repository; only the hit patterns are, as options in the command below.
 

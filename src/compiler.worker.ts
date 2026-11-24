@@ -23,16 +23,19 @@ const exportNames = [["process", "p"], ["setup", "s"], ["title", "d"], ["memory"
 const post = (message: any) => (self as any).postMessage(message)
 
 async function compile(source: string) {
-    const { commands } = await import("@yowasp/clang")
+    const { commands, runLLVM } = await import("@yowasp/clang")
     const decoder = new TextDecoder()
     let log = ""
     let output: any
     try {
+        // Fetch the toolchain first, on its own: `clang` doesn't pass `fetchProgress` on to the
+        // run that does the fetching, so this is the only way to hear how it's going.
+        await runLLVM(undefined, {}, { fetchProgress: ({ doneLength, totalLength }) => post({ progress: doneLength / totalLength }) })
+        post({ progress: 1 })
         // The source lives in a subdirectory so that `#include "../deck.h"` (as the examples in the
         // repository have it) works as well as `#include "deck.h"`.
         output = await commands.clang([...flags, "-o", "card.wasm", "card/card.c"], { ...headers, card: { "card.c": source } }, {
             stderr: bytes => { if (bytes) log += decoder.decode(bytes) },
-            fetchProgress: ({ doneLength, totalLength }) => post({ progress: doneLength / totalLength }),
         })
     } catch (e: any) {
         return { log: log || String(e?.message ?? e) }
