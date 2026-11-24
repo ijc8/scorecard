@@ -17,7 +17,7 @@ import Play from "pixelarticons/svg/play.svg?react"
 import Pause from "pixelarticons/svg/pause.svg?react"
 import Prev from "pixelarticons/svg/prev.svg?react"
 import SpeedFast from "pixelarticons/svg/speed-fast.svg?react"
-import Clock from "pixelarticons/svg/clock.svg?react"
+import ClockIcon from "pixelarticons/svg/clock.svg?react"
 import Dice from "pixelarticons/svg/dice.svg?react"
 import CloseBox from "pixelarticons/svg/close-box.svg?react"
 import Downasaur from "pixelarticons/svg/downasaur.svg?react"
@@ -312,16 +312,7 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
             </div>
         </div>
         <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", fontSize: "5cqw" }}>
-            <div style={{ userSelect: "none", display: "flex", alignItems: "center", width: "3.8em", flexShrink: 0, whiteSpace: "nowrap", justifyContent: "right" }}>
-                <Clock style={smallIconStyle} />
-                &nbsp;
-                <span style={{ verticalAlign: "middle", display: "inline-block" }}>{
-                    // sysfont has proportional digits ("1" is narrow, "4" wide); give each digit a
-                    // fixed cell so the colon and clock icon don't jitter while counting.
-                    [...formatTime(time)].map((c, i) => c === ":" ? c :
-                        <span key={i} style={{ display: "inline-block", width: "0.63em", textAlign: "center" }}>{c}</span>)
-                }</span>
-            </div>
+            <Clock {...{ time, seed, style: smallIconStyle }} />
             <button onTouchStart={touchStartReset} onMouseDown={mouseReset} onMouseUp={() => { events.current.reset = false }} style={{ touchAction: "manipulation" }}><Prev style={bigIconStyle} /></button>
             <button id="start" onTouchStart={touchStartToggle} onMouseDown={mouseToggle} onMouseUp={() => { events.current.toggle = false }}>{state === "playing" ? <Pause style={bigIconStyle} /> : <Play style={bigIconStyle} />}</button>
             <SkipButton style={{ ...bigIconStyle, height: "8cqw" }} />
@@ -353,6 +344,36 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
             <button title="Save the card as a picture (or share it, to the printer's app)" onClick={() => saveCardImage(printable())}>Save picture</button>
             {printing && <span>{printing}</span>}
         </div>}
+    </div>
+}
+
+// The clock. Tap it to go to a time: ahead by skipping, back by starting again (same seed) and
+// skipping to there. Either way the card has to work its way through every sample in between, at
+// up to 64 times real time.
+function Clock({ time, seed, style }: { time: number, seed: number, style: React.CSSProperties }) {
+    const [editing, setEditing] = useState<string | null>(null)
+    const go = (text: string) => {
+        setEditing(null)
+        const match = text.trim().match(/^(?:(\d+):)?(\d+(?:\.\d*)?)$/)
+        if (!match) return
+        const target = Number(match[1] ?? 0) * 60 + Number(match[2])
+        if (target >= time) sendToWorklet({ cmd: "skip", samples: Math.round((target - time) * 44100 / 128) * 128 })
+        else sendToWorklet({ cmd: "reset", seed, skip: Math.round(target * 44100 / 128) * 128 })
+    }
+    return <div style={{ userSelect: "none", display: "flex", alignItems: "center", width: "3.8em", flexShrink: 0, whiteSpace: "nowrap", justifyContent: "right" }}>
+        <ClockIcon style={style} />
+        &nbsp;
+        {editing === null
+            ? <span title="Go to a time" style={{ verticalAlign: "middle", display: "inline-block", cursor: "pointer" }} onClick={() => setEditing(formatTime(time))}>{
+                // sysfont has proportional digits ("1" is narrow, "4" wide); give each digit a
+                // fixed cell so the colon and clock icon don't jitter while counting.
+                [...formatTime(time)].map((c, i) => c === ":" ? c :
+                    <span key={i} style={{ display: "inline-block", width: "0.63em", textAlign: "center" }}>{c}</span>)
+            }</span>
+            : <input autoFocus value={editing} aria-label="Go to time (minutes:seconds)" style={{ width: "2.6em", font: "inherit", padding: 0, border: "none", borderBottom: "1px solid black", background: "transparent" }}
+                onChange={e => setEditing(e.target.value)} onFocus={e => e.target.select()}
+                onKeyDown={e => { if (e.key === "Enter") go(editing); else if (e.key === "Escape") setEditing(null) }}
+                onBlur={() => setEditing(null)} />}
     </div>
 }
 
