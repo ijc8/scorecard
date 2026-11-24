@@ -60,7 +60,7 @@
 }
 
 .play-controls > * {
-    padding: 0 6px;
+    padding: 0 min(6px, 0.8cqw);
 }
 
 .play-controls > *:first-child {

@@ -12,6 +12,8 @@ import { encodeBlob, decodeBlob } from "./base43Encoder"
 import Play from "pixelarticons/svg/play.svg?react"
 import Pause from "pixelarticons/svg/pause.svg?react"
 import Prev from "pixelarticons/svg/prev.svg?react"
+import Forward from "pixelarticons/svg/next.svg?react"
+import SpeedFast from "pixelarticons/svg/speed-fast.svg?react"
 import Clock from "pixelarticons/svg/clock.svg?react"
 import Dice from "pixelarticons/svg/dice.svg?react"
 import CloseBox from "pixelarticons/svg/close-box.svg?react"
@@ -294,6 +296,7 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, setSe
             </div>
             <button onTouchStart={touchStartReset} onMouseDown={mouseReset} onMouseUp={() => { events.current.reset = false }} style={{ touchAction: "manipulation" }}><Prev style={bigIconStyle} /></button>
             <button id="start" onTouchStart={touchStartToggle} onMouseDown={mouseToggle} onMouseUp={() => { events.current.toggle = false }}>{state === "playing" ? <Pause style={bigIconStyle} /> : <Play style={bigIconStyle} />}</button>
+            <SkipButton style={{ ...bigIconStyle, height: "8cqw" }} />
             <div style={{ display: "flex", alignItems: "center", userSelect: "none" }}>
                 <button style={{ fontSize: 0 }}><DiceIcon style={smallIconStyle} onClick={() => setSeedLock(!seedLock)} /></button>
                 &nbsp;
@@ -315,6 +318,41 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, setSe
             </button>
         </div>
     </div>
+}
+
+const SKIP_SECONDS = 10, FAST_FORWARD = 4, HOLD_MS = 350
+
+// Tap to skip ahead; hold to fast-forward (the card runs faster, and you hear it, sped up).
+function SkipButton({ style }: { style: React.CSSProperties }) {
+    const [fast, setFast] = useState(false)
+    const hold = useRef<{ timer?: number, fast?: boolean } | null>(null)
+    const down = (e: React.PointerEvent) => {
+        e.currentTarget.setPointerCapture(e.pointerId)
+        const h: { timer?: number, fast?: boolean } = {}
+        h.timer = window.setTimeout(() => {
+            h.fast = true
+            setFast(true)
+            sendToWorklet({ cmd: "speed", value: FAST_FORWARD })
+        }, HOLD_MS)
+        hold.current = h
+    }
+    const up = (cancelled: boolean) => {
+        const h = hold.current
+        if (!h) return
+        hold.current = null
+        clearTimeout(h.timer)
+        if (h.fast) {
+            setFast(false)
+            sendToWorklet({ cmd: "speed", value: 1 })
+        } else if (!cancelled) {
+            sendToWorklet({ cmd: "skip", samples: SKIP_SECONDS * 44100 })
+        }
+    }
+    const Icon = fast ? SpeedFast : Forward
+    return <button title={`Tap: skip ${SKIP_SECONDS} seconds. Hold: fast-forward.`} style={{ touchAction: "none", userSelect: "none", WebkitTouchCallout: "none", paddingLeft: 0 } as React.CSSProperties}
+        onPointerDown={down} onPointerUp={() => up(false)} onPointerCancel={() => up(true)} onContextMenu={e => e.preventDefault()}>
+        <Icon style={style} />
+    </button>
 }
 
 const About = memo(function About({ setTab, openDeck }: any) {
@@ -711,6 +749,7 @@ function App() {
     </div>
 }
 
-getWabt()
+// Fetch wabt (for tracing and the source face) ahead of time, but after the page and its card have loaded.
+window.addEventListener("load", () => setTimeout(getWabt, 2000))
 
 export default App
