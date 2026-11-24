@@ -32,23 +32,41 @@ function turn(direction: 1 | -1) {
         img.style.cssText = canvas.style.cssText + ";image-rendering:pixelated;display:block;width:100%;height:100%"
         copies[i].replaceWith(img)
     })
-    Object.assign(snapshot.style, {
-        position: "fixed", left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px`,
-        margin: "0", zIndex: direction > 0 ? "60" : "40", pointerEvents: "none", transformOrigin: "50% 100%", background: "white",
+    // The copy is laid over the card in a stand-in for the app (same classes and width), so that the
+    // card's styles, and its sizes in container units, apply to it as they do to the card.
+    const app = document.getElementById("app")!
+    const appRect = app.getBoundingClientRect()
+    const stage = document.createElement("div")
+    stage.className = app.className
+    Object.assign(stage.style, {
+        position: "fixed", left: `${appRect.left}px`, top: "0", width: `${appRect.width}px`, height: "0",
+        containerType: "inline-size", zIndex: direction > 0 ? "60" : "40", pointerEvents: "none", background: "none", border: "none",
     })
-    document.body.append(snapshot)
+    const holder = document.createElement("div")
+    holder.className = "card3d"
+    Object.assign(holder.style, {
+        position: "absolute", left: `${rect.left - appRect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px`,
+        margin: "0", transition: "none", transformOrigin: "50% 100%",
+    })
+    snapshot.style.visibility = "visible"
+    snapshot.style.height = "100%"
+    holder.append(snapshot)
+    stage.append(holder)
+    document.body.append(stage)
+    const remove = () => stage.remove()
     const behind = { transform: "translateY(-7%) scale(0.9)", opacity: 0.5 }
     const fallen = { transform: "perspective(900px) rotateX(-95deg)", opacity: 1 }
     const options = { duration: 420, easing: "cubic-bezier(.4, 0, .6, 1)" }
     if (direction > 0) {
         // This card falls forward, hinged at its foot, and the next rises from behind it.
-        snapshot.animate([{ transform: "perspective(900px) rotateX(0deg)" }, fallen], options).onfinish = () => snapshot.remove()
+        holder.animate([{ transform: "perspective(900px) rotateX(0deg)" }, fallen], options).onfinish = remove
         card.animate([behind, { transform: "none", opacity: 1 }], options)
     } else {
         // The card before swings back up in front, and this one sinks back into its place.
-        snapshot.animate([{ transform: "none", opacity: 1 }, behind], options).onfinish = () => snapshot.remove()
-        card.style.transformOrigin = "50% 100%"
-        card.animate([fallen, { transform: "perspective(900px) rotateX(0deg)", opacity: 1 }], options).onfinish = () => { card.style.transformOrigin = "" }
+        holder.animate([{ transform: "none", opacity: 1 }, behind], options).onfinish = remove
+        // (In front of the copy, which is laid over the page.)
+        Object.assign(card.style, { transformOrigin: "50% 100%", zIndex: "50" })
+        card.animate([fallen, { transform: "perspective(900px) rotateX(0deg)", opacity: 1 }], options).onfinish = () => Object.assign(card.style, { transformOrigin: "", zIndex: "" })
     }
 }
 

@@ -917,9 +917,9 @@
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
-    gap: 2.5cqw;
+    gap: 2cqw;
     margin-top: 3cqw;
-    font-size: 4cqw;
+    font-size: 3.8cqw;
     user-select: none;
 }
 

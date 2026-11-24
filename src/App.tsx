@@ -338,7 +338,7 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
         {printed && binary && <div className="tray">
             <button className={kept ? "on" : ""} title={kept ? "Remove from deck" : "Keep in deck"} onClick={toggleKept}><Heart />{kept ? "Kept" : "Keep"}</button>
             <button className={tracing ? "on" : ""} title="Show the card at work" onClick={traceClick}><TraceIcon />Inside</button>
-            <button className={face === "source" ? "on" : ""} title="Turn the card over, to its source" onClick={turnOver}><Repeat />Turn over</button>
+            <button className={face === "source" ? "on" : ""} title="Turn the card over, to its source" onClick={turnOver}><Repeat />Flip</button>
             <button className={printing !== null ? "on" : ""} title="Print this card, or save it as a picture" onClick={() => setPrinting(printing === null ? "" : null)}><Printer />Print</button>
             {listens && <span title="This card listens: it plays what the microphone hears, changed"><AudioDevice />Listens</span>}
         </div>}
