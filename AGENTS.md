@@ -27,6 +27,10 @@ base43-encode it (`base43.py`) and put it after a `#`.
 
 C examples (`examples/`):
 - `./build.sh foo.c`: emscripten (`-Oz`, no entry, only `_process` exported), then `strip.sh`.
+  Without a local Emscripten, the official container works (binaryen is in `/emsdk/upstream/bin`):
+  `podman run --rm -v $PWD/examples:/src:Z -w /src docker.io/emscripten/emsdk:7.0.1 sh -c
+  'PATH=/emsdk/upstream/bin:$PATH ./build.sh foo.c'`. Different Emscripten versions give sizes a few
+  dozen bytes apart, which matters for cards near the limit.
 - `./debug.sh foo.c`: native build (`foo.bin`) piped as raw f32 to `sox` for live playback (uses the
   non-Emscripten branch of `deck.h`).
 - `./strip.sh foo.wasm`: binaryen (`wasm-dis`/`wasm-as`/`wasm-opt`) pass that drops

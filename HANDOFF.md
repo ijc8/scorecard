@@ -80,7 +80,8 @@ Roughly in the order it was built:
 - **The build is about 115 MB**, nearly all of it the C compiler's two files (74 MB and 30 MB),
   fetched only on the first compile. Check the host's per-file limit before deploying.
 - **The build target is ES2022** (binaryen needs top-level await): roughly Safari 15 and later.
-- **Return True has under 30 bytes to spare** at `ijc8.me/s`. Changing `deck.h` or the converter's
+- **Return True has 37 bytes to spare** at `ijc8.me/s` (2,857 bytes with Emscripten 7.0.1, in the
+  container described in AGENTS.md; this branch's first build was 2,862 with an unknown version). Changing `deck.h` or the converter's
   player code can push it over; rebuild and check.
 - **`src/library.json` is generated and committed.** After touching a starter card or `deck.h`,
   run `examples/library/build.sh` (needs Emscripten and binaryen). The in-browser compiler does
