@@ -134,9 +134,9 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
     const [decoding, setDecoding] = useState(false)
     const wasTracing = useRef(tracing)
     useEffect(() => {
-        const turnedOn = tracing && !wasTracing.current
+        const turnedOn = tracing && !wasTracing.current, changed = tracing !== wasTracing.current
         wasTracing.current = tracing
-        if (!turnedOn || !pile || !binary || !code || showMessage || face === "source" || motionOff()) return
+        if (!changed || !pile || !binary || !code || showMessage || face === "source" || motionOff()) return
         let steps
         try {
             steps = decodeSteps(cardURL(code, seedLock ? seed : undefined), code.length)
@@ -145,8 +145,9 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
         }
         setDecoding(true)
         let timer = 0
-        // (Once it's done, it stays a moment while the bits dissolve in underneath.)
-        const stop = playDecode(decodeCanvas.current!, steps, binary, () => { timer = window.setTimeout(() => setDecoding(false), 450) })
+        // (Once it's done, it stays a moment while the bits dissolve in underneath. Turning tracing
+        // off plays it backwards: the bits are written out as the QR code again.)
+        const stop = playDecode(decodeCanvas.current!, steps, binary, () => { timer = window.setTimeout(() => setDecoding(false), turnedOn ? 450 : 0) }, !turnedOn)
         return () => {
             stop()
             clearTimeout(timer)

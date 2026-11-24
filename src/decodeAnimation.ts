@@ -18,8 +18,11 @@ const grey = (level: number) => {
     return 0xff000000 | v << 16 | v << 8 | v
 }
 
+// Run backwards it shows the program being written out as a QR code again; that goes quicker.
+const REWIND = 2.2
+
 // Plays on `canvas` (which should cover the QR code); returns a function that stops it.
-export function playDecode(canvas: HTMLCanvasElement, steps: Decoding, binary: Uint8Array, done: () => void) {
+export function playDecode(canvas: HTMLCanvasElement, steps: Decoding, binary: Uint8Array, done: () => void, backwards = false) {
     const { size, dark, mask, kind, progress } = steps
     // The trace view's grid of bits (see `draw` in App.tsx): the top four fifths of a square.
     const bits = binary.length * 8
@@ -40,7 +43,7 @@ export function playDecode(canvas: HTMLCanvasElement, steps: Decoding, binary: U
     let frame = 0
     const start = performance.now()
     const draw = (now: number) => {
-        const t = now - start
+        const t = backwards ? DECODE_MS - (now - start) * REWIND : now - start
         pixels.fill(WHITE)
         const flying = t - PATTERNS - UNMASK - CLEAR
         if (flying > 0) {
@@ -85,7 +88,7 @@ export function playDecode(canvas: HTMLCanvasElement, steps: Decoding, binary: U
             block(x, y, cell + (landed - cell) * ease, grey(ease * ease * 0.75))
         }
         context.putImageData(image, 0, 0)
-        if (t < DECODE_MS) frame = requestAnimationFrame(draw)
+        if (backwards ? t > 0 : t < DECODE_MS) frame = requestAnimationFrame(draw)
         else done()
     }
     // (Something to show at once, before the first frame.)
