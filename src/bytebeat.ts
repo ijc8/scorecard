@@ -6,7 +6,7 @@
 //     t * (42 & t >> 10)
 //
 // The expression uses C's integer operators and precedence. Its low 8 bits are the output.
-import { getWabt } from "./lazyWabt"
+import { assembleWat } from "./assemble"
 
 class BeatError extends Error {}
 
@@ -129,11 +129,9 @@ export async function compileBytebeat(source: string): Promise<{ binary?: Uint8A
         if (e instanceof BeatError) return { log: e.message }
         throw e
     }
-    const wabt = await getWabt()
-    const module = wabt.parseWat("beat.wat", wat)
     try {
-        return { binary: module.toBinary({}).buffer, log: "" }
-    } finally {
-        module.destroy()
+        return { binary: await assembleWat(wat), log: "" }
+    } catch (e: any) {
+        return { log: String(e?.message ?? e) }
     }
 }

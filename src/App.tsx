@@ -33,7 +33,6 @@ import logoUrl from "./assets/logo.png"
 import exampleCardUrl from "./assets/example-card.png"
 import { TraceMap, instrumentWasm } from "./wasmTracer"
 import { MemoryTrace } from "./memoryTrace"
-import { getWabt } from './lazyWabt'
 import { initDebug, dlog, DEBUG } from "./debug"
 import Heart from "pixelarticons/svg/heart.svg?react"
 import Bookmark from "pixelarticons/svg/bookmark.svg?react"
@@ -758,8 +757,5 @@ function App() {
     </div>
     </div>
 }
-
-// Fetch wabt (for tracing and the source face) ahead of time, but after the page and its card have loaded.
-window.addEventListener("load", () => setTimeout(getWabt, 2000))
 
 export default App

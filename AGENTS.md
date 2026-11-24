@@ -96,7 +96,7 @@ that fallback in `extractTitle` (`src/card.ts`) and in `public/worklet.js`.
   under `scorecard-sources`) and the card's disassembly otherwise. There are four modes:
   - **C**, compiled by `src/compiler.ts` (below).
   - **Beat** (`src/bytebeat.ts`): one bytebeat expression in `t`, translated straight to
-    WebAssembly text and assembled with wabt. No compiler download; division by zero gives 0.
+    WebAssembly text and assembled with watr. No compiler download; division by zero gives 0.
   - **Pattern** (`src/pattern.ts`): a subset of Tidal/Strudel mini-notation (sequences, `[ ]`,
     `< >`, `,`, `~`, `*n /n !n @n`; one `sound: pattern` line per layer). The pattern is evaluated
     in the editor for as many cycles as it takes to repeat, into a list of events. These are added
@@ -127,8 +127,10 @@ that fallback in `extractTitle` (`src/card.ts`) and in `public/worklet.js`.
   the Listen tab draws a heatmap over a bit-grid of the binary: green for executed code, blue/red
   for data-segment bytes read/written. Memory outside the data segments (`src/memoryTrace.ts`) is
   drawn in a band under the card. Instrumentation must not change a card's output.
-- `wabt/` is vendored and loaded lazily through `src/lazyWabt.ts` (it's large). Use `getWabt()`
-  rather than importing it directly.
+- WebAssembly text is assembled by `watr` (`src/assemble.ts`, ~50 KB; it replaced a vendored 1.2 MB
+  wabt) and disassembled by `wasmparser`. After touching the tracer or the disassembly, run
+  `npx tsx scripts/watr-check.ts <cards>.wasm`: reassembled and instrumented cards must play
+  sample-for-sample the same.
 - `vite.config.ts` sets `base: "./"`, which the `ijc8.me/s` subpath deployment depends on.
 
 Transport buttons handle `touchstart` and `mousedown` separately (with de-duplication) so play and

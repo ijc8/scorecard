@@ -5,7 +5,7 @@ import { compileBytebeat } from "./bytebeat"
 import { compilePattern } from "./pattern"
 import { Language, getSource, saveSource, templates } from "./sources"
 import { highlight } from "./highlight"
-import { getWabt } from "./lazyWabt"
+import { assembleWat } from "./assemble"
 import { disassembleWasm } from "./wasmTracer"
 import { maxCardSize } from "./card"
 
@@ -123,15 +123,10 @@ export const SourceFace = forwardRef<SourceHandle, {
         } else if (mode === "Pattern") {
             result = compilePattern(text)
         } else {
-            const wabt = await getWabt()
-            let module
             try {
-                module = wabt.parseWat("card.wat", wat)
-                result = { binary: module.toBinary({}).buffer, log: "" }
+                result = { binary: await assembleWat(wat), log: "" }
             } catch (e: any) {
                 result = { log: String(e.message ?? e).trim() }
-            } finally {
-                module?.destroy()
             }
         }
         setBusy(null)

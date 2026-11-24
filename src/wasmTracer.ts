@@ -1,6 +1,6 @@
 import * as wasmparser from "wasmparser/dist/esm/WasmParser"
 import * as wasmdis from "wasmparser/dist/esm/WasmDis"
-import { getWabt } from "./lazyWabt"
+import { assembleWat } from "./assemble"
 import { findDataSegments } from "./memoryTrace"
 
 export type TraceMap = {
@@ -22,7 +22,9 @@ export function disassembleWasm(binary: Uint8Array) {
     return dis.getResult()
 }
 
-export async function instrumentWasm(binary: Uint8Array) {
+// The card's WebAssembly text, with calls out to `scorecard.log` (execution) and `scorecard.read` and
+// `scorecard.write` (memory) added, and where each block of code that's counted lies in the text.
+export function instrumentWat(binary: Uint8Array) {
     const result = disassembleWasm(binary)
     let id = 0
     const out: string[] = []
@@ -80,8 +82,10 @@ export async function instrumentWasm(binary: Uint8Array) {
             end: markers[i + 1],
         }
     }
-    // Re-assemble instrumented WAT
-    const wabt = await getWabt()
-    const instrumented = wabt.parseWat("main.wasm", out.join("\n")).toBinary({}).buffer
-    return { binary: instrumented, map, data: findDataSegments(binary) }
+    return { text: out.join("\n"), map }
+}
+
+export async function instrumentWasm(binary: Uint8Array) {
+    const { text, map } = instrumentWat(binary)
+    return { binary: await assembleWat(text), map, data: findDataSegments(binary) }
 }
