@@ -86,6 +86,21 @@ that fallback in `extractTitle` (`src/card.ts`) and in `public/worklet.js`.
   inside the Play gesture (and from `mousedown`, not `touchstart`, when audio needs (re)starting);
   a context that was interrupted or whose clock is frozen is replaced, not resumed; a watchdog
   pauses the player if the clock stalls. Don't call `resume()` while the state is `"interrupted"`.
+- Playback extras, in the worklet: `{cmd: "skip", samples}` makes samples silently, up to 64x
+  real time per render quantum (even while paused); `{cmd: "speed", value}` makes `value` samples
+  per output sample and averages them (fast-forward, heard sped up); `{cmd: "reset", seed, skip}`
+  starts again and skips. The skip button (tap: 10 s, hold: 4x) and the clock (tap it to go to a
+  time; going back restarts with the same seed) use these.
+- `src/mediaSession.ts`: lock-screen controls. Non-iOS browsers only show them while a media
+  element plays, so a silent looping `<audio>` plays alongside a card (`holdMediaSession`, called
+  in the Play gesture); iOS has `audio.ts`'s own silent element.
+- `src/print.ts`: a card drawn as printed (576 dots, black and white), saved or shared as a PNG,
+  or sent to a Phomemo-style thermal printer over Web Serial (Bluetooth RFCOMM; the printer must be
+  paired with the device). It waits for the printer's `1a 0f 0c` before closing the port: closing
+  early stops the print. Only tried against a saved image so far, not a printer.
+- Looks (Settings): the printed look (default, a prototype) draws the card as printed and puts
+  every control on the player around it; the classic look is the earlier panel. The rolodex deck
+  style (`src/Rolodex.tsx`) is the other prototype. Background in `docs/CARD-DESIGN.md`.
 - `src/base43Encoder.ts` (mirrored by `base43.py`): base43 over the QR alphanumeric set minus `%`
   and space, so the binary shares the QR's dense alphanumeric mode with the URL and stays valid in
   a query string.
@@ -163,9 +178,9 @@ The deck sits beside the player (a slide-out drawer below 800px wide, pulled out
 edges peeking from the left of the screen). It shows the user's collected cards (`src/deck.ts`, kept in localStorage
 under `scorecard-deck`, keyed by each card's base43 code, with any saved seeds) as a pile of
 overlapping cards; the playing card is pulled out. Cards are collected when scanned or opened from
-a link, or by hand with the heart on Listen; drag-and-drop and Create don't collect, so
-work-in-progress builds stay out. Mini cards and the big card share a layout (title and size above
-the QR), and the big card flips over to show the trace view.
+a link, by hand with the heart (Keep), or by locking a seed (a locked seed is saved with its card;
+unlocking forgets it); drag-and-drop and Create don't collect, so work-in-progress builds stay out.
+Mini cards keep their title and size on top, as an index strip for the pile.
 
 Below the pile are sealed packs (`scorecard-packs` in localStorage): bundles of cards that join the
 deck when opened. The starter pack is there until opened. "Wrap as a pack" exports the deck as a
