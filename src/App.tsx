@@ -12,7 +12,6 @@ import { encodeBlob, decodeBlob } from "./base43Encoder"
 import Play from "pixelarticons/svg/play.svg?react"
 import Pause from "pixelarticons/svg/pause.svg?react"
 import Prev from "pixelarticons/svg/prev.svg?react"
-import Forward from "pixelarticons/svg/next.svg?react"
 import SpeedFast from "pixelarticons/svg/speed-fast.svg?react"
 import Clock from "pixelarticons/svg/clock.svg?react"
 import Dice from "pixelarticons/svg/dice.svg?react"
@@ -112,16 +111,11 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, setSe
     // (You can always write a new card, even with nothing loaded.)
     const showMessage = (error || (size === 0)) && face !== "source"
 
-    // The card has three faces but only two sides, so the face being turned to is put on the side
-    // that's hidden, and then the card is flipped over (always the same way round).
-    const [flip, setFlip] = useState({ turns: 0, face, previous: face, sides: { qr: 0, bits: 1, source: 1 } as { [f in Face]: number } })
-    if (flip.face !== face) {
-        setFlip({ turns: flip.turns + 1, face, previous: flip.face, sides: { ...flip.sides, [face]: (flip.turns + 1) % 2 } })
-    }
-    const faceStyle = (f: Face) => ({
-        transform: `rotateY(${flip.sides[f] * 180}deg)`,
-        visibility: f === flip.face || f === flip.previous ? "inherit" : "hidden",
-    }) as const
+    // The card has two sides: the front (its QR code, which tracing sees through to its bits) and
+    // the back (its source). Turning it over always goes the same way round.
+    const side = face === "source" ? 1 : 0
+    const [flip, setFlip] = useState({ turns: side, side })
+    if (flip.side !== side) setFlip({ turns: flip.turns + 1, side })
     const source = useRef<SourceHandle>(null)
     const setStateRef = useRef(setState)
     setStateRef.current = setState
@@ -251,36 +245,42 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, setSe
         setStateRef.current("playing")
     }
     const TraceIcon = tracing ? BullseyeArrow : Bullseye
+    const header = <h2 style={{ userSelect: "none", margin: "0 0 12px", fontSize: "6cqw", fontWeight: "normal", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", textAlign: "left", lineHeight: 1.2 }}>
+                <span>{title}</span>
+                <span style={{ whiteSpace: "nowrap" }}>
+                    {listens && <span title="This card listens: it plays what the microphone hears, changed"><AudioDevice style={{ height: "6cqw", verticalAlign: "middle" }} /> </span>}
+                    {size} bytes {/* TODO: add link and perhaps download buttons with icons */}
+                    {binary && <button className={"toggle" + (kept ? " on" : "")} title={kept ? "Remove from deck" : "Keep in deck"} style={{ fontSize: 0, lineHeight: 0, border: "none", padding: "0 0 0 6px", verticalAlign: "middle" }} onClick={toggleKept}>
+                        <Heart style={{ height: "6cqw", verticalAlign: "middle" }} />
+                    </button>}
+                </span>
+            </h2>
     return <div>
-        {/* Laid out like the cards in the deck: title and size on top, picture below. */}
-        <h2 style={{ userSelect: "none", margin: "0 0 12px", fontSize: "6cqw", fontWeight: "normal", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", textAlign: "left", lineHeight: 1.2 }}>
-            <span>{title}</span>
-            <span style={{ whiteSpace: "nowrap" }}>
-                {listens && <span title="This card listens: it plays what the microphone hears, changed"><AudioDevice style={{ height: "6cqw", verticalAlign: "middle" }} /> </span>}
-                {size} bytes {/* TODO: add link and perhaps download buttons with icons */}
-                {binary && <button className={"toggle" + (kept ? " on" : "")} title={kept ? "Remove from deck" : "Keep in deck"} style={{ fontSize: 0, lineHeight: 0, border: "none", padding: "0 0 0 6px", verticalAlign: "middle" }} onClick={toggleKept}>
-                    <Heart style={{ height: "6cqw", verticalAlign: "middle" }} />
-                </button>}
-            </span>
-        </h2>
-        <div id="table" style={{ position: "relative", marginBottom: "20px" }}>
-            {showMessage && <div style={{ position: "absolute", fontSize: "48px", height: "100%", width: "100%", userSelect: "none" }}>
-                <div style={{ border: "16px solid black", height: "100%", containerType: "size", lineHeight: 1, display: "flex", flexDirection: "column", justifyContent: "space-evenly" }}>
-                    {error ? <>
-                        <div><span style={{ fontSize: "21cqh", verticalAlign: "top" }}>TOO BIG</span> <Subscriptions style={{ height: "21cqh" }} /></div>
-                        <div><span style={{ fontSize: "12.5cqh", verticalAlign: "top" }}>Can't encode!</span> <Downasaur style={{ height: "12.5cqh" }} /></div>
-                        <div><span style={{ fontSize: "11.8cqh", verticalAlign: "top" }}>Shrink binary.</span> <Flatten style={{ height: "12.5cqh" }} /></div>
-                    </> : <>
-                        <div><span style={{ fontSize: "23cqh" }}>No card!</span></div>
-                        <div><span style={{ fontSize: "11cqh" }}>Scan <Camera style={inlineIconStyle} />, create <EditBox style={inlineIconStyle} />, or drag & drop <DragAndDrop style={inlineIconStyle} />.</span></div>
-                    </>}
+        {/* The whole card turns over: on each side, title and size on top (as in the deck), picture below. */}
+        <div className="card3d" style={{ transform: `perspective(2000px) rotateY(${flip.turns * 180}deg)` }}>
+            <div className="side" style={{ visibility: side ? "hidden" : "inherit" }} {...(side ? { inert: "" } : {})}>
+                {header}
+                <div className="square">
+                    <canvas ref={qrCanvas} width="1" height="1" style={{ visibility: showMessage ? "hidden" : "inherit" }}></canvas>
+                    {/* Tracing: the card's bits, seen through the QR code. */}
+                    <canvas ref={traceCanvas} width="1" height="1" className="xray" style={{ opacity: tracing && !showMessage ? 1 : 0 }}></canvas>
+                {showMessage && <div style={{ position: "absolute", fontSize: "48px", height: "100%", width: "100%", userSelect: "none" }}>
+                    <div style={{ border: "16px solid black", height: "100%", containerType: "size", lineHeight: 1, display: "flex", flexDirection: "column", justifyContent: "space-evenly" }}>
+                        {error ? <>
+                            <div><span style={{ fontSize: "21cqh", verticalAlign: "top" }}>TOO BIG</span> <Subscriptions style={{ height: "21cqh" }} /></div>
+                            <div><span style={{ fontSize: "12.5cqh", verticalAlign: "top" }}>Can't encode!</span> <Downasaur style={{ height: "12.5cqh" }} /></div>
+                            <div><span style={{ fontSize: "11.8cqh", verticalAlign: "top" }}>Shrink binary.</span> <Flatten style={{ height: "12.5cqh" }} /></div>
+                        </> : <>
+                            <div><span style={{ fontSize: "23cqh" }}>No card!</span></div>
+                            <div><span style={{ fontSize: "11cqh" }}>Scan <Camera style={inlineIconStyle} />, create <EditBox style={inlineIconStyle} />, or drag & drop <DragAndDrop style={inlineIconStyle} />.</span></div>
+                        </>}
+                    </div>
+                </div>}
                 </div>
-            </div>}
-            {/* The card's faces: its QR code, its bits (for tracing), and its source. */}
-            <div className="flip" style={{ transform: `perspective(1200px) rotateY(${flip.turns * 180}deg)`, visibility: showMessage ? "hidden" : "inherit" }}>
-                <div style={faceStyle("qr")}><canvas ref={qrCanvas} width="1" height="1"></canvas></div>
-                <div style={faceStyle("bits")}><canvas ref={traceCanvas} width="1" height="1"></canvas></div>
-                <div style={faceStyle("source")}><SourceFace ref={source} {...{ binary, code, loadBinary }} active={face === "source"} /></div>
+            </div>
+            <div className="side back" style={{ visibility: side ? "inherit" : "hidden" }} {...(side ? {} : { inert: "" })}>
+                {header}
+                <div className="square"><SourceFace ref={source} {...{ binary, code, loadBinary }} active={face === "source"} /></div>
             </div>
         </div>
         <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", fontSize: "5cqw" }}>
@@ -319,6 +319,11 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, setSe
         </div>
     </div>
 }
+
+// Two triangles, drawn on pixelarticons' grid (which has no fast-forward icon of its own).
+const Forward = (props: React.SVGProps<SVGSVGElement>) => <svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" {...props}>
+    <path d="M3 5h2v2h2v2h2v2h2v2h-2v2h-2v2h-2v2H3V5zm9 0h2v2h2v2h2v2h2v2h-2v2h-2v2h-2v2h-2V5z" fill="currentColor" />
+</svg>
 
 const SKIP_SECONDS = 10, FAST_FORWARD = 4, HOLD_MS = 350
 

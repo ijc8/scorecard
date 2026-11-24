@@ -403,27 +403,52 @@
     display: none;
 }
 
-/* The big card flips over to show its bits when tracing. */
-.flip {
+/* The big card turns over (all of it) between its front, the QR code, and its back, the source. */
+.card3d {
     position: relative;
-    aspect-ratio: 1;
+    margin-bottom: 20px;
     transform-style: preserve-3d;
-    transition: transform 0.5s cubic-bezier(.3, 1.3, .5, 1);
+    transition: transform 0.6s cubic-bezier(.3, 1.3, .5, 1);
 }
 
-.flip > div {
-    position: absolute;
-    inset: 0;
+.card3d > .side {
+    /* (WebKit only hides a back face that has a transform of its own.) */
+    transform: rotateY(0deg);
     -webkit-backface-visibility: hidden;
     backface-visibility: hidden;
     background: white;
+    /* The side turning away disappears halfway round, in case backface-visibility doesn't hold. */
+    transition: visibility 0s 0.2s;
 }
 
-.flip canvas {
+.card3d > .back {
+    position: absolute;
+    inset: 0;
+    transform: rotateY(180deg);
+}
+
+.square {
+    position: relative;
+    aspect-ratio: 1;
+}
+
+.square > * {
+    position: absolute;
+    inset: 0;
+}
+
+.square canvas {
     display: block;
     width: 100%;
     height: 100%;
     image-rendering: pixelated;
+}
+
+/* Tracing looks through the QR code to the card's bits. */
+.xray {
+    background: white;
+    pointer-events: none;
+    transition: opacity 0.4s;
 }
 
 /* The source side of the card: an editor, any complaints from the compiler, and a strip of controls. */
@@ -623,14 +648,14 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .deck, .pcard, .pack, .pack > *, .flip {
+    .deck, .pcard, .pack, .pack > *, .card3d, .card3d > .side, .xray {
         animation: none !important;
         transition: none;
     }
 }
 
 /* The same, when animations are turned off in Settings. */
-.still :is(.deck, .deck-peek, .pcard, .pack, .pack > *, .flip) {
+.still :is(.deck, .deck-peek, .pcard, .pack, .pack > *, .card3d, .card3d > .side, .xray) {
     animation: none !important;
     transition: none;
 }
