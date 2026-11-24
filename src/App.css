@@ -840,15 +840,6 @@
 /* The printed look (a prototype; Settings > Card look): the card is drawn as it's printed (wordmark,
    QR code, name and size, description) and lies on the player, which is everything else: the
    controls, the tray of things to do with the card, and the tabs. See docs/CARD-DESIGN.md. */
-#app.printed {
-    background-color: transparent;
-    border-top-color: transparent !important;
-}
-
-#app.printed > div:first-child {
-    border-color: transparent !important;
-}
-
 .printed .app-logo {
     display: none;
 }
@@ -968,4 +959,23 @@
     border-radius: 2.5cqw;
     padding: 4cqw 3cqw;
     box-shadow: 1.5cqw 1.5cqw 0 rgb(0 0 0 / 15%);
+}
+
+/* Variant (mock, ?console): the card lies on the table; the player is a console below it. */
+#app.console-look {
+    background-color: transparent;
+    border-top-color: transparent !important;
+}
+
+#app.console-look > div:first-child {
+    border-color: transparent !important;
+}
+
+.console-look .console {
+    margin: 0 -20px -20px;
+    padding: 4cqw 20px 20px;
+    background: white;
+    border: 1px solid black;
+    border-bottom: none;
+    border-radius: 3cqw 3cqw 0 0;
 }

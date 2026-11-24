@@ -311,39 +311,42 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
                 <div className="square"><SourceFace ref={source} {...{ binary, code, loadBinary }} active={face === "source"} /></div>
             </div>
         </div>
-        <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", fontSize: "5cqw" }}>
-            <Clock {...{ time, seed, style: smallIconStyle }} />
-            <button onTouchStart={touchStartReset} onMouseDown={mouseReset} onMouseUp={() => { events.current.reset = false }} style={{ touchAction: "manipulation" }}><Prev style={bigIconStyle} /></button>
-            <button id="start" onTouchStart={touchStartToggle} onMouseDown={mouseToggle} onMouseUp={() => { events.current.toggle = false }}>{state === "playing" ? <Pause style={bigIconStyle} /> : <Play style={bigIconStyle} />}</button>
-            <SkipButton style={{ ...bigIconStyle, height: "8cqw" }} />
-            <div style={{ display: "flex", alignItems: "center", userSelect: "none" }}>
-                <button style={{ fontSize: 0 }} title={seedLock ? "Unlock the seed (and forget it)" : "Lock this seed (and save it with the card)"} onClick={() => lockSeed(!seedLock)}><DiceIcon style={smallIconStyle} /></button>
-                &nbsp;
-                <SeedInput {...{ seed, setSeed }} />
+        {/* The player's own controls (in the printed look, on a console the tabs hang from). */}
+        <div className="console">
+            <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", fontSize: "5cqw" }}>
+                <Clock {...{ time, seed, style: smallIconStyle }} />
+                <button onTouchStart={touchStartReset} onMouseDown={mouseReset} onMouseUp={() => { events.current.reset = false }} style={{ touchAction: "manipulation" }}><Prev style={bigIconStyle} /></button>
+                <button id="start" onTouchStart={touchStartToggle} onMouseDown={mouseToggle} onMouseUp={() => { events.current.toggle = false }}>{state === "playing" ? <Pause style={bigIconStyle} /> : <Play style={bigIconStyle} />}</button>
+                <SkipButton style={{ ...bigIconStyle, height: "8cqw" }} />
+                <div style={{ display: "flex", alignItems: "center", userSelect: "none" }}>
+                    <button style={{ fontSize: 0 }} title={seedLock ? "Unlock the seed (and forget it)" : "Lock this seed (and save it with the card)"} onClick={() => lockSeed(!seedLock)}><DiceIcon style={smallIconStyle} /></button>
+                    &nbsp;
+                    <SeedInput {...{ seed, setSeed }} />
+                </div>
+                {!printed && <button style={{ fontSize: 0 }} title="Show the card at work" onClick={traceClick}>
+                    <TraceIcon style={smallIconStyle} />
+                </button>}
             </div>
-            {!printed && <button style={{ fontSize: 0 }} title="Show the card at work" onClick={traceClick}>
-                <TraceIcon style={smallIconStyle} />
-            </button>}
+            {/* In the printed look, what you can do with the card (rather than play it) sits on a tray below. */}
+            {printed && binary && <div className="tray">
+                <button className={kept ? "on" : ""} title={kept ? "Remove from deck" : "Keep in deck"} onClick={toggleKept}><Heart />{kept ? "Kept" : "Keep"}</button>
+                <button className={tracing ? "on" : ""} title="Show the card at work" onClick={traceClick}><TraceIcon />Inside</button>
+                <button className={face === "source" ? "on" : ""} title="Turn the card over, to its source" onClick={turnOver}><Repeat />Flip</button>
+                <button className={printing !== null ? "on" : ""} title="Print this card, or save it as a picture" onClick={() => setPrinting(printing === null ? "" : null)}><Printer />Print</button>
+                {listens && <span title="This card listens: it plays what the microphone hears, changed"><AudioDevice />Listens</span>}
+            </div>}
+            {printed && binary && printing !== null && <div className="tray">
+                {canPrintDirectly() && <button title="Print on a Bluetooth thermal printer (paired with this device)" onClick={async () => {
+                    try {
+                        await printCard(printable(), setPrinting)
+                    } catch (e: any) {
+                        setPrinting(e?.name === "NotFoundError" ? "" : String(e?.message ?? e))
+                    }
+                }}>Thermal printer</button>}
+                <button title="Save the card as a picture (or share it, to the printer's app)" onClick={() => saveCardImage(printable())}>Save picture</button>
+                {printing && <span>{printing}</span>}
+            </div>}
         </div>
-        {/* In the printed look, what you can do with the card (rather than play it) sits on a tray below. */}
-        {printed && binary && <div className="tray">
-            <button className={kept ? "on" : ""} title={kept ? "Remove from deck" : "Keep in deck"} onClick={toggleKept}><Heart />{kept ? "Kept" : "Keep"}</button>
-            <button className={tracing ? "on" : ""} title="Show the card at work" onClick={traceClick}><TraceIcon />Inside</button>
-            <button className={face === "source" ? "on" : ""} title="Turn the card over, to its source" onClick={turnOver}><Repeat />Flip</button>
-            <button className={printing !== null ? "on" : ""} title="Print this card, or save it as a picture" onClick={() => setPrinting(printing === null ? "" : null)}><Printer />Print</button>
-            {listens && <span title="This card listens: it plays what the microphone hears, changed"><AudioDevice />Listens</span>}
-        </div>}
-        {printed && binary && printing !== null && <div className="tray">
-            {canPrintDirectly() && <button title="Print on a Bluetooth thermal printer (paired with this device)" onClick={async () => {
-                try {
-                    await printCard(printable(), setPrinting)
-                } catch (e: any) {
-                    setPrinting(e?.name === "NotFoundError" ? "" : String(e?.message ?? e))
-                }
-            }}>Thermal printer</button>}
-            <button title="Save the card as a picture (or share it, to the printer's app)" onClick={() => saveCardImage(printable())}>Save picture</button>
-            {printing && <span>{printing}</span>}
-        </div>}
     </div>
 }
 
@@ -803,7 +806,7 @@ function App() {
     const border = `1px ${dragging ? "dashed" : "solid"} black`
     return <div id="layout">
     <Deck {...{ deck, packs, openPack, importPack, exportPack, current: code, loadCard, discard: (code: string) => setDeck(removeCard(deck, code)), open: deckOpen, setOpen: setDeckOpen }} />
-    <div id="app" className={settings.look === "printed" ? "printed" : ""} style={{ display: "flex", flexDirection: "column", alignItems: "stretch", containerType: "inline-size", borderTop: border }}>
+    <div id="app" className={settings.look === "printed" ? "printed" + (new URLSearchParams(location.search).has("console") ? " console-look" : "") : ""} style={{ display: "flex", flexDirection: "column", alignItems: "stretch", containerType: "inline-size", borderTop: border }}>
         <div style={{ borderLeft: border, borderRight: border, margin: "0 -1px" }}>
             <div style={{ margin: "20px" }} >
                 <h1 className="app-logo" style={{ margin: "0 0 20px 0" }}><a href="/"><img src={logoUrl} style={{ imageRendering: "pixelated", width: "100%" }} /></a></h1>
