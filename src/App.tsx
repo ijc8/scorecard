@@ -256,7 +256,7 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, setSe
             <span style={{ whiteSpace: "nowrap" }}>
                 {listens && <span title="This card listens: it plays what the microphone hears, changed"><AudioDevice style={{ height: "6cqw", verticalAlign: "middle" }} /> </span>}
                 {size} bytes {/* TODO: add link and perhaps download buttons with icons */}
-                {binary && <button className={"toggle" + (kept ? " on" : "")} title={kept ? "Remove from deck" : "Keep in deck"} style={{ fontSize: 0, border: "none", padding: "0 0 0 6px" }} onClick={toggleKept}>
+                {binary && <button className={"toggle" + (kept ? " on" : "")} title={kept ? "Remove from deck" : "Keep in deck"} style={{ fontSize: 0, lineHeight: 0, border: "none", padding: "0 0 0 6px", verticalAlign: "middle" }} onClick={toggleKept}>
                     <Heart style={{ height: "6cqw", verticalAlign: "middle" }} />
                 </button>}
             </span>

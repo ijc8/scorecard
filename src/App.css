@@ -740,6 +740,9 @@
 }
 
 .viewfinder > video {
+    /* Out of the flow: otherwise a portrait camera's tall picture stretches the square to fit it. */
+    position: absolute;
+    inset: 0;
     display: block;
     width: 100%;
     height: 100%;
