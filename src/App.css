@@ -1024,6 +1024,9 @@
     position: absolute;
     inset: 0;
     box-shadow: 3px 3px 0 -1px white, 3px 3px 0 0 black, 6px 6px 0 -1px white, 6px 6px 0 0 black, 8px 8px 0 0 black;
+    /* (A blank card right under the top one, for when that's turned or has a corner folded.) */
+    border: 1px solid black;
+    background: white;
 }
 
 .pile-look .tabs {
@@ -1071,7 +1074,7 @@
     overflow: hidden auto;
 }
 
-/* A folded corner: turn the card over. */
+/* A folded corner: turn the card over. The flap is the upper left half; the rest shows the card beneath. */
 .dog-ear {
     position: absolute;
     right: -1px;
@@ -1079,10 +1082,8 @@
     width: 24px;
     height: 24px;
     padding: 0;
-    border: none;
-    border-top: 1px solid black;
-    border-left: 1px solid black;
-    background: linear-gradient(135deg, white calc(50% - 1px), black calc(50% - 1px) 50%, #ccf 50%);
+    border: 1px solid black;
+    background: linear-gradient(135deg, white calc(50% - 1px), black calc(50% - 1px) 50%, white 50%);
     cursor: pointer;
 }
 

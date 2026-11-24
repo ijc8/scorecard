@@ -48,6 +48,9 @@ function dress(copy: HTMLElement, card: DeckCard | undefined) {
     })
     copy.querySelector(".own-tab")?.remove()
     copy.querySelector<HTMLElement>(".xray")?.style.setProperty("opacity", "0")
+    // (Face up, even if the card it was copied from is turned over.)
+    copy.querySelector<HTMLElement>(".card3d")?.style.setProperty("transform", "none")
+    copy.querySelectorAll<HTMLElement>(".card3d > .side").forEach(side => { side.style.visibility = side.classList.contains("back") ? "hidden" : "inherit" })
     if (!card) return
     const set = (selector: string, text: string) => copy.querySelectorAll(selector).forEach(element => { element.textContent = text })
     set("[data-card-title]", card.title)
@@ -70,13 +73,21 @@ function tuck(ghost: HTMLElement, direction: keyof typeof OFF, from = "none", ha
 }
 
 // The whole top card turns over, becoming whatever `change` makes of it once it's edge-on.
-export function turn(change: () => void) {
+// Meanwhile the card under it (`beneath`, if there is one) shows.
+export function turn(change: () => void, beneath?: DeckCard) {
     const top = pileTop()
     if (!top || !top.animate || motionOff()) return change()
+    let under: HTMLElement | undefined
+    if (beneath) {
+        under = snapshot(top)
+        dress(under, beneath)
+        under.style.zIndex = "1"
+        top.parentElement!.append(under)
+    }
     const at = (degrees: number) => ({ transform: `perspective(1400px) rotateY(${degrees}deg)` })
     top.animate([at(0), at(90)], { duration: 150, easing: "cubic-bezier(.5, 0, 1, .7)" }).onfinish = () => {
         change()
-        top.animate([at(-90), at(0)], { duration: 210, easing: "cubic-bezier(.2, .9, .3, 1.15)" })
+        top.animate([at(-90), at(0)], { duration: 210, easing: "cubic-bezier(.2, .9, .3, 1.15)" }).onfinish = () => under?.remove()
     }
 }
 

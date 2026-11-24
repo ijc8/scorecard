@@ -797,20 +797,21 @@ function App() {
     const pile = settings.look === "pile"
     // In the pile look, the tabs belong to cards at the back of the pile: tapping one brings its card
     // to the top, and tapping it again sends the card back. (Create is the top card, turned over.)
+    const nextCard = (direction: 1 | -1) => {
+        const card = neighbour(deck, code, direction)
+        return card && card.code !== code ? card : undefined
+    }
     const pickTab = (index: number) => {
         const change = () => flushSync(() => setTab(index === tab ? Tab.Listen : index))
         // (The source is the back of the top card: with a music card on top, the whole card turns over.)
-        if (index === Tab.Create && (tab === Tab.Listen || tab === Tab.Create)) turn(change)
+        if (index === Tab.Create && (tab === Tab.Listen || tab === Tab.Create)) turn(change, nextCard(1))
         else if (index === tab) throwTop("down", change)
         else raise(change)
     }
     const pileHandlers = usePile({
         enabled: pile,
         current: code,
-        next: direction => {
-            const card = neighbour(deck, code, direction)
-            return card && card.code !== code ? card : undefined
-        },
+        next: nextCard,
         go: card => loadCard(card.code),
         dismiss: tab !== Tab.Listen && tab !== Tab.Create ? () => flushSync(() => setTab(Tab.Listen)) : undefined,
     })
