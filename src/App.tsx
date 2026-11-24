@@ -1,7 +1,7 @@
 import { RefObject, memo, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import { Tab } from "./tabs"
-import { NO_TITLE, cardFragment, cardURL, extractTitle, generateCard, formatTime, formatSeed, generateSeed, parseCardURL, takesInput } from "./card"
+import { NO_TITLE, cardFragment, cardURL, generateCard, formatTime, formatSeed, generateSeed, parseCardURL } from "./card"
 import AudioDevice from "pixelarticons/svg/audio-device.svg?react"
 import { Face, SourceFace, SourceHandle } from "./SourceFace"
 import { Scan } from "./Scan"
@@ -581,16 +581,22 @@ function App() {
     // `keep` adds the card to the deck. `seed` loads the card with that seed locked in, or (if null)
     // unlocked with a fresh seed; by default the seed lock is left as it is.
     const loadBinary = async (binary: Uint8Array, { keep, seed }: { keep?: boolean, seed?: number | null } = {}) => {
-        // The card that plays is the one given, unless it generates another (see `generateCard`):
-        // then its title, and what tracing shows, are those of the card it writes.
-        const played = await generateCard(binary, seed ?? 0)
-        const module = await WebAssembly.compile(played as BufferSource)
+        // The card that plays is the one given, unless its setup generates another (see generate.ts):
+        // then what tracing shows is the card it wrote. (Always found with the same seed, so that a
+        // card's title doesn't depend on the performance.)
+        let generated
+        try {
+            generated = await generateCard(binary, 0)
+        } catch (e: any) {
+            window.alert(e?.message ?? String(e))
+            return
+        }
+        const { binary: played, listens } = generated
         setSize(binary.length)
-        console.log("loaded wasm", module, played === binary ? "" : `(generated: ${played.length} bytes from ${binary.length})`)
-        const title = extractTitle(module) ?? NO_TITLE
+        console.log("loaded wasm", played === binary ? "" : `(generated: ${played.length} bytes from ${binary.length})`)
+        const title = generated.title ?? NO_TITLE
         setTitle(title)
         // A card whose process function takes a sample in is an effect, and gets the microphone.
-        const listens = takesInput(module)
         setListens(listens)
         setInputWanted(listens)
         if (keep && settings.collect) setDeck(deck => addCard(deck, binary, title))
@@ -721,7 +727,7 @@ function App() {
         setPacks(savePacks(packs.filter(p => p.id !== pack.id)))
     }
     const importPack = async (file: File) => {
-        const pack = parsePack(await file.text())
+        const pack = await parsePack(await file.text())
         if (!pack) return window.alert("That doesn't look like a pack of score cards.")
         setPacks(packs => savePacks([...packs, pack]))
         showDeck.current()

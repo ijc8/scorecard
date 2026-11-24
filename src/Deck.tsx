@@ -4,7 +4,7 @@ import Close from "pixelarticons/svg/close.svg?react"
 import library from "./library.json"
 import { decodeBlob, encodeBlob } from "./base43Encoder"
 import { DeckCard, Pack } from "./deck"
-import { NO_TITLE, cardFace, extractTitle, formatSeed } from "./card"
+import { NO_TITLE, cardFace, formatSeed, generateCard } from "./card"
 import { motionOff } from "./Settings"
 
 export type LoadCard = (code: string, seed?: number) => void
@@ -123,22 +123,23 @@ export const starterPack: Pack = { id: "starter", name: "Starter pack", cards: l
 export const PACK_FORMAT = "scorecard-pack"
 
 // Read a pack file, keeping only what checks out. (Titles and sizes come from the cards themselves.)
-export function parsePack(text: string): Pack | undefined {
+export async function parsePack(text: string): Promise<Pack | undefined> {
     try {
         const file = JSON.parse(text)
         if (file?.format !== PACK_FORMAT || !Array.isArray(file.cards)) return
         const cards = []
         for (const { code, description, seeds } of file.cards) {
-            let binary
+            let binary, title
             try {
                 binary = decodeBlob(code)
                 if (!WebAssembly.validate(binary as BufferSource)) continue
+                title = (await generateCard(binary, 0)).title
             } catch {
                 continue
             }
             cards.push({
                 code: encodeBlob(binary),
-                title: extractTitle(new WebAssembly.Module(binary as BufferSource)) ?? NO_TITLE,
+                title: title ?? NO_TITLE,
                 size: binary.length,
                 seeds: Array.isArray(seeds) ? seeds.filter(seed => Number.isInteger(seed) && seed >= 0 && seed < 2 ** 32) : [],
                 ...(typeof description === "string" ? { description: description.slice(0, 200) } : {}),

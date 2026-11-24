@@ -1,5 +1,5 @@
 // Packs a score card into a smaller one that unpacks it: an experiment in cards that generate their
-// own WebAssembly (the `g` export; see the ABI notes in AGENTS.md).
+// own WebAssembly (a setup function that returns another card; see the ABI notes in AGENTS.md).
 //
 //   node scripts/pack-card.mjs card.wasm [packed.wasm]
 //
@@ -11,7 +11,7 @@
 import { readFileSync, writeFileSync } from "fs"
 import { compile } from "watr"
 
-const OUT = 8192     // where the unpacked card goes (its length first, as `g` must return it)
+const OUT = 8192     // where the unpacked card goes (its length first, as setup must return it)
 const TABLE = 65536  // the models' table: 2^20 entries of two floats (probability - 1/2, count)
 const MODELS = 4
 
@@ -85,12 +85,12 @@ const MODEL = `(module
   (func (export "update") (param $bit i32) (local $j i32) (local $a i32) (local $q f32) (local $w f32)
     ${UPDATE}))`
 
-// The unpacker: `g` unpacks the data that follows it and says where the result is.
+// The unpacker: its setup unpacks the data that follows it and says where the result is.
 const unpacker = data => `(module
   (memory (export "m") ${PAGES})
   ${GLOBALS}
   ${ENTRY}
-  (func (export "g") (param $seed i32) (result i32)
+  (func (export "s") (param $seed i32) (result i32)
     (local $range i32) (local $code i32) (local $in i32) (local $bound i32) (local $bit i32)
     (local $j i32) (local $a i32) (local $q f32) (local $w f32) (local $num f32) (local $den f32)
     (local.set $range (i32.const 1))
@@ -152,8 +152,8 @@ export function pack(card) {
     while (length > 0 && data[length - 1] === 0) length--
     const packed = compile(unpacker(data.subarray(0, length)))
     // Make sure it comes out as it went in.
-    const { g, m } = new WebAssembly.Instance(new WebAssembly.Module(packed)).exports
-    const at = g(0)
+    const { s, m } = new WebAssembly.Instance(new WebAssembly.Module(packed)).exports
+    const at = s(0)
     const memory = new Uint8Array(m.buffer)
     const size = new DataView(m.buffer).getUint32(at, true)
     if (size !== card.length || card.some((byte, i) => memory[at + 4 + i] !== byte)) throw new Error("the packed card doesn't unpack to the original")

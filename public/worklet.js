@@ -86,21 +86,18 @@ class CustomProcessor extends AudioWorkletProcessor {
         } else {
             this.traceLogs = null
             this.wasm = await WebAssembly.instantiate(this.module)
-            // A card may write another card, to be played in its place (and that one another, a few
-            // times over): `g` takes the seed and says where in memory the new card is, as a 32-bit
-            // length followed by that many bytes. (When tracing, this has been done already.)
-            for (let generation = 0; this.wasm.exports.g && generation < 8; generation++) {
-                const memory = (this.wasm.exports.m ?? this.wasm.exports.memory).buffer
-                const at = this.wasm.exports.g(seed) >>> 0
-                const length = new DataView(memory).getUint32(at, true)
-                this.wasm = await WebAssembly.instantiate(new WebAssembly.Module(memory.slice(at + 4, at + 4 + length)))
-            }
         }
 
-        // Support new, short export name ("s") or legacy name ("setup") for old cards.
-        const setup = this.wasm.exports.s ?? this.wasm.exports.setup
-        if (setup) {
-            setup(seed)
+        // Set the card up (short export name "s", or the legacy "setup" of old cards). Its setup may
+        // return the address in its memory of another card (a 32-bit length, then that many bytes of
+        // WebAssembly), to be played in its place; and that one's may do the same. (When tracing,
+        // the main thread has already done this, and what's here is the card that plays.)
+        for (;;) {
+            const next = (this.wasm.exports.s ?? this.wasm.exports.setup)?.(seed)
+            if (this.trace || typeof next !== "number" || next === 0) break
+            const memory = (this.wasm.exports.m ?? this.wasm.exports.memory).buffer
+            const length = new DataView(memory).getUint32(next >>> 0, true)
+            this.wasm = await WebAssembly.instantiate(new WebAssembly.Module(memory.slice((next >>> 0) + 4, (next >>> 0) + 4 + length)))
         }
 
         if (this.trace) this.postTrace()

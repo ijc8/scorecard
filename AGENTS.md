@@ -61,19 +61,20 @@ A scorecard `.wasm` exports:
 - `d`: optional `i32` global pointing to a zero-terminated UTF-8 title. If present, memory must be
   exported as `m`.
 
-- `g`: `(i32) -> i32`, optional and **experimental** (11-24): the card generates another card, which
-  is played in its place. `g` takes the seed and returns an address in `m`: a 32-bit little-endian
-  length, then that many bytes of WebAssembly. The result may export `g` in turn (up to 8 times);
-  the last one is the card (`p`, `s`, `d` as above), and nothing carries over to it but the seed
-  and whatever the generator wrote into it. It happens afresh at each setup. A card with `g` needn't
-  have `p`. `generateCard` (`src/card.ts`) and `public/worklet.js` implement it; the title, the
-  trace view and the Wasm source shown are the generated card's, the size and QR code the
-  generator's. `scripts/pack-card.mjs` uses it to pack a card smaller: a ~450-byte unpacker
-  (context-mixing arithmetic decoder, in WebAssembly text in that script) plus the packed card.
-  Not settled: whether this stays, the name, and generating during play.
+- **Experimental** (11-24): `s` may return an `i32`. If it's non-zero, it's an address in `m` where
+  the card has written another card (a 32-bit little-endian length, then that many bytes of
+  WebAssembly), which is set up and played in its place; that card's `s` may do the same, without
+  limit. Nothing carries over but the seed and whatever the generator wrote into the new card, and
+  it happens afresh at each setup. A card that does this needn't have `p`. The title is that of the
+  last card along the way that has a `d`, found with seed 0 so that it doesn't vary. `src/generate.ts`
+  (run in a worker, which is abandoned if a card takes over 3 s: the only guard against a card that
+  never settles) and `public/worklet.js` implement it; the trace view and the Wasm source shown are
+  the generated card's, the size and QR code the generator's. `scripts/pack-card.mjs` uses it to
+  pack a card smaller: a ~450-byte unpacker (context-mixing arithmetic decoder, in WebAssembly text
+  in that script) plus the packed card. Not settled: whether this stays, and generating during play.
 
 The player also accepts the legacy names (`process`/`setup`/`title`/`memory`) for old cards. Keep
-that fallback in `extractTitle` (`src/card.ts`) and in `public/worklet.js`.
+that fallback in `src/generate.ts` and in `public/worklet.js`.
 
 ## Architecture
 

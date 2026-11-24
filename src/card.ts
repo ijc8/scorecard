@@ -1,5 +1,6 @@
 // Things about cards themselves: their links, their size limit, their titles and faces.
 import QRCode from "qrcode"
+import { Generated } from "./generate"
 import { decodeBlob, encode, decode } from "./base43Encoder"
 
 export function generateSeed() {
@@ -110,52 +111,33 @@ export function maxCardSize() {
 
 export const NO_TITLE = "untitled"
 
-export function extractTitle(module: WebAssembly.Module) {
-    const instance = new WebAssembly.Instance(module)
-    // Support new, short export name ("d") or legacy name ("title") for old cards.
-    // (In the future, "d" may contain additional metadata such as an artist name or description.)
-    const data = instance.exports.d ?? instance.exports.title
-    if (data === undefined) {
-        return
-    }
-    const startPtr: number = (data as WebAssembly.Global).value
-    // Support new, short export name ("m") or legacy name ("memory") for old cards.
-    const memory = (instance.exports.m ?? instance.exports.memory) as WebAssembly.Memory
-    const mem = memory.buffer
-    const heap = new Uint8Array(mem)
-    let endPtr = startPtr;
-    while (heap[endPtr] != 0 && endPtr < heap.length) endPtr++
-    const title = (new TextDecoder()).decode(new Uint8Array(mem, startPtr, endPtr - startPtr))
-    console.log("Loaded title", title, "from", startPtr, "to", endPtr)
-    return title
-}
-
-
-// Does the card take sound in? That is: does its process function take a sample, as well as returning one?
-export function takesInput(module: WebAssembly.Module) {
-    const instance = new WebAssembly.Instance(module)
-    const process = (instance.exports.p ?? instance.exports.process) as ((...args: number[]) => number) | undefined
-    return !!process && process.length > 0
-}
-
-// A card may write another card and have that played in its place: if it exports `g`, a function
-// from the seed to an address in its memory, the player calls it and takes what's there (a 32-bit
-// length, then that many bytes of WebAssembly) as the card. That one may do the same, a few times
-// over. (So a card can carry a program packed smaller than the program itself, along with what
-// unpacks it; or write a different program for each seed.) Returns the card that ends up playing:
-// the one given, unless it generates another.
-export const MAX_GENERATIONS = 8
-const MAX_GENERATED = 1 << 20
-export async function generateCard(binary: Uint8Array, seed: number): Promise<Uint8Array> {
-    for (let generation = 0; generation <= MAX_GENERATIONS; generation++) {
-        // (Asynchronously: browsers won't compile more than 4 KB at once on the main thread.)
-        const { exports } = (await WebAssembly.instantiate(binary as BufferSource)).instance
-        if (typeof exports.g !== "function") return binary
-        const memory = (exports.m ?? exports.memory) as WebAssembly.Memory
-        const at = (exports.g as (seed: number) => number)(seed) >>> 0
-        const length = new DataView(memory.buffer).getUint32(at, true)
-        if (length > MAX_GENERATED) throw new Error("The card generated too large a card")
-        binary = new Uint8Array(memory.buffer.slice(at + 4, at + 4 + length))
-    }
-    throw new Error("The card kept generating cards")
+// Finds out which card plays when this one is set up (itself, unless it generates another: see
+// generate.ts), and that card's title and whether it listens. A card that hasn't finished setting
+// up after a few seconds is given up on. (One worker is kept for this, and replaced if it gets stuck.)
+const SETUP_LIMIT = 3000
+let worker: Worker | undefined
+let requests = 0
+export function generateCard(binary: Uint8Array, seed: number): Promise<Generated> {
+    return new Promise((resolve, reject) => {
+        const mine = worker ??= new Worker(new URL("./generate.worker.ts", import.meta.url), { type: "module" })
+        const id = ++requests
+        const done = () => {
+            clearTimeout(timer)
+            mine.removeEventListener("message", listen)
+        }
+        const timer = setTimeout(() => {
+            done()
+            mine.terminate()
+            if (worker === mine) worker = undefined
+            reject(new Error("This card didn't finish setting up."))
+        }, SETUP_LIMIT)
+        const listen = (e: MessageEvent) => {
+            if (e.data.id !== id) return
+            done()
+            if (e.data.error) reject(new Error(e.data.error))
+            else resolve(e.data.result)
+        }
+        mine.addEventListener("message", listen)
+        mine.postMessage({ id, binary, seed })
+    })
 }
