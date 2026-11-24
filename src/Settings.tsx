@@ -1,12 +1,15 @@
 import Volume from "pixelarticons/svg/volume-2.svg?react"
 
 // Settings, kept in localStorage.
-export const defaultSettings = { collect: true, motion: true, volume: 1, awake: false, echo: true, deckStyle: "drawer" as "drawer" | "rolodex", look: "stack" as "stack" | "printed" | "classic" }
+export const defaultSettings = { collect: true, motion: true, volume: 1, awake: false, echo: true, deckStyle: "drawer" as "drawer" | "rolodex", look: "pile" as "pile" | "printed" | "classic" }
 export type Settings = typeof defaultSettings
 
 export function loadSettings(): Settings {
     try {
-        return { ...defaultSettings, ...JSON.parse(localStorage.getItem("scorecard-settings") ?? "{}") }
+        const settings = { ...defaultSettings, ...JSON.parse(localStorage.getItem("scorecard-settings") ?? "{}") }
+        // (An earlier mock.)
+        if (settings.look === "stack") settings.look = "pile"
+        return settings
     } catch {
         return defaultSettings
     }
@@ -33,9 +36,9 @@ export function SettingsTab({ settings, setSettings, deckSize, hasStarter, fresh
             </span>
         </label>
         <label>
-            <span style={{ flexGrow: 1 }}>Card look<small>A stack of cards with arrows between them (a mock, after HyperCard), the card as it's printed, lying on the player (a prototype), or the classic panel.</small></span>
+            <span style={{ flexGrow: 1 }}>Card look<small>The panel as the top card of a pile, to flick through (a prototype), the card as it's printed, lying on the player (another), or the classic panel.</small></span>
             <select value={settings.look} onChange={e => setSettings({ ...settings, look: e.target.value as Settings["look"] })}>
-                <option value="stack">Stack</option>
+                <option value="pile">Pile</option>
                 <option value="printed">Printed card</option>
                 <option value="classic">Classic</option>
             </select>

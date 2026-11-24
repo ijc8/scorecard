@@ -980,50 +980,117 @@
     border-radius: 3cqw 3cqw 0 0;
 }
 
-/* The stack look (a mock): the classic panel as one card of a stack, after HyperCard. Arrows on its
-   background step through the deck; see Stack.tsx. */
-.stack-nav {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: 3cqw;
-    font-size: 5cqw;
-    line-height: 1;
-    user-select: none;
+/* The pile look (a prototype; see Pile.tsx): the panel is the top card of a pile, on the table. */
+#app.pile-look {
+    background: none;
+    padding: 0 21px 0 13px;
 }
 
-.stack-nav > button {
-    border: none;
-    padding: 0;
+.pile {
+    position: relative;
+    margin: 12px 0 56px;
+}
+
+.pile-card {
+    position: relative;
+    background: white;
+    border: 1px solid black;
+}
+
+.pile-top {
+    z-index: 2;
+    touch-action: pan-y;
+}
+
+.pile-top :is(a, img) {
+    -webkit-user-drag: none;
+}
+
+/* Copies of the top card: one that moves, and one that stands in for the card beneath. */
+.pile-ghost {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    pointer-events: none;
+    will-change: transform;
+}
+
+.pile-under {
+    z-index: 3;
+}
+
+/* The edges of the cards below, and their shadow on the table. */
+.pile-edges {
+    position: absolute;
+    inset: 0;
+    box-shadow: 3px 3px 0 -1px white, 3px 3px 0 0 black, 6px 6px 0 -1px white, 6px 6px 0 0 black, 8px 8px 0 0 black;
+}
+
+.pile-look .tabs {
+    display: flex;
+    justify-content: center;
     background: none;
-    font: inherit;
+}
+
+.pile-look .tabs > button {
+    width: 80px;
+}
+
+/* The tabs of cards at the back of the pile stick out below it... */
+.pile-tabs {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 6px;
+    right: -6px;
+}
+
+/* ...and the top card's own tab (if it has one) hangs from it. */
+.own-tab {
+    position: absolute;
+    top: calc(100% - 1px);
+    left: -1px;
+    right: -1px;
+    pointer-events: none;
+}
+
+.own-tab > button {
+    pointer-events: auto;
+}
+
+/* Every card in the pile is the size of a music card; the tabbed cards' contents scroll if they must. */
+.pile-look .panes {
+    position: relative;
+}
+
+.pile-look .sheet {
+    position: absolute;
+    inset: 0;
+    width: auto !important;
+    margin: 0 !important;
+    justify-content: flex-start !important;
+    overflow: hidden auto;
+}
+
+/* A folded corner: turn the card over. */
+.dog-ear {
+    position: absolute;
+    right: -1px;
+    bottom: -1px;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    border-top: 1px solid black;
+    border-left: 1px solid black;
+    background: linear-gradient(135deg, white calc(50% - 1px), black calc(50% - 1px) 50%, #ccf 50%);
     cursor: pointer;
 }
 
-.stack-nav svg {
-    display: block;
-    height: 9cqw;
-    width: 9cqw;
-}
-
-.stack-nav > button:disabled {
-    opacity: 0.25;
-    cursor: default;
-}
-
-/* (A button as the old Mac drew them: a round-cornered box.) */
-.stack-nav > .stack-count {
-    padding: 0.25em 0.9em;
-    border: 1px solid black;
-    border-radius: 0.5em;
-}
-
-.stack-nav > .stack-count:active {
-    background: black;
-    color: white;
-}
-
-/* The count opens the deck, so the pile peeking from the side of the screen isn't needed. */
-#layout:has(#app.stack) .deck-peek {
+.pile-top.lifted > .own-tab {
     display: none;
+}
+
+/* (A card that's covered by another goes at once, not halfway through a turn.) */
+.away .card3d > .side {
+    transition: none;
 }
