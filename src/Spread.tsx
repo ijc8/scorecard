@@ -49,12 +49,13 @@ function Face({ card }: { card: DeckCard }) {
         <img src={cardFace(card.code)} alt="" style={{ display: "block", width: "100%", aspectRatio: "1", marginBottom: "20px", imageRendering: "pixelated" }} />
         <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "1.6cqw", fontSize: "5cqw" }}>
             <ClockIcon style={small} /><span>0:00</span><Prev style={big} /><Play style={big} /><Forward style={{ ...big, height: "8cqw" }} />
-            <SeedIcon style={small} /><span style={{ width: "4.6em" }}>{card.seeds.length ? formatSeed(card.seeds[0]) : ""}</span><Bullseye style={small} />
+            <SeedIcon style={small} /><span style={{ width: "4.6em" }}>{card.seeds.length ? formatSeed(card.seeds[0]) : "--------"}</span><Bullseye style={small} />
         </div>
     </div>
 }
 
-export interface TabbedCard { index: number, name: string, label: string, Icon: React.FunctionComponent<React.SVGProps<SVGSVGElement>> }
+// A card with a tab: `face` is what's on it (drawn small, and not to be used there).
+export interface TabbedCard { index: number, name: string, face: React.ReactNode, Icon: React.FunctionComponent<React.SVGProps<SVGSVGElement>> }
 
 export function Spread({ deck, packs, tabbed, current, pile, pick, pickTab, close, discard, openPack, importPack, exportPack }: {
     deck: DeckCard[], packs: Pack[], tabbed: TabbedCard[], current: string | null,
@@ -123,15 +124,15 @@ export function Spread({ deck, packs, tabbed, current, pile, pick, pickTab, clos
             {packs.map(pack => <SealedPack key={pack.id} pack={pack} open={() => openPack(pack)} />)}
         </div>
         <div className="spread-cards tabbed">
-            {tabbed.map(({ index, name, label, Icon }) =>
-                <div key={index} className="mini" style={tilt(name + name)}>
+            {tabbed.map(({ index, name, face, Icon }, slot) =>
+                <div key={index} className="mini" style={{ ...tilt(name + name), "--slot": slot } as React.CSSProperties}>
                     <div className="mini-scale pile-card" title={name} {...activate(target => gather(target.parentElement, () => pickTab(index)))}>
-                        <div style={{ margin: "20px", textAlign: "center" }}>
+                        <div style={{ margin: "20px" }}>
                             <Logo />
-                            <Icon style={{ display: "block", height: "42cqw", margin: "16cqw auto 6cqw" }} />
-                            <div style={{ fontSize: "11cqw", lineHeight: 1.2 }}>{label}</div>
+                            <div className="mini-face" {...{ inert: "" }}>{face}</div>
                         </div>
                     </div>
+                    {/* Its tab, where it sticks out of the pile. */}
                     <span className="mini-tab"><Icon /></span>
                 </div>
             )}

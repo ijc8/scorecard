@@ -22,7 +22,8 @@ function snapshot(top: HTMLElement) {
         const img = document.createElement("img")
         for (const { name, value } of canvas.attributes) if (name !== "width" && name !== "height") img.setAttribute(name, value)
         img.src = canvas.toDataURL()
-        img.style.cssText += ";image-rendering:pixelated;display:block;width:100%;height:100%"
+        // (Keeping the canvas's own styles: one that's hidden stays hidden.)
+        img.style.cssText += ";image-rendering:pixelated;width:100%;height:100%"
         copies[i].replaceWith(img)
     })
     copy.classList.remove("pile-top")

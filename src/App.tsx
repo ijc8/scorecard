@@ -695,12 +695,12 @@ function App() {
         } else {
             sendToWorklet({ cmd: "loadModule", binary })
         }
-        if (state !== "playing") {
+        if (state === "stopped" || time === 0) {
             reset()
         } else {
-            // The card has to start over for the change to take hold; keep its seed, so it's the same performance.
-            setTime(0)
-            sendToWorklet({ cmd: "reset", seed })
+            // The card has to start over for the change to take hold. Keep its seed, so it's the same
+            // performance, and have it run (silently, as fast as it can) back to where it had got to.
+            sendToWorklet({ cmd: "reset", seed, resume: true })
         }
     }
 
@@ -853,13 +853,26 @@ function App() {
         const card = neighbour(deck, code, direction)
         return card && card.code !== code ? card : undefined
     }
+    // The Create tab's card is the top music card turned over, to write on. The card can also be
+    // turned over by its folded corner, just to see its source: then no tab goes with it.
+    const [writing, setWriting] = useState(false)
     const pickTab = (index: number) => {
-        const change = () => flushSync(() => setTab(index === tab ? Tab.Listen : index))
+        if (index === Tab.Create && tab === Tab.Create && !writing) return setWriting(true)
+        const change = () => flushSync(() => {
+            setTab(index === tab ? Tab.Listen : index)
+            setWriting(index === Tab.Create)
+        })
         // (The source is the back of the top card: with a music card on top, the whole card turns over.)
         if (index === Tab.Create && (tab === Tab.Listen || tab === Tab.Create)) turn(change, nextCard(1))
         else if (index === tab) throwTop("down", change)
         else raise(change)
     }
+    const flip = () => turn(() => flushSync(() => {
+        setTab(tab === Tab.Create ? Tab.Listen : Tab.Create)
+        setWriting(false)
+    }), nextCard(1))
+    // Is the top card one with a tab of its own?
+    const tabbed = tab !== Tab.Listen && (tab !== Tab.Create || writing)
     const pileHandlers = usePile({
         enabled: pile && !spread,
         current: code,
@@ -880,16 +893,17 @@ function App() {
 
     const face: Face = tab === Tab.Create ? "source" : tracing ? "bits" : "qr"
     const toggleTracing = () => setTracing(!tracing)
+    const settingsProps = {
+        settings, setSettings, deckSize: deck.length, hasStarter: packs.some(pack => pack.id === starterPack.id),
+        freshStarter: () => { setPacks(savePacks([...packs, starterPack])); showDeck.current() },
+        emptyDeck: () => setDeck(clearDeck()),
+    }
     const tabs = [
         { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, played, tracing, toggleTracing, face, code, loadBinary, kept: !!deckCard, toggleKept, lockSeed, printed: settings.look === "printed", description: deckCard?.description ?? library.find(card => card.code === code)?.description, turnOver: () => setTab(tab === Tab.Create ? Tab.Listen : Tab.Create), rolodex: settings.deckStyle === "rolodex" && !pile ? deck : null, loadCard, pile }} /> },
         { name: "Scan", Icon: Camera, component: <Scan {...{ onScan, tab }} /> },
         // Creating happens on the back of the card, so this tab shows the Listen tab's card turned over.
         { name: "Create", Icon: EditBox, component: null },
-        { name: "Settings", Icon: Sliders, component: <SettingsTab {...{
-            settings, setSettings, deckSize: deck.length, hasStarter: packs.some(pack => pack.id === starterPack.id),
-            freshStarter: () => { setPacks(savePacks([...packs, starterPack])); showDeck.current() },
-            emptyDeck: () => setDeck(clearDeck()),
-        }} /> },
+        { name: "Settings", Icon: Sliders, component: <SettingsTab {...settingsProps} /> },
         { name: "About", Icon: InfoBox, component: <About {...{ setTab, openDeck }} /> },
     ]
 
@@ -901,16 +915,22 @@ function App() {
         )}
     </div>
     const tabButtons = (own: boolean) => tabs.map(({ name, Icon }, index) => index !== Tab.Listen &&
-        <button key={index} title={name} aria-label={name} className={own ? "active" : ""} style={{ visibility: (index === tab) === own ? "visible" : "hidden" }} onClick={() => pickTab(index)}><Icon /></button>)
+        <button key={index} title={name} aria-label={name} className={own ? "active" : ""} style={{ visibility: (index === tab && tabbed) === own ? "visible" : "hidden" }} onClick={() => pickTab(index)}><Icon /></button>)
     return <div id="layout">
     {!pile && <Deck {...{ deck, packs, openPack, importPack, exportPack, current: code, loadCard, discard: (code: string) => setDeck(removeCard(deck, code)), open: deckOpen, setOpen: setDeckOpen }} />}
     {pile ? <div id="app" className="pile-look" style={{ containerType: "inline-size" }}>
         {spread && <Spread {...{ deck, packs, openPack, importPack, exportPack, current: tab === Tab.Listen || tab === Tab.Create ? code : null, pile: pilePlace.current }}
             tabbed={[
-                { index: Tab.Scan, name: "Scan", label: "Scan a card", Icon: Camera },
-                { index: Tab.Create, name: "Create", label: "Write a card", Icon: EditBox },
-                { index: Tab.Settings, name: "Settings", label: "Settings", Icon: Sliders },
-                { index: Tab.About, name: "About", label: "About", Icon: InfoBox },
+                { index: Tab.Scan, name: "Scan", Icon: Camera, face: <>
+                    <div className="viewfinder"><div></div></div>
+                    <div style={{ margin: "12px 0", fontSize: "6cqw", textAlign: "center" }}>Point at a score card</div>
+                </> },
+                { index: Tab.Create, name: "Create", Icon: EditBox, face: <>
+                    <div style={{ margin: "0 0 12px", fontSize: "6cqw", lineHeight: 1.2 }}>new card</div>
+                    <div style={{ aspectRatio: "1", border: "1px solid black" }}></div>
+                </> },
+                { index: Tab.Settings, name: "Settings", Icon: Sliders, face: <SettingsTab {...settingsProps} /> },
+                { index: Tab.About, name: "About", Icon: InfoBox, face: <About setTab={() => {}} openDeck={() => {}} /> },
             ]}
             discard={code => setDeck(removeCard(deck, code))}
             close={() => setSpread(false)}
@@ -919,14 +939,14 @@ function App() {
                 if (tab !== Tab.Create) setTab(Tab.Listen)
                 if (picked !== code || seed !== undefined) loadCard(picked, seed)
             }}
-            pickTab={index => { setSpread(false); setTab(index) }} />}
+            pickTab={index => { setSpread(false); setTab(index); setWriting(index === Tab.Create) }} />}
         <div className="pile" style={spread ? { display: "none" } : undefined}>
             <div className="pile-edges"></div>
             <div className="tabs pile-tabs">{tabButtons(false)}</div>
-            <div className="pile-card pile-top" style={{ borderStyle: dragging ? "dashed" : "solid" }} {...pileHandlers}>
+            <div className={"pile-card pile-top" + (binary && (tab === Tab.Listen || tab === Tab.Create) ? " eared" : "")} style={{ borderStyle: dragging ? "dashed" : "solid" }} {...pileHandlers}>
                 <div style={{ margin: "20px" }}>{logo}{panes}</div>
-                {tab !== Tab.Listen && <div className="tabs own-tab">{tabButtons(true)}</div>}
-                {binary && (tab === Tab.Listen || tab === Tab.Create) && <button className="dog-ear" title={tab === Tab.Create ? "Turn the card back over" : "Turn the card over, to its source"} onClick={() => pickTab(Tab.Create)}></button>}
+                {tabbed && <div className="tabs own-tab">{tabButtons(true)}</div>}
+                {binary && (tab === Tab.Listen || tab === Tab.Create) && <button className="dog-ear" title={tab === Tab.Create ? "Turn the card back over" : "Turn the card over, to its source"} onClick={flip}></button>}
             </div>
         </div>
     </div> :

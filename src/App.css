@@ -1074,7 +1074,24 @@
     overflow: hidden auto;
 }
 
-/* A folded corner: turn the card over. The flap is the upper left half; the rest shows the card beneath. */
+/* A folded corner: turn the card over. The corner really is missing from the card (which is drawn
+   by a layer of its own, cut to shape), so what's under the card shows there. */
+.pile-card.eared {
+    border-color: transparent;
+    background: none;
+}
+
+.pile-card.eared::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: -1px;
+    border: 1px solid black;
+    background: white;
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 23px), calc(100% - 23px) 100%, 0 100%);
+}
+
+/* (The flap: the upper left half of the corner, folded over.) */
 .dog-ear {
     position: absolute;
     right: -1px;
@@ -1082,8 +1099,10 @@
     width: 24px;
     height: 24px;
     padding: 0;
-    border: 1px solid black;
-    background: linear-gradient(135deg, white calc(50% - 1px), black calc(50% - 1px) 50%, white 50%);
+    border: none;
+    border-top: 1px solid black;
+    border-left: 1px solid black;
+    background: linear-gradient(135deg, white calc(50% - 1px), black calc(50% - 1px) 50%, transparent 50%);
     cursor: pointer;
 }
 
@@ -1205,21 +1224,34 @@
     padding: 0 3px;
 }
 
+.mini-face {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: 410px;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+/* A tabbed card's tab, full size and shrunk like the card, in its own place along the bottom. */
 .mini-tab {
     position: absolute;
     top: calc(100% - 1px);
     left: 50%;
-    width: 44px;
-    margin-left: -22px;
-    padding: 1px 0 3px;
+    width: 80px;
+    margin-left: -40px;
+    padding: 4px 0;
     border: 0 solid transparent;
     border-image: url("assets/tab.png") 0 10 2 10 fill / 0 15px 3px 15px;
     image-rendering: pixelated;
     font-size: 0;
+    transform-origin: 50% 0;
+    transform: translateX(calc((var(--slot) - 1.5) * var(--mw) / 360 * 80px)) scale(calc(var(--mw) / 360));
 }
 
 .mini-tab > svg {
-    height: 14px;
+    height: 24px;
+    vertical-align: middle;
 }
 
 .spread .pack {

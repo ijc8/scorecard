@@ -50,7 +50,8 @@ class CustomProcessor extends AudioWorkletProcessor {
                 this.module = new WebAssembly.Module(e.data.binary)
                 this.trace = e.data.trace
             } else if (e.data.cmd === "reset") {
-                this.setup(e.data.seed, e.data.skip)
+                // (`resume`: start again, but get back to where the card had got to.)
+                this.setup(e.data.seed, e.data.resume ? this.pos + this.skipping : e.data.skip)
             } else if (e.data.cmd === "skip") {
                 this.skipping += e.data.samples
             } else if (e.data.cmd === "speed") {
