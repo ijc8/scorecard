@@ -13,6 +13,9 @@ import { flushSync } from "react-dom"
 import { raise, throwTop, turn, useDissolve, usePile } from "./Pile"
 import { Place, Spread, placeOf } from "./Spread"
 import { Forward } from "./icons"
+import { decodeSteps } from "./qrDecode"
+import { playDecode } from "./decodeAnimation"
+import { motionOff } from "./Settings"
 import { holdMediaSession, useMediaSession } from "./mediaSession"
 import { DeckCard } from "./deck"
 import QRCode from "qrcode"
@@ -125,6 +128,31 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
     const showMessage = (error || (size === 0)) && face !== "source"
     // (In the pile look, the QR code dissolves into the card's bits.)
     const dissolve = useDissolve(tracing && !showMessage)
+    // When tracing is turned on there, the QR code is first read, step by step, into those bits
+    // (see decodeAnimation.ts); the animation plays on a canvas of its own, over both. Tap it to skip.
+    const decodeCanvas = useRef<HTMLCanvasElement>(null)
+    const [decoding, setDecoding] = useState(false)
+    const wasTracing = useRef(tracing)
+    useEffect(() => {
+        const turnedOn = tracing && !wasTracing.current
+        wasTracing.current = tracing
+        if (!turnedOn || !pile || !binary || !code || showMessage || face === "source" || motionOff()) return
+        let steps
+        try {
+            steps = decodeSteps(cardURL(code, seedLock ? seed : undefined), code.length)
+        } catch {
+            return
+        }
+        setDecoding(true)
+        let timer = 0
+        // (Once it's done, it stays a moment while the bits dissolve in underneath.)
+        const stop = playDecode(decodeCanvas.current!, steps, binary, () => { timer = window.setTimeout(() => setDecoding(false), 450) })
+        return () => {
+            stop()
+            clearTimeout(timer)
+            setDecoding(false)
+        }
+    }, [tracing, binary])
 
     // The card has two sides: the front (its QR code, which tracing sees through to its bits) and
     // the back (its source). Turning it over always goes the same way round.
@@ -298,6 +326,7 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
                     <canvas ref={qrCanvas} data-qr="" width="1" height="1" style={{ visibility: showMessage ? "hidden" : "inherit" }}></canvas>
                     {/* Tracing: the card's bits, seen through the QR code. */}
                     <canvas ref={traceCanvas} width="1" height="1" className="xray" style={pile ? dissolve : { opacity: tracing && !showMessage ? 1 : 0 }}></canvas>
+                    <canvas ref={decodeCanvas} width="1" height="1" title="Reading the QR code (tap to skip)" style={{ display: decoding ? "block" : "none" }} onClick={() => setDecoding(false)}></canvas>
                 {showMessage && <div style={{ position: "absolute", fontSize: "48px", height: "100%", width: "100%", userSelect: "none" }}>
                     <div style={{ border: "16px solid black", height: "100%", containerType: "size", lineHeight: 1, display: "flex", flexDirection: "column", justifyContent: "space-evenly" }}>
                         {error ? <>
@@ -865,7 +894,7 @@ function App() {
                 { index: Tab.Scan, name: "Scan", label: "Scan a card", Icon: Camera },
                 { index: Tab.Create, name: "Create", label: "Write a card", Icon: EditBox },
                 { index: Tab.Settings, name: "Settings", label: "Settings", Icon: Sliders },
-                { index: Tab.About, name: "About", label: "Rules", Icon: InfoBox },
+                { index: Tab.About, name: "About", label: "About", Icon: InfoBox },
             ]}
             discard={code => setDeck(removeCard(deck, code))}
             close={() => setSpread(false)}

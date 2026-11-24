@@ -103,7 +103,10 @@ that fallback in `extractTitle` (`src/card.ts`) and in `public/worklet.js`.
   About are cards at the back of the pile whose index tabs stick out below. React only draws the top
   card; what moves, and what shows under a dragged card, are DOM copies of it. Tapping the table
   spreads the pile out (`src/Spread.tsx`): small copies of every card, the tabbed cards and sealed
-  packs, which stands in for the deck drawer in this look. The printed look
+  packs, which stands in for the deck drawer in this look. Turning tracing on there first plays the
+  QR code being read into the card's bits (`src/decodeAnimation.ts`, from the module-by-module
+  account in `src/qrDecode.ts`; `npx tsx scripts/qr-decode-check.ts <cards>.wasm` checks that
+  account by reading the link back off the modules). The printed look
   (another prototype) draws the card as printed and puts
   every control on the player around it; the classic look is the earlier panel. The rolodex deck
   style (`src/Rolodex.tsx`) is the other prototype. Background in `docs/CARD-DESIGN.md`.
