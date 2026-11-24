@@ -403,6 +403,37 @@
     display: none;
 }
 
+/* The rolodex (a deck style): the tops of the next cards, standing behind the big card. */
+.rolodex {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: -2px;
+}
+
+.rolodex > button {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font: inherit;
+    font-size: 4cqw;
+    text-align: left;
+    padding: 0.15em 0.5em 0.35em;
+    margin: 0 auto -0.2em;
+    width: calc(100% - var(--depth) * 4%);
+    border: 1px solid black;
+    border-bottom: none;
+    border-radius: 4px 4px 0 0;
+    background: hsl(0 0% calc(100% - var(--depth) * 5%));
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.rolodex > button > span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 /* The big card turns over (all of it) between its front, the QR code, and its back, the source. */
 .card3d {
     position: relative;

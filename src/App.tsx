@@ -7,6 +7,8 @@ import { Face, SourceFace, SourceHandle } from "./SourceFace"
 import { Scan } from "./Scan"
 import { Settings, SettingsTab, loadSettings } from "./Settings"
 import { Deck, LoadCard, PACK_FORMAT, parsePack, starterPack } from "./Deck"
+import { RolodexTops, useRolodex } from "./Rolodex"
+import { DeckCard } from "./deck"
 import QRCode from "qrcode"
 import { encodeBlob, decodeBlob } from "./base43Encoder"
 import Play from "pixelarticons/svg/play.svg?react"
@@ -98,12 +100,14 @@ function SeedInput({ seed, setSeed }: any) {
 }
 
 // TODO: Specify types
-function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, kept, toggleKept, seedSaved, toggleSeedSaved, face, code, loadBinary }: {
+function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, kept, toggleKept, seedSaved, toggleSeedSaved, face, code, loadBinary, rolodex, loadCard }: {
     qrCanvas: RefObject<HTMLCanvasElement>, title: string, listens: boolean, size: number, seed: number, setSeed: (s: number) => void, seedLock: boolean,
     setSeedLock: (l: boolean) => void, state: any, setState: any, time: number, reset: any, error: any, buffer: Uint8Array | null,
     tracing: boolean, toggleTracing: () => void, face: Face, code: string | null, loadBinary: (b: Uint8Array) => Promise<void>,
     kept: boolean, toggleKept: () => void, seedSaved: boolean, toggleSeedSaved: () => void,
+    rolodex: DeckCard[] | null, loadCard: LoadCard,
 }) {
+    const { swipe } = useRolodex(rolodex ?? [], code, loadCard)
     const bigIconStyle = { height: "10cqw", verticalAlign: "middle" }
     const smallIconStyle = { height: "5cqw", flexShrink: 0, verticalAlign: "middle" }
     const inlineIconStyle = { height: "11cqh", verticalAlign: "bottom" }
@@ -257,10 +261,11 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, setSe
             </h2>
     return <div>
         {/* The whole card turns over: on each side, title and size on top (as in the deck), picture below. */}
+        {rolodex && <RolodexTops deck={rolodex} current={code} loadCard={loadCard} />}
         <div className="card3d" style={{ transform: `perspective(2000px) rotateY(${flip.turns * 180}deg)` }}>
             <div className="side" style={{ visibility: side ? "hidden" : "inherit" }} {...(side ? { inert: "" } : {})}>
                 {header}
-                <div className="square">
+                <div className="square" {...(rolodex ? { ...swipe, style: { touchAction: "none" } } : {})}>
                     <canvas ref={qrCanvas} width="1" height="1" style={{ visibility: showMessage ? "hidden" : "inherit" }}></canvas>
                     {/* Tracing: the card's bits, seen through the QR code. */}
                     <canvas ref={traceCanvas} width="1" height="1" className="xray" style={{ opacity: tracing && !showMessage ? 1 : 0 }}></canvas>
@@ -715,7 +720,7 @@ function App() {
     const face: Face = tab === Tab.Create ? "source" : tracing ? "bits" : "qr"
     const toggleTracing = () => setTracing(!tracing)
     const tabs = [
-        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, listens, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, face, code, loadBinary, kept: !!deckCard, toggleKept, seedSaved: !!deckCard?.seeds.includes(seed), toggleSeedSaved }} /> },
+        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, listens, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, face, code, loadBinary, kept: !!deckCard, toggleKept, seedSaved: !!deckCard?.seeds.includes(seed), toggleSeedSaved, rolodex: settings.deckStyle === "rolodex" ? deck : null, loadCard }} /> },
         { name: "Scan", Icon: Camera, component: <Scan {...{ onScan, tab }} /> },
         // Creating happens on the back of the card, so this tab shows the Listen tab's card turned over.
         { name: "Create", Icon: EditBox, component: null },
