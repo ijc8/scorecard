@@ -52,6 +52,13 @@ function turn(direction: 1 | -1) {
     }
 }
 
+// The card that many places along from this one in the deck (the deck's first, if this isn't in it).
+export function neighbour(deck: DeckCard[], current: string | null, direction: number) {
+    if (deck.length === 0) return
+    const { index, at } = around(deck, current)
+    return index < 0 ? deck[0] : at(direction)
+}
+
 export function useRolodex(deck: DeckCard[], current: string | null, loadCard: LoadCard) {
     const go = (direction: 1 | -1) => {
         if (deck.length === 0) return

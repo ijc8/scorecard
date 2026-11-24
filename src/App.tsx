@@ -7,7 +7,8 @@ import { Face, SourceFace, SourceHandle } from "./SourceFace"
 import { Scan } from "./Scan"
 import { Settings, SettingsTab, loadSettings } from "./Settings"
 import { Deck, LoadCard, PACK_FORMAT, parsePack, starterPack } from "./Deck"
-import { RolodexTops, useRolodex } from "./Rolodex"
+import { RolodexTops, neighbour, useRolodex } from "./Rolodex"
+import { holdMediaSession, useMediaSession } from "./mediaSession"
 import { DeckCard } from "./deck"
 import QRCode from "qrcode"
 import { encodeBlob, decodeBlob } from "./base43Encoder"
@@ -35,7 +36,6 @@ import { TraceMap, instrumentWasm } from "./wasmTracer"
 import { MemoryTrace } from "./memoryTrace"
 import { initDebug, dlog, DEBUG } from "./debug"
 import Heart from "pixelarticons/svg/heart.svg?react"
-import Bookmark from "pixelarticons/svg/bookmark.svg?react"
 import Headphone from "pixelarticons/svg/headphone.svg?react"
 import Sliders from "pixelarticons/svg/sliders.svg?react"
 import InfoBox from "pixelarticons/svg/info-box.svg?react"
@@ -99,11 +99,11 @@ function SeedInput({ seed, setSeed }: any) {
 }
 
 // TODO: Specify types
-function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, kept, toggleKept, seedSaved, toggleSeedSaved, face, code, loadBinary, rolodex, loadCard }: {
+function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, kept, toggleKept, face, code, loadBinary, rolodex, loadCard, lockSeed }: {
     qrCanvas: RefObject<HTMLCanvasElement>, title: string, listens: boolean, size: number, seed: number, setSeed: (s: number) => void, seedLock: boolean,
-    setSeedLock: (l: boolean) => void, state: any, setState: any, time: number, reset: any, error: any, buffer: Uint8Array | null,
+    state: any, setState: any, time: number, reset: any, error: any, buffer: Uint8Array | null,
     tracing: boolean, toggleTracing: () => void, face: Face, code: string | null, loadBinary: (b: Uint8Array) => Promise<void>,
-    kept: boolean, toggleKept: () => void, seedSaved: boolean, toggleSeedSaved: () => void,
+    kept: boolean, toggleKept: () => void, lockSeed: (lock: boolean) => void,
     rolodex: DeckCard[] | null, loadCard: LoadCard,
 }) {
     const { swipe } = useRolodex(rolodex ?? [], code, loadCard)
@@ -256,17 +256,6 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, setSe
                     {binary && <button className={"toggle" + (kept ? " on" : "")} title={kept ? "Remove from deck" : "Keep in deck"} style={{ fontSize: 0, lineHeight: 0, border: "none", padding: "0 0 0 6px", verticalAlign: "middle" }} onClick={toggleKept}>
                         <Heart style={{ height: "6cqw", verticalAlign: "middle" }} />
                     </button>}
-                    {binary && <button style={{ fontSize: 0, lineHeight: 0, border: "none", padding: "0 0 0 6px", verticalAlign: "middle" }} title="Show the card at work" onClick={() => {
-                        // On the source side, tracing lights up lines of the card's WebAssembly text (so turn to that);
-                        // otherwise the front fades to the card's bits.
-                        if (face === "source") {
-                            if (!tracing) source.current?.showWasm()
-                            else source.current?.showHeat(null)
-                        }
-                        toggleTracing()
-                    }}>
-                        <TraceIcon style={{ height: "6cqw", verticalAlign: "middle" }} />
-                    </button>}
                 </span>
             </h2>
     return <div>
@@ -299,7 +288,7 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, setSe
             </div>
         </div>
         <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", fontSize: "5cqw" }}>
-            <div style={{ userSelect: "none", display: "flex", alignItems: "center", width: "4em", flexShrink: 0, whiteSpace: "nowrap", justifyContent: "right" }}>
+            <div style={{ userSelect: "none", display: "flex", alignItems: "center", width: "3.8em", flexShrink: 0, whiteSpace: "nowrap", justifyContent: "right" }}>
                 <Clock style={smallIconStyle} />
                 &nbsp;
                 <span style={{ verticalAlign: "middle", display: "inline-block" }}>{
@@ -313,13 +302,21 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, setSe
             <button id="start" onTouchStart={touchStartToggle} onMouseDown={mouseToggle} onMouseUp={() => { events.current.toggle = false }}>{state === "playing" ? <Pause style={bigIconStyle} /> : <Play style={bigIconStyle} />}</button>
             <SkipButton style={{ ...bigIconStyle, height: "8cqw" }} />
             <div style={{ display: "flex", alignItems: "center", userSelect: "none" }}>
-                <button style={{ fontSize: 0 }}><DiceIcon style={smallIconStyle} onClick={() => setSeedLock(!seedLock)} /></button>
+                <button style={{ fontSize: 0 }} title={seedLock ? "Unlock the seed (and forget it)" : "Lock this seed (and save it with the card)"} onClick={() => lockSeed(!seedLock)}><DiceIcon style={smallIconStyle} /></button>
                 &nbsp;
                 <SeedInput {...{ seed, setSeed }} />
-                <button className={"toggle" + (seedSaved ? " on" : "")} title={seedSaved ? "Forget this seed" : "Save this seed"} style={{ fontSize: 0 }} onClick={toggleSeedSaved}>
-                    <Bookmark style={smallIconStyle} />
-                </button>
             </div>
+            <button style={{ fontSize: 0 }} title="Show the card at work" onClick={() => {
+                // On the source side, tracing lights up lines of the card's WebAssembly text (so turn to that);
+                // otherwise the front fades to the card's bits.
+                if (face === "source") {
+                    if (!tracing) source.current?.showWasm()
+                    else source.current?.showHeat(null)
+                }
+                toggleTracing()
+            }}>
+                <TraceIcon style={smallIconStyle} />
+            </button>
         </div>
     </div>
 }
@@ -567,6 +564,7 @@ function App() {
         } else if (_state === "paused") {
             sendToWorklet({ cmd: "pause" })
         }
+        holdMediaSession(_state === "playing")
         _setState(_state)
     }
 
@@ -633,14 +631,26 @@ function App() {
     }
 
     const loadCard: LoadCard = (code, seed) => loadBinary(decodeBlob(code), { seed: seed ?? null })
+    const stepDeck = (direction: number) => {
+        const card = neighbour(deck, code, direction)
+        if (card && card.code !== code) loadCard(card.code)
+    }
+    useMediaSession(title, state === "playing", qrCanvas.current, binary, {
+        play: () => setState("playing"),
+        pause: () => setState("paused"),
+        skip: () => sendToWorklet({ cmd: "skip", samples: 10 * 44100 }),
+        next: () => stepDeck(1),
+        previous: () => stepDeck(-1),
+    })
     const toggleKept = () => {
         if (!binary) return
         setDeck(deckCard ? removeCard(deck, code!) : addCard(deck, binary, title))
     }
-    const toggleSeedSaved = () => {
-        if (!binary) return
-        // Saving a seed implies keeping the card.
-        setDeck(toggleSeed(addCard(deck, binary, title), code!, seed))
+    // A locked seed is saved with the card in the deck (which keeps the card); unlocking forgets it.
+    const lockSeed = (lock: boolean) => {
+        setSeedLock(lock)
+        if (!binary || lock === !!deckCard?.seeds.includes(seed)) return
+        setDeck(toggleSeed(lock ? addCard(deck, binary, title) : deck, code!, seed))
     }
 
     const onScanRef = useRef(onScan)
@@ -705,7 +715,10 @@ function App() {
     }, [])
 
     // If the audio clock stalls (iOS), show "paused" so the next Play tap can restart audio.
-    useEffect(() => onStall(() => _setState("paused")), [])
+    useEffect(() => onStall(() => {
+        holdMediaSession(false)
+        _setState("paused")
+    }), [])
 
     // TODO: "load example" link
     // useEffect(() => {
@@ -719,7 +732,7 @@ function App() {
     const face: Face = tab === Tab.Create ? "source" : tracing ? "bits" : "qr"
     const toggleTracing = () => setTracing(!tracing)
     const tabs = [
-        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, listens, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, face, code, loadBinary, kept: !!deckCard, toggleKept, seedSaved: !!deckCard?.seeds.includes(seed), toggleSeedSaved, rolodex: settings.deckStyle === "rolodex" ? deck : null, loadCard }} /> },
+        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, face, code, loadBinary, kept: !!deckCard, toggleKept, lockSeed, rolodex: settings.deckStyle === "rolodex" ? deck : null, loadCard }} /> },
         { name: "Scan", Icon: Camera, component: <Scan {...{ onScan, tab }} /> },
         // Creating happens on the back of the card, so this tab shows the Listen tab's card turned over.
         { name: "Create", Icon: EditBox, component: null },

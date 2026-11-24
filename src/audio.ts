@@ -161,7 +161,7 @@ export function audioHealthy() {
 // https://stackoverflow.com/questions/21122418/ios-webaudio-only-works-on-headphones/46839941#46839941
 // TODO: Once iOS < 16.4 no longer matters, try dropping the tag (test the mute switch on an iPhone,
 // and that playback continues in the background / with the screen locked).
-function iOS() {
+export function iOS() {
     return ['iPad Simulator', 'iPhone Simulator', 'iPod Simulator', 'iPad', 'iPhone', 'iPod'].includes(navigator.platform)
         // iPad on iOS 13+ reports itself as a Mac
         || (navigator.userAgent.includes("Mac") && "ontouchend" in document)
