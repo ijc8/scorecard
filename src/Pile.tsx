@@ -59,12 +59,24 @@ function dress(copy: HTMLElement, card: DeckCard | undefined) {
 const OFF = { left: "translate(-115%, 4%) rotate(-10deg)", right: "translate(115%, 4%) rotate(10deg)", down: "translate(3%, 85%) rotate(3deg)" }
 
 // A copy of a card goes off to one side (from wherever it is) and is tucked in at the bottom of the pile.
-function tuck(ghost: HTMLElement, direction: keyof typeof OFF, from = "none") {
+// (`haste` is how many times quicker than usual: a card that was thrown hard keeps its speed.)
+function tuck(ghost: HTMLElement, direction: keyof typeof OFF, from = "none", haste = 1) {
     const pile = ghost.parentElement!
-    ghost.animate([{ transform: from }, { transform: OFF[direction] }], { duration: 190, easing: "cubic-bezier(.4, 0, .9, .6)", fill: "forwards" }).onfinish = () => {
+    ghost.animate([{ transform: from }, { transform: OFF[direction] }], { duration: 160 / haste, easing: haste > 1 ? "linear" : "cubic-bezier(.4, 0, .9, .6)", fill: "forwards" }).onfinish = () => {
         pile.prepend(ghost)
         ghost.style.zIndex = "0"
-        ghost.animate([{ transform: OFF[direction] }, { transform: "none" }], { duration: 230, easing: "cubic-bezier(.2, .8, .3, 1)", fill: "forwards" }).onfinish = () => ghost.remove()
+        ghost.animate([{ transform: OFF[direction] }, { transform: "none" }], { duration: 200 / Math.sqrt(haste), easing: "cubic-bezier(.2, .8, .3, 1)", fill: "forwards" }).onfinish = () => ghost.remove()
+    }
+}
+
+// The whole top card turns over, becoming whatever `change` makes of it once it's edge-on.
+export function turn(change: () => void) {
+    const top = pileTop()
+    if (!top || !top.animate || motionOff()) return change()
+    const at = (degrees: number) => ({ transform: `perspective(1400px) rotateY(${degrees}deg)` })
+    top.animate([at(0), at(90)], { duration: 150, easing: "cubic-bezier(.5, 0, 1, .7)" }).onfinish = () => {
+        change()
+        top.animate([at(-90), at(0)], { duration: 210, easing: "cubic-bezier(.2, .9, .3, 1.15)" })
     }
 }
 
@@ -92,7 +104,7 @@ export function raise(change: () => void) {
     }
 }
 
-interface Drag { x: number, y: number, pointer: number, ghost?: HTMLElement, under?: HTMLElement, direction?: number, dx: number }
+interface Drag { x: number, y: number, pointer: number, ghost?: HTMLElement, under?: HTMLElement, direction?: number, dx: number, trail: { t: number, x: number }[] }
 
 // Handlers for the top card: drag it sideways and let go to send it to the bottom of the pile.
 // `next` is the card that would turn up (if any) going one way or the other; `go` makes it the top
@@ -146,12 +158,16 @@ export function usePile({ enabled, current, next, go, dismiss }: {
         const { next, go, dismiss } = latest.current
         const forward = d.dx < 0
         const card = dismiss ? undefined : next(forward ? 1 : -1)
-        if (commit && Math.abs(d.dx) > 70 && (dismiss || card)) {
+        // How fast it was let go, in pixels a millisecond (the way it was dragged counting as positive).
+        const first = d.trail[0], last = d.trail[d.trail.length - 1]
+        const speed = last && last.t > first.t ? (last.x - first.x) / (last.t - first.t) * Math.sign(d.dx) : 0
+        // A card goes if it's let go far enough out, or thrown.
+        if (commit && (Math.abs(d.dx) > 70 || (speed > 0.5 && Math.abs(d.dx) > 15)) && speed > -0.3 && (dismiss || card)) {
             d.under?.classList.add("done")
             const under = d.under
             // (In case nothing changes to clear it away.)
             setTimeout(() => under?.remove(), 600)
-            tuck(d.ghost, forward ? "left" : "right", transform(d))
+            tuck(d.ghost, forward ? "left" : "right", transform(d), Math.min(Math.max(speed / 0.5, 1), 3))
             if (dismiss) dismiss()
             else go(card!)
             redraw(n => n + 1)
@@ -167,12 +183,15 @@ export function usePile({ enabled, current, next, go, dismiss }: {
         onPointerDown: (e: React.PointerEvent) => {
             if (drag.current || motionOff()) return
             if ((e.target as HTMLElement).closest("button, input, textarea, select, label, video, .source")) return
-            drag.current = { x: e.clientX, y: e.clientY, pointer: e.pointerId, dx: 0 }
+            drag.current = { x: e.clientX, y: e.clientY, pointer: e.pointerId, dx: 0, trail: [] }
         },
         onPointerMove: (e: React.PointerEvent) => {
             const d = drag.current
             if (!d || e.pointerId !== d.pointer) return
             d.dx = e.clientX - d.x
+            // (Where the pointer has been in the last tenth of a second, to tell how fast the card is let go.)
+            d.trail.push({ t: e.timeStamp, x: e.clientX })
+            while (d.trail[0].t < e.timeStamp - 100) d.trail.shift()
             const dy = e.clientY - d.y
             const top = e.currentTarget as HTMLElement
             if (!d.ghost) {

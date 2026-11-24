@@ -10,7 +10,7 @@ import { Deck, LoadCard, PACK_FORMAT, parsePack, starterPack } from "./Deck"
 import library from "./library.json"
 import { RolodexTops, neighbour, useRolodex } from "./Rolodex"
 import { flushSync } from "react-dom"
-import { raise, throwTop, useDissolve, usePile } from "./Pile"
+import { raise, throwTop, turn, useDissolve, usePile } from "./Pile"
 import { holdMediaSession, useMediaSession } from "./mediaSession"
 import { DeckCard } from "./deck"
 import QRCode from "qrcode"
@@ -799,7 +799,8 @@ function App() {
     // to the top, and tapping it again sends the card back. (Create is the top card, turned over.)
     const pickTab = (index: number) => {
         const change = () => flushSync(() => setTab(index === tab ? Tab.Listen : index))
-        if (index === Tab.Create) change()
+        // (The source is the back of the top card: with a music card on top, the whole card turns over.)
+        if (index === Tab.Create && (tab === Tab.Listen || tab === Tab.Create)) turn(change)
         else if (index === tab) throwTop("down", change)
         else raise(change)
     }
@@ -817,7 +818,7 @@ function App() {
     const face: Face = tab === Tab.Create ? "source" : tracing ? "bits" : "qr"
     const toggleTracing = () => setTracing(!tracing)
     const tabs = [
-        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, face, code, loadBinary, kept: !!deckCard, toggleKept, lockSeed, printed: settings.look === "printed", description: deckCard?.description ?? library.find(card => card.code === code)?.description, turnOver: () => setTab(tab === Tab.Create ? Tab.Listen : Tab.Create), rolodex: settings.deckStyle === "rolodex" ? deck : null, loadCard, pile }} /> },
+        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, face, code, loadBinary, kept: !!deckCard, toggleKept, lockSeed, printed: settings.look === "printed", description: deckCard?.description ?? library.find(card => card.code === code)?.description, turnOver: () => setTab(tab === Tab.Create ? Tab.Listen : Tab.Create), rolodex: settings.deckStyle === "rolodex" && !pile ? deck : null, loadCard, pile }} /> },
         { name: "Scan", Icon: Camera, component: <Scan {...{ onScan, tab }} /> },
         // Creating happens on the back of the card, so this tab shows the Listen tab's card turned over.
         { name: "Create", Icon: EditBox, component: null },
@@ -847,7 +848,7 @@ function App() {
             <div className="pile-card pile-top" style={{ borderStyle: dragging ? "dashed" : "solid" }} {...pileHandlers}>
                 <div style={{ margin: "20px" }}>{logo}{panes}</div>
                 {tab !== Tab.Listen && <div className="tabs own-tab">{tabButtons(true)}</div>}
-                {binary && (tab === Tab.Listen || tab === Tab.Create) && <button className="dog-ear" title={tab === Tab.Create ? "Turn the card back over" : "Turn the card over, to its source"} onClick={() => setTab(tab === Tab.Create ? Tab.Listen : Tab.Create)}></button>}
+                {binary && (tab === Tab.Listen || tab === Tab.Create) && <button className="dog-ear" title={tab === Tab.Create ? "Turn the card back over" : "Turn the card over, to its source"} onClick={() => pickTab(Tab.Create)}></button>}
             </div>
         </div>
     </div> :

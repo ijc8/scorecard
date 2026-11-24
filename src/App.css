@@ -1094,3 +1094,8 @@
 .away .card3d > .side {
     transition: none;
 }
+
+/* In the pile look the whole card turns over (see `turn`), so its middle changes sides at once. */
+.pile-look .card3d, .pile-look .card3d > .side {
+    transition: none;
+}
