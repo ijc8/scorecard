@@ -38,6 +38,8 @@ import { MemoryTrace } from "./memoryTrace"
 import { initDebug, dlog, DEBUG } from "./debug"
 import Heart from "pixelarticons/svg/heart.svg?react"
 import Repeat from "pixelarticons/svg/repeat.svg?react"
+import Printer from "pixelarticons/svg/print.svg?react"
+import { canPrintDirectly, printCard, saveCardImage } from "./print"
 import Headphone from "pixelarticons/svg/headphone.svg?react"
 import Sliders from "pixelarticons/svg/sliders.svg?react"
 import InfoBox from "pixelarticons/svg/info-box.svg?react"
@@ -251,6 +253,9 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
         setStateRef.current("playing")
     }
     const TraceIcon = tracing ? BullseyeArrow : Bullseye
+    // null: the print options are hidden; otherwise, how printing is going.
+    const [printing, setPrinting] = useState<string | null>(null)
+    const printable = () => ({ url: cardURL(code!, seedLock ? seed : undefined), title, size, description })
     const traceClick = () => {
         // On the source side, tracing lights up lines of the card's WebAssembly text (so turn to that);
         // otherwise the front fades to the card's bits.
@@ -334,7 +339,19 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
             <button className={kept ? "on" : ""} title={kept ? "Remove from deck" : "Keep in deck"} onClick={toggleKept}><Heart />{kept ? "Kept" : "Keep"}</button>
             <button className={tracing ? "on" : ""} title="Show the card at work" onClick={traceClick}><TraceIcon />Inside</button>
             <button className={face === "source" ? "on" : ""} title="Turn the card over, to its source" onClick={turnOver}><Repeat />Turn over</button>
+            <button className={printing !== null ? "on" : ""} title="Print this card, or save it as a picture" onClick={() => setPrinting(printing === null ? "" : null)}><Printer />Print</button>
             {listens && <span title="This card listens: it plays what the microphone hears, changed"><AudioDevice />Listens</span>}
+        </div>}
+        {printed && binary && printing !== null && <div className="tray">
+            {canPrintDirectly() && <button title="Print on a Bluetooth thermal printer (paired with this device)" onClick={async () => {
+                try {
+                    await printCard(printable(), setPrinting)
+                } catch (e: any) {
+                    setPrinting(e?.name === "NotFoundError" ? "" : String(e?.message ?? e))
+                }
+            }}>Thermal printer</button>}
+            <button title="Save the card as a picture (or share it, to the printer's app)" onClick={() => saveCardImage(printable())}>Save picture</button>
+            {printing && <span>{printing}</span>}
         </div>}
     </div>
 }
