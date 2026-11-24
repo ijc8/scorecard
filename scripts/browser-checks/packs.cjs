@@ -30,7 +30,7 @@ const fs = require('fs');
   console.log("after junk: packs", await page.locator(".pack").count())
   await page.reload(); await page.waitForTimeout(800); console.log("after reload:", (await titles()).length, "packs:", await page.locator(".pack").count())
   // flip
-  await page.locator(".play-controls > button").last().click(); await page.waitForTimeout(250); await page.screenshot({ path: `${S}/p4-flipping.png` })
+  await page.locator("button[title='Show the card at work']").first().click(); await page.waitForTimeout(250); await page.screenshot({ path: `${S}/p4-flipping.png` })
   await page.waitForTimeout(1200); await page.locator("#start").dispatchEvent("mousedown"); await page.waitForTimeout(1500)
   await page.screenshot({ path: `${S}/p5-flipped.png` })
   await ctx.close()

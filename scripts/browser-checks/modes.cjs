@@ -27,7 +27,7 @@ const { chromium } = require('playwright');
   const url = page.url(); await page.goto(url); await page.waitForTimeout(700); await page.click(".tabs button[title='Create']"); await page.waitForTimeout(500)
   console.log("after reload:", await info(), "| first line:", (await page.locator(".editor textarea").inputValue()).split("\n")[0])
   // Trace heat on the WebAssembly text
-  await page.locator(".play-controls > button").last().click(); await page.waitForTimeout(1500)
+  await page.locator("button[title='Show the card at work']").first().click(); await page.waitForTimeout(1500)
   console.log("tracing from source:", await info(), "| tab", await page.locator(".tabs button.active").getAttribute("title"))
   await play(); await page.waitForTimeout(1500)
   const lit = await page.evaluate(() => { const c = document.querySelector(".editor canvas"); const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return [n, c.width, c.height] })

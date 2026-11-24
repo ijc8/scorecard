@@ -257,6 +257,17 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, setSe
                     {binary && <button className={"toggle" + (kept ? " on" : "")} title={kept ? "Remove from deck" : "Keep in deck"} style={{ fontSize: 0, lineHeight: 0, border: "none", padding: "0 0 0 6px", verticalAlign: "middle" }} onClick={toggleKept}>
                         <Heart style={{ height: "6cqw", verticalAlign: "middle" }} />
                     </button>}
+                    {binary && <button style={{ fontSize: 0, lineHeight: 0, border: "none", padding: "0 0 0 6px", verticalAlign: "middle" }} title="Show the card at work" onClick={() => {
+                        // On the source side, tracing lights up lines of the card's WebAssembly text (so turn to that);
+                        // otherwise the front fades to the card's bits.
+                        if (face === "source") {
+                            if (!tracing) source.current?.showWasm()
+                            else source.current?.showHeat(null)
+                        }
+                        toggleTracing()
+                    }}>
+                        <TraceIcon style={{ height: "6cqw", verticalAlign: "middle" }} />
+                    </button>}
                 </span>
             </h2>
     return <div>
@@ -310,17 +321,6 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, setSe
                     <Bookmark style={smallIconStyle} />
                 </button>
             </div>
-            <button style={{ fontSize: 0, marginRight: "-5cqw" }} title="Show the card at work" onClick={() => {
-                // On the source side, tracing lights up lines of the card's WebAssembly text (so turn to that);
-                // otherwise it turns the card over to its bits.
-                if (face === "source") {
-                    if (!tracing) source.current?.showWasm()
-                    else source.current?.showHeat(null)
-                }
-                toggleTracing()
-            }}>
-                <TraceIcon style={{ ...smallIconStyle }} />
-            </button>
         </div>
     </div>
 }

@@ -29,8 +29,8 @@ const { chromium } = require('playwright');
   // 3. Flip to QR and bits
   await page.click(".tabs button[title='Listen']"); await page.waitForTimeout(250); await page.screenshot({ path: `${S}/f3-mid.png` }); await page.waitForTimeout(700); await page.screenshot({ path: `${S}/f3.png` })
   await page.click(".tabs button[title='Create']"); await page.waitForTimeout(800)
-  await page.locator(".play-controls > button").last().click(); await page.waitForTimeout(1500); console.log("bullseye from source:", await info()); await page.screenshot({ path: `${S}/f4.png` })
-  await page.locator(".play-controls > button").last().click(); await page.waitForTimeout(800)
+  await page.locator("button[title='Show the card at work']").first().click(); await page.waitForTimeout(1500); console.log("bullseye from source:", await info()); await page.screenshot({ path: `${S}/f4.png` })
+  await page.locator("button[title='Show the card at work']").first().click(); await page.waitForTimeout(800)
   // 4. Load a starter card (known source) and an unknown one
   await page.goto("http://localhost:4173/?c=" + encodeURIComponent(lib[6].code)); await page.waitForTimeout(600)
   await page.click(".tabs button[title='Create']"); await page.waitForTimeout(600)
