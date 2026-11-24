@@ -11,6 +11,8 @@ import library from "./library.json"
 import { RolodexTops, neighbour, useRolodex } from "./Rolodex"
 import { flushSync } from "react-dom"
 import { raise, throwTop, turn, useDissolve, usePile } from "./Pile"
+import { Place, Spread, placeOf } from "./Spread"
+import { Forward } from "./icons"
 import { holdMediaSession, useMediaSession } from "./mediaSession"
 import { DeckCard } from "./deck"
 import QRCode from "qrcode"
@@ -385,11 +387,6 @@ function Clock({ time, seed, style }: { time: number, seed: number, style: React
     </div>
 }
 
-// Two triangles, drawn on pixelarticons' grid (which has no fast-forward icon of its own).
-const Forward = (props: React.SVGProps<SVGSVGElement>) => <svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" {...props}>
-    <path d="M3 5h2v2h2v2h2v2h2v2h-2v2h-2v2h-2v2H3V5zm9 0h2v2h2v2h2v2h2v2h-2v2h-2v2h-2v2h-2V5z" fill="currentColor" />
-</svg>
-
 const SKIP_SECONDS = 10, FAST_FORWARD = 4, HOLD_MS = 350
 
 // Tap to skip ahead; hold to fast-forward (the card runs faster, and you hear it, sped up).
@@ -526,7 +523,17 @@ function App() {
             document.removeEventListener("visibilitychange", acquire)
         }
     }, [settings.awake, state])
-    const openDeck = useRef(() => setDeckOpen(true)).current
+    // The pile look's own way of showing the deck: the pile, spread out on the table (see Spread.tsx).
+    const [spread, setSpread] = useState(false)
+    const pilePlace = useRef<Place | null>(null)
+    const openSpread = () => {
+        const top = document.querySelector(".pile-top")
+        if (top) pilePlace.current = placeOf(top)
+        setSpread(true)
+    }
+    const showDeck = useRef(() => {})
+    showDeck.current = () => settings.look === "pile" ? openSpread() : setDeckOpen(true)
+    const openDeck = useRef(() => showDeck.current()).current
     const code = useMemo(() => binary && encodeBlob(binary), [binary])
     const deckCard = deck.find(card => card.code === code)
 
@@ -678,7 +685,7 @@ function App() {
         const pack = parsePack(await file.text())
         if (!pack) return window.alert("That doesn't look like a pack of score cards.")
         setPacks(packs => savePacks([...packs, pack]))
-        setDeckOpen(true)
+        showDeck.current()
     }
     const importPackRef = useRef(importPack)
     importPackRef.current = importPack
@@ -809,12 +816,22 @@ function App() {
         else raise(change)
     }
     const pileHandlers = usePile({
-        enabled: pile,
+        enabled: pile && !spread,
         current: code,
         next: nextCard,
         go: card => loadCard(card.code),
         dismiss: tab !== Tab.Listen && tab !== Tab.Create ? () => flushSync(() => setTab(Tab.Listen)) : undefined,
     })
+
+    useEffect(() => {
+        // A tap on the table (beside the pile) spreads the pile out.
+        if (!pile || spread) return
+        const click = (e: MouseEvent) => {
+            if (e.target instanceof Element && e.target.matches("html, body, #root, #layout, #app, .pile")) openSpread()
+        }
+        document.addEventListener("click", click)
+        return () => document.removeEventListener("click", click)
+    }, [pile, spread])
 
     const face: Face = tab === Tab.Create ? "source" : tracing ? "bits" : "qr"
     const toggleTracing = () => setTracing(!tracing)
@@ -825,7 +842,7 @@ function App() {
         { name: "Create", Icon: EditBox, component: null },
         { name: "Settings", Icon: Sliders, component: <SettingsTab {...{
             settings, setSettings, deckSize: deck.length, hasStarter: packs.some(pack => pack.id === starterPack.id),
-            freshStarter: () => { setPacks(savePacks([...packs, starterPack])); setDeckOpen(true) },
+            freshStarter: () => { setPacks(savePacks([...packs, starterPack])); showDeck.current() },
             emptyDeck: () => setDeck(clearDeck()),
         }} /> },
         { name: "About", Icon: InfoBox, component: <About {...{ setTab, openDeck }} /> },
@@ -841,9 +858,24 @@ function App() {
     const tabButtons = (own: boolean) => tabs.map(({ name, Icon }, index) => index !== Tab.Listen &&
         <button key={index} title={name} aria-label={name} className={own ? "active" : ""} style={{ visibility: (index === tab) === own ? "visible" : "hidden" }} onClick={() => pickTab(index)}><Icon /></button>)
     return <div id="layout">
-    <Deck {...{ deck, packs, openPack, importPack, exportPack, current: code, loadCard, discard: (code: string) => setDeck(removeCard(deck, code)), open: deckOpen, setOpen: setDeckOpen }} />
+    {!pile && <Deck {...{ deck, packs, openPack, importPack, exportPack, current: code, loadCard, discard: (code: string) => setDeck(removeCard(deck, code)), open: deckOpen, setOpen: setDeckOpen }} />}
     {pile ? <div id="app" className="pile-look" style={{ containerType: "inline-size" }}>
-        <div className="pile">
+        {spread && <Spread {...{ deck, packs, openPack, importPack, exportPack, current: tab === Tab.Listen || tab === Tab.Create ? code : null, pile: pilePlace.current }}
+            tabbed={[
+                { index: Tab.Scan, name: "Scan", label: "Scan a card", Icon: Camera },
+                { index: Tab.Create, name: "Create", label: "Write a card", Icon: EditBox },
+                { index: Tab.Settings, name: "Settings", label: "Settings", Icon: Sliders },
+                { index: Tab.About, name: "About", label: "Rules", Icon: InfoBox },
+            ]}
+            discard={code => setDeck(removeCard(deck, code))}
+            close={() => setSpread(false)}
+            pick={(picked, seed) => {
+                setSpread(false)
+                if (tab !== Tab.Create) setTab(Tab.Listen)
+                if (picked !== code || seed !== undefined) loadCard(picked, seed)
+            }}
+            pickTab={index => { setSpread(false); setTab(index) }} />}
+        <div className="pile" style={spread ? { display: "none" } : undefined}>
             <div className="pile-edges"></div>
             <div className="tabs pile-tabs">{tabButtons(false)}</div>
             <div className="pile-card pile-top" style={{ borderStyle: dragging ? "dashed" : "solid" }} {...pileHandlers}>

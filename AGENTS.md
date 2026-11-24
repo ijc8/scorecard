@@ -101,7 +101,9 @@ that fallback in `extractTitle` (`src/card.ts`) and in `public/worklet.js`.
 - Looks (Settings): the pile look (default, a prototype; `src/Pile.tsx`) makes the classic panel the
   top card of a pile: flick it aside for the next card in the deck, and Scan, Create, Settings and
   About are cards at the back of the pile whose index tabs stick out below. React only draws the top
-  card; what moves, and what shows under a dragged card, are DOM copies of it. The printed look
+  card; what moves, and what shows under a dragged card, are DOM copies of it. Tapping the table
+  spreads the pile out (`src/Spread.tsx`): small copies of every card, the tabbed cards and sealed
+  packs, which stands in for the deck drawer in this look. The printed look
   (another prototype) draws the card as printed and puts
   every control on the player around it; the classic look is the earlier panel. The rolodex deck
   style (`src/Rolodex.tsx`) is the other prototype. Background in `docs/CARD-DESIGN.md`.

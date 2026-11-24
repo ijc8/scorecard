@@ -7,9 +7,8 @@
 // moves is a snapshot of the card, and what shows beneath a card being dragged is another copy,
 // dressed up as the card that's next.
 import { useEffect, useRef, useState } from "react"
-import QRCode from "qrcode"
 import { DeckCard } from "./deck"
-import { cardURL } from "./card"
+import { cardFace } from "./card"
 import { motionOff } from "./Settings"
 
 const pileTop = () => document.querySelector<HTMLElement>(".pile-top")
@@ -33,14 +32,6 @@ function snapshot(top: HTMLElement) {
     return copy
 }
 
-// QR codes for cards that aren't loaded (to show under the top card), made ahead of time.
-const codes = new Map<string, string>()
-function prepare(card: DeckCard | undefined) {
-    if (!card || codes.has(card.code)) return
-    codes.set(card.code, "")
-    QRCode.toDataURL(cardURL(card.code), { errorCorrectionLevel: "L", scale: 1, margin: 0 }).then(url => codes.set(card.code, url), () => {})
-}
-
 // Makes a copy of the top card look like another music card, face up.
 function dress(copy: HTMLElement, card: DeckCard | undefined) {
     copy.querySelectorAll<HTMLElement>("[data-pane]").forEach(pane => {
@@ -56,7 +47,7 @@ function dress(copy: HTMLElement, card: DeckCard | undefined) {
     set("[data-card-title]", card.title)
     set("[data-card-size]", String(card.size))
     const qr = copy.querySelector<HTMLImageElement>("img[data-qr]")
-    if (qr && codes.get(card.code)) qr.src = codes.get(card.code)!
+    if (qr) qr.src = cardFace(card.code)
 }
 
 const OFF = { left: "translate(-115%, 4%) rotate(-10deg)", right: "translate(115%, 4%) rotate(10deg)", down: "translate(3%, 85%) rotate(3deg)" }
@@ -126,11 +117,6 @@ export function usePile({ enabled, current, next, go, dismiss }: {
     const drag = useRef<Drag | null>(null)
     const latest = useRef({ enabled, next, go, dismiss })
     latest.current = { enabled, next, go, dismiss }
-    useEffect(() => {
-        if (!enabled) return
-        prepare(next(1))
-        prepare(next(-1))
-    })
     // (Left and right arrow keys flick through the pile, too.)
     useEffect(() => {
         const key = (e: KeyboardEvent) => {

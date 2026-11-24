@@ -1100,3 +1100,147 @@
 .pile-look .card3d, .pile-look .card3d > .side {
     transition: none;
 }
+
+/* The pile spread out on the table (see Spread.tsx): small copies of whole cards. */
+.spread {
+    padding: 4px 0 30px;
+}
+
+.spread h3 {
+    margin: 0 0 16px;
+    font-size: 1em;
+    font-weight: normal;
+}
+
+.spread-cards {
+    --mw: 108;
+    --card-w: calc(var(--mw) * 1px);
+    --card-h: calc(var(--mw) * 1.44px);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 22px 12px;
+    margin-bottom: 26px;
+}
+
+.spread-cards.tabbed {
+    --mw: 80;
+    margin-bottom: 40px;
+}
+
+@media (max-width: 379px) {
+    .spread-cards {
+        --mw: 96;
+    }
+
+    .spread-cards.tabbed {
+        --mw: 72;
+    }
+}
+
+.mini {
+    position: relative;
+    width: var(--card-w);
+    height: var(--card-h);
+    transform: rotate(var(--tilt));
+}
+
+/* The card at its full size (so that everything on it is laid out as on the pile), shrunk to fit. */
+.mini-scale {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 360px;
+    height: 518px;
+    overflow: hidden;
+    transform: scale(calc(var(--mw) / 360));
+    transform-origin: 0 0;
+    container-type: inline-size;
+    box-shadow: 7px 7px 0 black;
+    text-align: left;
+    cursor: pointer;
+    user-select: none;
+}
+
+.mini.current {
+    z-index: 2;
+}
+
+.mini.current > .mini-scale {
+    outline: 7px solid black;
+}
+
+.mini-x {
+    position: absolute;
+    z-index: 1;
+    top: -12px;
+    right: -12px;
+    width: 17px;
+    height: 17px;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 0;
+}
+
+.mini-x > svg {
+    height: 11px;
+    vertical-align: middle;
+}
+
+.mini-seeds {
+    position: absolute;
+    z-index: 1;
+    left: -4px;
+    right: -4px;
+    bottom: -9px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 2px;
+    font-size: 11px;
+    line-height: 1.2;
+}
+
+.mini-seeds > button {
+    padding: 0 3px;
+}
+
+.mini-tab {
+    position: absolute;
+    top: calc(100% - 1px);
+    left: 50%;
+    width: 44px;
+    margin-left: -22px;
+    padding: 1px 0 3px;
+    border: 0 solid transparent;
+    border-image: url("assets/tab.png") 0 10 2 10 fill / 0 15px 3px 15px;
+    image-rendering: pixelated;
+    font-size: 0;
+}
+
+.mini-tab > svg {
+    height: 14px;
+}
+
+.spread .pack {
+    margin: 0;
+}
+
+.spread .pack:not(.opening) {
+    animation: none;
+}
+
+.spread .deck-actions {
+    flex-direction: row;
+    justify-content: center;
+}
+
+/* Gathering the pile up again: the chosen card goes back to where the pile was, and the rest go. */
+.gathering .mini:not(.chosen), .gathering .pack, .gathering .deck-actions, .gathering h3 {
+    opacity: 0;
+    transition: opacity 0.18s;
+}
+
+.mini.chosen {
+    z-index: 5;
+}
