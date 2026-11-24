@@ -1,7 +1,7 @@
 import Volume from "pixelarticons/svg/volume-2.svg?react"
 
 // Settings, kept in localStorage.
-export const defaultSettings = { collect: true, motion: true, volume: 1, awake: false, echo: true, deckStyle: "drawer" as "drawer" | "rolodex" }
+export const defaultSettings = { collect: true, motion: true, volume: 1, awake: false, echo: true, deckStyle: "drawer" as "drawer" | "rolodex", look: "printed" as "printed" | "classic" }
 export type Settings = typeof defaultSettings
 
 export function loadSettings(): Settings {
@@ -31,6 +31,13 @@ export function SettingsTab({ settings, setSettings, deckSize, hasStarter, fresh
             <span style={{ flexGrow: 1 }}>Volume
                 <input type="range" min="0" max="1" step="0.01" value={settings.volume} onChange={e => setSettings({ ...settings, volume: Number(e.target.value) })} />
             </span>
+        </label>
+        <label>
+            <span style={{ flexGrow: 1 }}>Card look<small>The card as it's printed, lying on the player (a prototype), or the classic panel.</small></span>
+            <select value={settings.look} onChange={e => setSettings({ ...settings, look: e.target.value as Settings["look"] })}>
+                <option value="printed">Printed card</option>
+                <option value="classic">Classic</option>
+            </select>
         </label>
         <label>
             <span style={{ flexGrow: 1 }}>Deck style<small>A drawer of cards beside the player, or (to try out) a rolodex: the next cards stand behind this one; swipe the card down or up to flip through them.</small></span>

@@ -831,3 +831,141 @@
 .settings > label:first-child {
     width: 100%;
 }
+
+/* The classic look: the player is a white panel, with the card's parts on it. */
+#app {
+    background-color: white;
+}
+
+/* The printed look (a prototype; Settings > Card look): the card is drawn as it's printed (wordmark,
+   QR code, name and size, description) and lies on the player, which is everything else: the
+   controls, the tray of things to do with the card, and the tabs. See docs/CARD-DESIGN.md. */
+#app.printed {
+    background-color: transparent;
+    border-top-color: transparent !important;
+}
+
+#app.printed > div:first-child {
+    border-color: transparent !important;
+}
+
+.printed .app-logo {
+    display: none;
+}
+
+.printed .card3d > .side {
+    border: 2px solid black;
+    border-radius: 2.5cqw;
+    padding: 4cqw 4cqw 3cqw;
+    box-shadow: 1.5cqw 1.5cqw 0 rgb(0 0 0 / 15%);
+}
+
+.printed .card3d > .back {
+    display: flex;
+    flex-direction: column;
+}
+
+.printed .back > .card-foot {
+    margin: 0 0 3cqw;
+}
+
+.printed .back > .square {
+    flex: 1;
+    aspect-ratio: auto;
+}
+
+.wordmark {
+    display: block;
+    width: 100%;
+    margin-bottom: 4cqw;
+    image-rendering: pixelated;
+    user-select: none;
+}
+
+.card-foot {
+    margin-top: 3cqw;
+    text-align: center;
+    user-select: none;
+}
+
+.card-name {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    column-gap: 0.35em;
+    font-size: 7cqw;
+    line-height: 1.15;
+}
+
+.card-name > span:last-child {
+    white-space: nowrap;
+}
+
+.card-desc {
+    margin-top: 1.5cqw;
+    font-size: 4.2cqw;
+    line-height: 1.3;
+}
+
+.printed .rolodex > button {
+    border-width: 2px;
+    border-radius: 2.5cqw 2.5cqw 0 0;
+}
+
+/* Things to do with the card (rather than to play it), below the controls. */
+.tray {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 2.5cqw;
+    margin-top: 3cqw;
+    font-size: 4cqw;
+    user-select: none;
+}
+
+.tray > * {
+    display: flex;
+    align-items: center;
+    gap: 0.3em;
+    padding: 0.15em 0.6em;
+    border: 1px solid black;
+    background: white;
+    font: inherit;
+    cursor: pointer;
+}
+
+.tray > span {
+    border-style: dashed;
+    cursor: default;
+}
+
+.tray svg {
+    height: 1.3em;
+}
+
+.tray > .on {
+    background: black;
+    color: white;
+}
+
+/* The controls sit on the player's own surface. */
+.printed .play-controls button,
+.printed .play-controls input {
+    background: transparent;
+}
+
+/* Keep the whole card, its controls and the tabs in view on short screens. */
+@media screen {
+    #app.printed {
+        width: min(100vw, 520px, calc((100dvh - 210px) / 1.48));
+    }
+}
+
+/* Other tabs, in the printed look: a sheet of the same card stock (About is the deck's rules card). */
+.printed .sheet {
+    background: white;
+    border: 2px solid black;
+    border-radius: 2.5cqw;
+    padding: 4cqw 3cqw;
+    box-shadow: 1.5cqw 1.5cqw 0 rgb(0 0 0 / 15%);
+}

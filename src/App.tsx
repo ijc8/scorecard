@@ -7,6 +7,7 @@ import { Face, SourceFace, SourceHandle } from "./SourceFace"
 import { Scan } from "./Scan"
 import { Settings, SettingsTab, loadSettings } from "./Settings"
 import { Deck, LoadCard, PACK_FORMAT, parsePack, starterPack } from "./Deck"
+import library from "./library.json"
 import { RolodexTops, neighbour, useRolodex } from "./Rolodex"
 import { holdMediaSession, useMediaSession } from "./mediaSession"
 import { DeckCard } from "./deck"
@@ -36,6 +37,7 @@ import { TraceMap, instrumentWasm } from "./wasmTracer"
 import { MemoryTrace } from "./memoryTrace"
 import { initDebug, dlog, DEBUG } from "./debug"
 import Heart from "pixelarticons/svg/heart.svg?react"
+import Repeat from "pixelarticons/svg/repeat.svg?react"
 import Headphone from "pixelarticons/svg/headphone.svg?react"
 import Sliders from "pixelarticons/svg/sliders.svg?react"
 import InfoBox from "pixelarticons/svg/info-box.svg?react"
@@ -99,12 +101,13 @@ function SeedInput({ seed, setSeed }: any) {
 }
 
 // TODO: Specify types
-function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, kept, toggleKept, face, code, loadBinary, rolodex, loadCard, lockSeed }: {
+function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, kept, toggleKept, face, code, loadBinary, rolodex, loadCard, lockSeed, printed, description, turnOver }: {
     qrCanvas: RefObject<HTMLCanvasElement>, title: string, listens: boolean, size: number, seed: number, setSeed: (s: number) => void, seedLock: boolean,
     state: any, setState: any, time: number, reset: any, error: any, buffer: Uint8Array | null,
     tracing: boolean, toggleTracing: () => void, face: Face, code: string | null, loadBinary: (b: Uint8Array) => Promise<void>,
     kept: boolean, toggleKept: () => void, lockSeed: (lock: boolean) => void,
     rolodex: DeckCard[] | null, loadCard: LoadCard,
+    printed: boolean, description?: string, turnOver: () => void,
 }) {
     const { swipe } = useRolodex(rolodex ?? [], code, loadCard)
     const bigIconStyle = { height: "10cqw", verticalAlign: "middle" }
@@ -248,6 +251,21 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
         setStateRef.current("playing")
     }
     const TraceIcon = tracing ? BullseyeArrow : Bullseye
+    const traceClick = () => {
+        // On the source side, tracing lights up lines of the card's WebAssembly text (so turn to that);
+        // otherwise the front fades to the card's bits.
+        if (face === "source") {
+            if (!tracing) source.current?.showWasm()
+            else source.current?.showHeat(null)
+        }
+        toggleTracing()
+    }
+    // The printed look: the card as it's printed (see docs/CARD-DESIGN.md). Its name and size go
+    // under the QR code, with the wordmark above; everything you can press is off the card.
+    const foot = <div className="card-foot">
+        <div className="card-name"><span>{title}</span><span>|&nbsp;{size}</span></div>
+        {description && <div className="card-desc">{description}</div>}
+    </div>
     const header = <h2 style={{ userSelect: "none", margin: "0 0 12px", fontSize: "6cqw", fontWeight: "normal", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", textAlign: "left", lineHeight: 1.2 }}>
                 <span>{title}</span>
                 <span style={{ whiteSpace: "nowrap" }}>
@@ -263,7 +281,7 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
         {rolodex && <RolodexTops deck={rolodex} current={code} loadCard={loadCard} />}
         <div className="card3d" style={{ transform: `perspective(2000px) rotateY(${flip.turns * 180}deg)` }}>
             <div className="side" style={{ visibility: side ? "hidden" : "inherit" }} {...(side ? { inert: "" } : {})}>
-                {header}
+                {printed ? <img className="wordmark" src={logoUrl} alt="ScoreCard" /> : header}
                 <div className="square" {...(rolodex ? { ...swipe, style: { touchAction: "none" } } : {})}>
                     <canvas ref={qrCanvas} width="1" height="1" style={{ visibility: showMessage ? "hidden" : "inherit" }}></canvas>
                     {/* Tracing: the card's bits, seen through the QR code. */}
@@ -281,9 +299,10 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
                     </div>
                 </div>}
                 </div>
+                {printed && foot}
             </div>
             <div className="side back" style={{ visibility: side ? "inherit" : "hidden" }} {...(side ? {} : { inert: "" })}>
-                {header}
+                {printed ? <div className="card-foot"><div className="card-name"><span>{title}</span><span>|&nbsp;{size}</span></div></div> : header}
                 <div className="square"><SourceFace ref={source} {...{ binary, code, loadBinary }} active={face === "source"} /></div>
             </div>
         </div>
@@ -306,18 +325,17 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
                 &nbsp;
                 <SeedInput {...{ seed, setSeed }} />
             </div>
-            <button style={{ fontSize: 0 }} title="Show the card at work" onClick={() => {
-                // On the source side, tracing lights up lines of the card's WebAssembly text (so turn to that);
-                // otherwise the front fades to the card's bits.
-                if (face === "source") {
-                    if (!tracing) source.current?.showWasm()
-                    else source.current?.showHeat(null)
-                }
-                toggleTracing()
-            }}>
+            {!printed && <button style={{ fontSize: 0 }} title="Show the card at work" onClick={traceClick}>
                 <TraceIcon style={smallIconStyle} />
-            </button>
+            </button>}
         </div>
+        {/* In the printed look, what you can do with the card (rather than play it) sits on a tray below. */}
+        {printed && binary && <div className="tray">
+            <button className={kept ? "on" : ""} title={kept ? "Remove from deck" : "Keep in deck"} onClick={toggleKept}><Heart />{kept ? "Kept" : "Keep"}</button>
+            <button className={tracing ? "on" : ""} title="Show the card at work" onClick={traceClick}><TraceIcon />Inside</button>
+            <button className={face === "source" ? "on" : ""} title="Turn the card over, to its source" onClick={turnOver}><Repeat />Turn over</button>
+            {listens && <span title="This card listens: it plays what the microphone hears, changed"><AudioDevice />Listens</span>}
+        </div>}
     </div>
 }
 
@@ -732,7 +750,7 @@ function App() {
     const face: Face = tab === Tab.Create ? "source" : tracing ? "bits" : "qr"
     const toggleTracing = () => setTracing(!tracing)
     const tabs = [
-        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, face, code, loadBinary, kept: !!deckCard, toggleKept, lockSeed, rolodex: settings.deckStyle === "rolodex" ? deck : null, loadCard }} /> },
+        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, tracing, toggleTracing, face, code, loadBinary, kept: !!deckCard, toggleKept, lockSeed, printed: settings.look === "printed", description: deckCard?.description ?? library.find(card => card.code === code)?.description, turnOver: () => setTab(tab === Tab.Create ? Tab.Listen : Tab.Create), rolodex: settings.deckStyle === "rolodex" ? deck : null, loadCard }} /> },
         { name: "Scan", Icon: Camera, component: <Scan {...{ onScan, tab }} /> },
         // Creating happens on the back of the card, so this tab shows the Listen tab's card turned over.
         { name: "Create", Icon: EditBox, component: null },
@@ -747,13 +765,13 @@ function App() {
     const border = `1px ${dragging ? "dashed" : "solid"} black`
     return <div id="layout">
     <Deck {...{ deck, packs, openPack, importPack, exportPack, current: code, loadCard, discard: (code: string) => setDeck(removeCard(deck, code)), open: deckOpen, setOpen: setDeckOpen }} />
-    <div id="app" style={{ display: "flex", flexDirection: "column", alignItems: "stretch", containerType: "inline-size", backgroundColor: "white", borderTop: border }}>
+    <div id="app" className={settings.look === "printed" ? "printed" : ""} style={{ display: "flex", flexDirection: "column", alignItems: "stretch", containerType: "inline-size", borderTop: border }}>
         <div style={{ borderLeft: border, borderRight: border, margin: "0 -1px" }}>
             <div style={{ margin: "20px" }} >
-                <h1 style={{ margin: "0 0 20px 0" }}><a href="/"><img src={logoUrl} style={{ imageRendering: "pixelated", width: "100%" }} /></a></h1>
+                <h1 className="app-logo" style={{ margin: "0 0 20px 0" }}><a href="/"><img src={logoUrl} style={{ imageRendering: "pixelated", width: "100%" }} /></a></h1>
                 <div style={{ display: "flex" }}>
                     {tabs.map(({ component }, index) => component &&
-                        <div key={index} style={{ display: "flex", flexDirection: "column", justifyContent: "center", visibility: index === tab || (index === Tab.Listen && tab === Tab.Create) ? "visible" : "hidden", width: "100%", marginRight: "-100%" }}>{component}</div>
+                        <div key={index} className={index === Tab.Listen ? "" : "sheet"} style={{ display: "flex", flexDirection: "column", justifyContent: "center", visibility: index === tab || (index === Tab.Listen && tab === Tab.Create) ? "visible" : "hidden", width: "100%", marginRight: "-100%" }}>{component}</div>
                     )}
                 </div>
             </div>
