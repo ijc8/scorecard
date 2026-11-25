@@ -10,7 +10,7 @@ import CloseBox from "pixelarticons/svg/close-box.svg?react"
 import Bullseye from "pixelarticons/svg/bullseye.svg?react"
 import Heart from "pixelarticons/svg/heart.svg?react"
 import Close from "pixelarticons/svg/close.svg?react"
-import { Forward } from "./icons"
+import { Forward, HeartFull } from "./icons"
 import logoUrl from "./assets/logo.png"
 import { DeckCard, Pack } from "./deck"
 import { SealedPack } from "./Deck"
@@ -39,12 +39,12 @@ const Logo = () => <img src={logoUrl} alt="ScoreCard" style={{ display: "block",
 // A music card as it looks on top of the pile, but not live: nothing on it works.
 function Face({ card }: { card: DeckCard }) {
     const big = { height: "10cqw", verticalAlign: "middle" }, small = { height: "5cqw", flexShrink: 0, verticalAlign: "middle" }
-    const SeedIcon = card.seeds.length ? CloseBox : Dice
+    const SeedIcon = card.seeds.length ? CloseBox : Dice, KeptIcon = card.seeds.length ? HeartFull : Heart
     return <div style={{ margin: "20px" }}>
         <Logo />
         <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", margin: "0 0 12px", fontSize: "6cqw", lineHeight: 1.2 }}>
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{card.title}</span>
-            <span style={{ whiteSpace: "nowrap" }}>{card.size} bytes <Heart style={{ height: "6cqw", verticalAlign: "middle" }} /></span>
+            <span style={{ whiteSpace: "nowrap" }}>{card.size} bytes <KeptIcon style={{ height: "6cqw", verticalAlign: "middle" }} /></span>
         </div>
         <img src={cardFace(card.code)} alt="" style={{ display: "block", width: "100%", aspectRatio: "1", marginBottom: "20px", imageRendering: "pixelated" }} />
         <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "1.6cqw", fontSize: "5cqw" }}>

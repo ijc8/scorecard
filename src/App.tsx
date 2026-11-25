@@ -12,7 +12,7 @@ import { RolodexTops, neighbour, useRolodex } from "./Rolodex"
 import { flushSync } from "react-dom"
 import { raise, throwTop, turn, useDissolve, usePile } from "./Pile"
 import { Place, Spread, placeOf } from "./Spread"
-import { Forward } from "./icons"
+import { Forward, HeartFull } from "./icons"
 import { decodeSteps } from "./qrDecode"
 import { playDecode } from "./decodeAnimation"
 import { motionOff } from "./Settings"
@@ -309,13 +309,14 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
         <div className="card-name"><span>{title}</span><span>|&nbsp;{size}</span></div>
         {description && <div className="card-desc">{description}</div>}
     </div>
+    const KeptIcon = kept ? HeartFull : Heart
     const header = <h2 style={{ userSelect: "none", margin: "0 0 12px", fontSize: "6cqw", fontWeight: "normal", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", textAlign: "left", lineHeight: 1.2 }}>
                 <span data-card-title="">{title}</span>
                 <span style={{ whiteSpace: "nowrap" }}>
                     {listens && <span title="This card listens: it plays what the microphone hears, changed"><AudioDevice style={{ height: "6cqw", verticalAlign: "middle" }} /> </span>}
                     <span data-card-size="">{size}</span> bytes {/* TODO: add link and perhaps download buttons with icons */}
-                    {binary && <button className={"toggle" + (kept ? " on" : "")} title={kept ? "Remove from deck" : "Keep in deck"} style={{ fontSize: 0, lineHeight: 0, border: "none", padding: "0 0 0 6px", verticalAlign: "middle" }} onClick={toggleKept}>
-                        <Heart style={{ height: "6cqw", verticalAlign: "middle" }} />
+                    {binary && <button title={kept ? "Forget this performance" : "Keep this performance (its seed is saved with the card)"} style={{ fontSize: 0, lineHeight: 0, border: "none", padding: "0 0 0 6px", verticalAlign: "middle" }} onClick={toggleKept}>
+                        <KeptIcon style={{ height: "6cqw", verticalAlign: "middle" }} />
                     </button>}
                 </span>
             </h2>
@@ -358,7 +359,7 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
                 <button id="start" onTouchStart={touchStartToggle} onMouseDown={mouseToggle} onMouseUp={() => { events.current.toggle = false }}>{state === "playing" ? <Pause style={bigIconStyle} /> : <Play style={bigIconStyle} />}</button>
                 <SkipButton style={{ ...bigIconStyle, height: "8cqw" }} />
                 <div style={{ display: "flex", alignItems: "center", userSelect: "none" }}>
-                    <button style={{ fontSize: 0 }} title={seedLock ? "Unlock the seed (and forget it)" : "Lock this seed (and save it with the card)"} onClick={() => lockSeed(!seedLock)}><DiceIcon style={smallIconStyle} /></button>
+                    <button style={{ fontSize: 0 }} title={seedLock ? "Unlock the seed: draw a new one each time" : "Lock this seed: keep it when starting again"} onClick={() => lockSeed(!seedLock)}><DiceIcon style={smallIconStyle} /></button>
                     &nbsp;
                     <SeedInput {...{ seed, setSeed }} />
                 </div>
@@ -368,7 +369,7 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
             </div>
             {/* In the printed look, what you can do with the card (rather than play it) sits on a tray below. */}
             {printed && binary && <div className="tray">
-                <button className={kept ? "on" : ""} title={kept ? "Remove from deck" : "Keep in deck"} onClick={toggleKept}><Heart />{kept ? "Kept" : "Keep"}</button>
+                <button className={kept ? "on" : ""} title={kept ? "Forget this performance" : "Keep this performance (its seed is saved with the card)"} onClick={toggleKept}><KeptIcon />{kept ? "Kept" : "Keep"}</button>
                 <button className={tracing ? "on" : ""} title="Show the card at work" onClick={traceClick}><TraceIcon />Inside</button>
                 <button className={face === "source" ? "on" : ""} title="Turn the card over, to its source" onClick={turnOver}><Repeat />Flip</button>
                 <button className={printing !== null ? "on" : ""} title="Print this card, or save it as a picture" onClick={() => setPrinting(printing === null ? "" : null)}><Printer />Print</button>
@@ -759,16 +760,15 @@ function App() {
         next: () => stepDeck(1),
         previous: () => stepDeck(-1),
     })
+    // The heart keeps a performance: this seed is saved with the card in the deck (which keeps the
+    // card, if it wasn't there). Again, and the seed is forgotten. (Cards leave the deck from the
+    // spread, or the drawer.) Locking the seed is something else: it stops a new one being drawn.
+    const kept = !!deckCard?.seeds.includes(seed)
     const toggleKept = () => {
         if (!binary) return
-        setDeck(deckCard ? removeCard(deck, code!) : addCard(deck, binary, title))
+        setDeck(toggleSeed(kept ? deck : addCard(deck, binary, title), code!, seed))
     }
-    // A locked seed is saved with the card in the deck (which keeps the card); unlocking forgets it.
-    const lockSeed = (lock: boolean) => {
-        setSeedLock(lock)
-        if (!binary || lock === !!deckCard?.seeds.includes(seed)) return
-        setDeck(toggleSeed(lock ? addCard(deck, binary, title) : deck, code!, seed))
-    }
+    const lockSeed = setSeedLock
 
     const onScanRef = useRef(onScan)
     onScanRef.current = onScan
@@ -832,9 +832,11 @@ function App() {
     }, [])
 
     // If the audio clock stalls (iOS), show "paused" so the next Play tap can restart audio.
-    useEffect(() => onStall(() => {
+    useEffect(() => onStall(hung => {
         holdMediaSession(false)
         _setState("paused")
+        // (Twice in the same place, with the audio thread not answering: it's the card, and it has been taken off.)
+        if (hung) window.alert("This card stopped responding, so it has been stopped. Load it again to give it another try.")
     }), [])
 
     // TODO: "load example" link
@@ -899,7 +901,7 @@ function App() {
         emptyDeck: () => setDeck(clearDeck()),
     }
     const tabs = [
-        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, played, tracing, toggleTracing, face, code, loadBinary, kept: !!deckCard, toggleKept, lockSeed, printed: settings.look === "printed", description: deckCard?.description ?? library.find(card => card.code === code)?.description, turnOver: () => setTab(tab === Tab.Create ? Tab.Listen : Tab.Create), rolodex: settings.deckStyle === "rolodex" && !pile ? deck : null, loadCard, pile }} /> },
+        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, played, tracing, toggleTracing, face, code, loadBinary, kept, toggleKept, lockSeed, printed: settings.look === "printed", description: deckCard?.description ?? library.find(card => card.code === code)?.description, turnOver: () => setTab(tab === Tab.Create ? Tab.Listen : Tab.Create), rolodex: settings.deckStyle === "rolodex" && !pile ? deck : null, loadCard, pile }} /> },
         { name: "Scan", Icon: Camera, component: <Scan {...{ onScan, tab }} /> },
         // Creating happens on the back of the card, so this tab shows the Listen tab's card turned over.
         { name: "Create", Icon: EditBox, component: null },

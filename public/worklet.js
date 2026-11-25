@@ -63,6 +63,9 @@ class CustomProcessor extends AudioWorkletProcessor {
                 this.playing = false
             } else if (e.data.cmd === "volume") {
                 this.volume = e.data.value
+            } else if (e.data.cmd === "ping") {
+                // (Answered whenever this thread is free: that is, not while a card is stuck.)
+                this.port.postMessage({ pong: true })
             }
         }
     }
