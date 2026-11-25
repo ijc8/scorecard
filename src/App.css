@@ -574,7 +574,7 @@
     overflow: hidden auto;
 }
 
-/* "Over", printed at the card's corner: turn the card over. (On the back it's at the other corner, the other way round.) */
+/* "Over", printed at the card's corner: turn the card over. (At the same corner on both sides.) */
 .over {
     position: absolute;
     right: 1px;
@@ -597,12 +597,6 @@
 
 .over > svg {
     height: 18px;
-}
-
-.over.turned {
-    right: auto;
-    left: 1px;
-    transform: scaleX(-1);
 }
 
 .pile-top.lifted > .own-tab {
