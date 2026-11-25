@@ -18,42 +18,6 @@
   }
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
-}
-
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
-}
-
-.card {
-  padding: 2em;
-}
-
-.read-the-docs {
-  color: #888;
-}
-
 .play-controls * {
     border: none;
     padding: 0;
@@ -93,7 +57,6 @@
 }
 
 
-/* The deck: a pile of overlapping cards lying beside the player. */
 #layout {
     display: flex;
     justify-content: center;
@@ -101,175 +64,11 @@
     gap: 12px;
 }
 
-.deck {
-    --card-w: 148px;
-    --card-h: 186px;
-    --peek: 30px;
-    position: relative;
-    width: 216px;
-    flex-shrink: 0;
-    text-align: left;
-}
-
-/* The deck takes its height from the player, and scrolls if it's longer. */
-.deck > div {
-    position: absolute;
-    inset: 0;
-    overflow: hidden auto;
-    padding: 0 0 24px;
-    scrollbar-width: thin;
-}
-
-.deck h3, .deck p {
-    margin: 0 18px 10px;
-    font-size: 1em;
-    font-weight: normal;
-    line-height: 1.3;
-}
-
-.deck h3 {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-bottom: 2px;
-    border-bottom: 1px solid black;
-}
-
-.deck-close {
-    border: none;
-    padding: 0;
-    background: none;
-}
-
-.pile {
-    margin-bottom: 22px;
-}
-
-.pcard {
-    position: relative;
-    width: var(--card-w);
-    height: var(--card-h);
-    margin-left: 18px;
-    transform: rotate(var(--tilt));
-    transition: transform 0.25s cubic-bezier(.3, 1.8, .5, 1), margin 0.25s cubic-bezier(.3, 1.4, .5, 1);
-    animation: deal 0.45s cubic-bezier(.3, 1.4, .5, 1) backwards;
-    animation-delay: calc(var(--i) * 45ms);
-}
-
-/* Each card covers all but the top of the one before it. */
-.pcard + .pcard {
-    margin-top: calc(var(--peek) - var(--card-h));
-}
-
-@media (hover: hover) {
-    /* Thumb a card out of the pile for a better look. */
-    .pcard:hover {
-        transform: translate(14px, -3px) rotate(0deg);
-    }
-
-    .pcard:not(.selected):hover + .pcard {
-        margin-top: calc(var(--peek) - var(--card-h) + 56px);
-    }
-}
-
-.pcard:active {
-    transform: translate(14px, -3px) rotate(0deg) scale(0.96);
-}
-
-/* The card that's playing is pulled out of the pile, pushing the rest down to show all of it. */
-.pcard.selected {
-    height: auto;
-    transform: translateX(28px) rotate(0deg);
-    animation: deal 0.45s cubic-bezier(.3, 1.4, .5, 1) backwards, float 3s ease-in-out 0.5s infinite alternate;
-}
-
-.pcard.selected + .pcard {
-    margin-top: 10px;
-}
-
 @keyframes deal {
     from {
         transform: translate(-60px, -30px) rotate(-14deg);
         opacity: 0;
     }
-}
-
-@keyframes float {
-    from { transform: translateX(28px) rotate(-1.2deg); }
-    to { transform: translate(28px, -3px) rotate(1.2deg); }
-}
-
-.pcard-face {
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    width: 100%;
-    height: var(--card-h);
-    padding: 0;
-    border-radius: 5px;
-    box-shadow: 2px 2px 0 black;
-    overflow: hidden;
-    text-align: left;
-}
-
-.pcard-head {
-    display: flex;
-    justify-content: space-between;
-    gap: 6px;
-    height: var(--peek);
-    padding: 0 7px;
-    line-height: var(--peek);
-    white-space: nowrap;
-}
-
-.pcard-head > b {
-    font-weight: normal;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.pcard-face > img {
-    display: block;
-    flex-shrink: 0;
-    width: calc(100% - 16px);
-    aspect-ratio: 1;
-    margin: 0 auto;
-    image-rendering: pixelated;
-}
-
-.pcard-extras {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 4px 6px;
-    margin-top: 6px;
-    padding: 3px 6px;
-    border: 1px solid black;
-    box-shadow: 2px 2px 0 black;
-    background: white;
-    font-size: 13px;
-    line-height: 1.2;
-}
-
-.pcard-extras > span {
-    flex-grow: 1;
-}
-
-.pcard-extras > div {
-    width: 100%;
-}
-
-.pcard-extras > button {
-    padding: 0 3px;
-}
-
-.pcard-extras > button:hover {
-    background-color: #ccf;
-}
-
-.pcard-extras > button:last-child {
-    border: none;
-    padding: 0;
 }
 
 /* A sealed pack: a striped wrapper, crimped at both ends, with a strip to tear off the top. */
@@ -399,63 +198,20 @@
     display: none;
 }
 
-.deck-peek, .deck-scrim, .deck-close {
-    display: none;
-}
-
-/* The rolodex (a deck style): the tops of the next cards, standing behind the big card. */
-.rolodex {
-    display: flex;
-    flex-direction: column;
-    margin-bottom: -2px;
-}
-
-.rolodex > button {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    font: inherit;
-    font-size: 4cqw;
-    text-align: left;
-    padding: 0.15em 0.5em 0.35em;
-    margin: 0 auto -0.2em;
-    width: calc(100% - var(--depth) * 4%);
-    border: 1px solid black;
-    border-bottom: none;
-    border-radius: 4px 4px 0 0;
-    background: hsl(0 0% calc(100% - var(--depth) * 5%));
-    cursor: pointer;
-    white-space: nowrap;
-    overflow: hidden;
-}
-
-.rolodex > button > span:first-child {
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-/* The big card turns over (all of it) between its front, the QR code, and its back, the source. */
-.card3d {
+/* The card's sides (front, back, and the workbench, which takes its place) lie over one another;
+   the front gives them their size. */
+.faces {
     position: relative;
     margin-bottom: 20px;
-    transform-style: preserve-3d;
-    transition: transform 0.6s cubic-bezier(.3, 1.3, .5, 1);
 }
 
-.card3d > .side {
-    /* (WebKit only hides a back face that has a transform of its own.) */
-    transform: rotateY(0deg);
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
+.faces > .side {
     background: white;
-    /* The side turning away disappears halfway round, in case backface-visibility doesn't hold. */
-    transition: visibility 0s 0.2s;
 }
 
-.card3d > .back {
+.faces > .side:not(.front) {
     position: absolute;
     inset: 0;
-    transform: rotateY(180deg);
 }
 
 .square {
@@ -530,6 +286,16 @@
     caret-color: black;
 }
 
+/* (The back of a card: text to read, which scrolls by itself.) */
+.editor.reading > pre {
+    overflow: auto;
+    outline: none;
+}
+
+.source > div > button {
+    padding: 0 5px;
+}
+
 .editor .comment { color: #8a8a8a; }
 .editor .string, .editor .number { color: #b3477d; }
 .editor .keyword, .editor .directive { color: #4b4bd6; }
@@ -564,6 +330,7 @@
 }
 
 .source select {
+    width: 5em;
     border: 1px solid black;
     border-radius: 0;
     background: white;
@@ -571,7 +338,7 @@
     font: inherit;
 }
 
-/* Two halves of one switch. */
+/* Parts of one switch. */
 .modes {
     display: flex;
 }
@@ -589,104 +356,15 @@
     color: white;
 }
 
-/* Without room for the deck beside the player, it becomes a drawer that slides out from the left. */
-@media screen and (max-width: 799px) {
-    .deck {
-        position: fixed;
-        z-index: 10;
-        inset: 0 auto 0 0;
-        width: 232px;
-        border-right: 1px solid black;
-        background: #ccf;
-        transform: translateX(-110%);
-        visibility: hidden;
-        transition: transform 0.3s cubic-bezier(.3, 1.3, .5, 1), visibility 0s 0.3s;
-    }
-
-    .deck.open {
-        transform: none;
-        visibility: visible;
-        transition-delay: 0s;
-    }
-
-    /* Hide the overshoot of the slide. */
-    .deck::before {
-        content: "";
-        position: absolute;
-        inset: 0 100% 0 -40px;
-        background: #ccf;
-    }
-
-    .deck > div {
-        padding-top: 12px;
-    }
-
-    .deck-close {
-        display: block;
-    }
-
-    /* The edges of a few cards, poking out from the side of the screen. */
-    .deck-peek {
-        display: block;
-        position: fixed;
-        z-index: 8;
-        left: 0;
-        top: 36%;
-        width: 26px;
-        height: 132px;
-        padding: 0;
-        border: none;
-        background: none;
-        transition: transform 0.2s cubic-bezier(.3, 1.8, .5, 1);
-        animation: peek 0.5s 0.6s cubic-bezier(.3, 1.6, .5, 1) backwards;
-    }
-
-    .deck-peek:hover, .deck-peek:active {
-        transform: translateX(4px);
-    }
-
-    .deck-peek > span {
-        position: absolute;
-        left: -4px;
-        height: 100px;
-        border: 1px solid black;
-        border-radius: 0 5px 5px 0;
-        box-shadow: 2px 2px 0 black;
-        background: white;
-    }
-
-    .deck-peek > span:nth-child(1) { top: 0; width: 10px; transform: rotate(-3deg); }
-    .deck-peek > span:nth-child(2) { top: 14px; width: 15px; transform: rotate(2deg); }
-    .deck-peek > span:nth-child(3) { top: 28px; width: 12px; transform: rotate(-1deg); }
-
-    @keyframes peek {
-        from { transform: translateX(-24px); }
-    }
-
-    .deck-scrim {
-        display: block;
-        position: fixed;
-        z-index: 9;
-        inset: 0;
-        background: rgb(0 0 0 / 30%);
-    }
-}
-
-@media print {
-    .deck {
-        display: none;
-    }
-}
-
 @media (prefers-reduced-motion: reduce) {
-    .deck, .pcard, .pack, .pack > *, .card3d, .card3d > .side, .xray {
+    .pack, .pack > *, .xray {
         animation: none !important;
         transition: none;
     }
 }
 
 /* The same, when animations are turned off in Settings. */
-.still :is(.deck, .deck-peek, .pcard, .pack, .pack > *, .card3d, .card3d > .side, .xray) {
+.still :is(.pack, .pack > *, .xray) {
     animation: none !important;
     transition: none;
 }
@@ -773,21 +451,6 @@
     cursor: default;
 }
 
-/* Icon buttons that are either on or off (kept card, saved seed). */
-.toggle {
-    opacity: 0.25;
-}
-
-.toggle.on {
-    opacity: 1;
-}
-
-@media print {
-    .toggle {
-        display: none;
-    }
-}
-
 /* Scan tab */
 .viewfinder {
     position: relative;
@@ -832,157 +495,8 @@
     width: 100%;
 }
 
-/* The classic look: the player is a white panel, with the card's parts on it. */
+/* The pile (see Pile.tsx): the panel is the top card of a pile, on the table. */
 #app {
-    background-color: white;
-}
-
-/* The printed look (a prototype; Settings > Card look): the card is drawn as it's printed (wordmark,
-   QR code, name and size, description) and lies on the player, which is everything else: the
-   controls, the tray of things to do with the card, and the tabs. See docs/CARD-DESIGN.md. */
-.printed .app-logo {
-    display: none;
-}
-
-.printed .card3d > .side {
-    border: 2px solid black;
-    border-radius: 2.5cqw;
-    padding: 4cqw 4cqw 3cqw;
-    box-shadow: 1.5cqw 1.5cqw 0 rgb(0 0 0 / 15%);
-}
-
-.printed .card3d > .back {
-    display: flex;
-    flex-direction: column;
-}
-
-.printed .back > .card-foot {
-    margin: 0 0 3cqw;
-}
-
-.printed .back > .square {
-    flex: 1;
-    aspect-ratio: auto;
-}
-
-.wordmark {
-    display: block;
-    width: 100%;
-    margin-bottom: 4cqw;
-    image-rendering: pixelated;
-    user-select: none;
-}
-
-.card-foot {
-    margin-top: 3cqw;
-    text-align: center;
-    user-select: none;
-}
-
-.card-name {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    column-gap: 0.35em;
-    font-size: 7cqw;
-    line-height: 1.15;
-}
-
-.card-name > span:last-child {
-    white-space: nowrap;
-}
-
-.card-desc {
-    margin-top: 1.5cqw;
-    font-size: 4.2cqw;
-    line-height: 1.3;
-}
-
-.printed .rolodex > button {
-    border-width: 2px;
-    border-radius: 2.5cqw 2.5cqw 0 0;
-}
-
-/* Things to do with the card (rather than to play it), below the controls. */
-.tray {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 2cqw;
-    margin-top: 3cqw;
-    font-size: 3.8cqw;
-    user-select: none;
-}
-
-.tray > * {
-    display: flex;
-    align-items: center;
-    gap: 0.3em;
-    padding: 0.15em 0.6em;
-    border: 1px solid black;
-    background: white;
-    font: inherit;
-    cursor: pointer;
-}
-
-.tray > span {
-    border-style: dashed;
-    cursor: default;
-}
-
-.tray svg {
-    height: 1.3em;
-}
-
-.tray > .on {
-    background: black;
-    color: white;
-}
-
-/* The controls sit on the player's own surface. */
-.printed .play-controls button,
-.printed .play-controls input {
-    background: transparent;
-}
-
-/* Keep the whole card, its controls and the tabs in view on short screens. */
-@media screen {
-    #app.printed {
-        width: min(100vw, 520px, calc((100dvh - 210px) / 1.48));
-    }
-}
-
-/* Other tabs, in the printed look: a sheet of the same card stock (About is the deck's rules card). */
-.printed .sheet {
-    background: white;
-    border: 2px solid black;
-    border-radius: 2.5cqw;
-    padding: 4cqw 3cqw;
-    box-shadow: 1.5cqw 1.5cqw 0 rgb(0 0 0 / 15%);
-}
-
-/* Variant (mock, ?console): the card lies on the table; the player is a console below it. */
-#app.console-look {
-    background-color: transparent;
-    border-top-color: transparent !important;
-}
-
-#app.console-look > div:first-child {
-    border-color: transparent !important;
-}
-
-.console-look .console {
-    margin: 0 -20px -20px;
-    padding: 4cqw 20px 20px;
-    background: white;
-    border: 1px solid black;
-    border-bottom: none;
-    border-radius: 3cqw 3cqw 0 0;
-}
-
-/* The pile look (a prototype; see Pile.tsx): the panel is the top card of a pile, on the table. */
-#app.pile-look {
-    background: none;
     padding: 0 21px 0 13px;
 }
 
@@ -1029,14 +543,14 @@
     background: white;
 }
 
-.pile-look .tabs {
+.pile .tabs {
     display: flex;
     justify-content: center;
     background: none;
 }
 
-.pile-look .tabs > button {
-    width: 80px;
+.pile .tabs > button {
+    width: min(80px, 20%);
 }
 
 /* The tabs of cards at the back of the pile stick out below it... */
@@ -1061,11 +575,11 @@
 }
 
 /* Every card in the pile is the size of a music card; the tabbed cards' contents scroll if they must. */
-.pile-look .panes {
+.panes {
     position: relative;
 }
 
-.pile-look .sheet {
+.sheet {
     position: absolute;
     inset: 0;
     width: auto !important;
@@ -1074,50 +588,39 @@
     overflow: hidden auto;
 }
 
-/* A folded corner: turn the card over. The corner really is missing from the card (which is drawn
-   by a layer of its own, cut to shape), so what's under the card shows there. */
-.pile-card.eared {
-    border-color: transparent;
-    background: none;
-}
-
-.pile-card.eared::before {
-    content: "";
+/* "Over", printed at the card's corner: turn the card over. (On the back it's at the other corner, the other way round.) */
+.over {
     position: absolute;
-    z-index: -1;
-    inset: -1px;
-    border: 1px solid black;
-    background: white;
-    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 23px), calc(100% - 23px) 100%, 0 100%);
-}
-
-/* (The flap: the upper left half of the corner, folded over.) */
-.dog-ear {
-    position: absolute;
-    right: -1px;
-    bottom: -1px;
-    width: 24px;
-    height: 24px;
+    right: 1px;
+    bottom: 1px;
+    width: 20px;
+    height: 20px;
     padding: 0;
     border: none;
-    border-top: 1px solid black;
-    border-left: 1px solid black;
-    background: linear-gradient(135deg, white calc(50% - 1px), black calc(50% - 1px) 50%, transparent 50%);
+    background: none;
+    font-size: 0;
     cursor: pointer;
+}
+
+/* (Easier to hit than to see.) */
+.over::before {
+    content: "";
+    position: absolute;
+    inset: -10px -2px -2px -10px;
+}
+
+.over > svg {
+    height: 18px;
+}
+
+.over.turned {
+    right: auto;
+    left: 1px;
+    transform: scaleX(-1);
 }
 
 .pile-top.lifted > .own-tab {
     display: none;
-}
-
-/* (A card that's covered by another goes at once, not halfway through a turn.) */
-.away .card3d > .side {
-    transition: none;
-}
-
-/* In the pile look the whole card turns over (see `turn`), so its middle changes sides at once. */
-.pile-look .card3d, .pile-look .card3d > .side {
-    transition: none;
 }
 
 /* The pile spread out on the table (see Spread.tsx): small copies of whole cards. */
@@ -1238,15 +741,15 @@
     position: absolute;
     top: calc(100% - 1px);
     left: 50%;
-    width: 80px;
-    margin-left: -40px;
+    width: 72px;
+    margin-left: -36px;
     padding: 4px 0;
     border: 0 solid transparent;
     border-image: url("assets/tab.png") 0 10 2 10 fill / 0 15px 3px 15px;
     image-rendering: pixelated;
     font-size: 0;
     transform-origin: 50% 0;
-    transform: translateX(calc((var(--slot) - 1.5) * var(--mw) / 360 * 80px)) scale(calc(var(--mw) / 360));
+    transform: translateX(calc((var(--slot) - 1) * var(--mw) / 360 * 72px)) scale(calc(var(--mw) / 360));
 }
 
 .mini-tab > svg {

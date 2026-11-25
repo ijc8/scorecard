@@ -1,7 +1,7 @@
-// The pile look (a prototype; Settings > Card look). The panel is a card, lying on top of a pile of
-// cards like it: the deck. Flick the top card aside and it goes to the bottom of the pile; the next
-// one is under it. Scan, Create, Settings and About are cards too, kept at the back of the pile,
-// each with an index tab that sticks out below; tapping a tab brings its card to the top.
+// The pile. The panel is a card, lying on top of a pile of cards like it: the deck. Flick the top
+// card aside and it goes to the bottom of the pile; the next one is under it. Scan, Create, Settings
+// and About are cards too, kept at the back of the pile, each with an index tab that sticks out
+// below; tapping a tab brings its card to the top. (The music cards share a tab: see App.)
 //
 // React only ever draws the top card (`.pile-top`). The rest is done here with copies of it: what
 // moves is a snapshot of the card, and what shows beneath a card being dragged is another copy,
@@ -38,11 +38,12 @@ function dress(copy: HTMLElement, card: DeckCard | undefined) {
     copy.querySelectorAll<HTMLElement>("[data-pane]").forEach(pane => {
         pane.style.visibility = pane.dataset.pane === "listen" ? "visible" : "hidden"
     })
-    copy.querySelector(".own-tab")?.remove()
+    // (A music card's tab is the first.)
+    copy.querySelectorAll<HTMLElement>(".own-tab > button").forEach(tab => { tab.style.visibility = tab.dataset.tab === "0" ? "visible" : "hidden" })
     copy.querySelector<HTMLElement>(".xray")?.style.setProperty("opacity", "0")
     // (Face up, even if the card it was copied from is turned over.)
-    copy.querySelector<HTMLElement>(".card3d")?.style.setProperty("transform", "none")
-    copy.querySelectorAll<HTMLElement>(".card3d > .side").forEach(side => { side.style.visibility = side.classList.contains("back") ? "hidden" : "inherit" })
+    copy.querySelectorAll<HTMLElement>(".faces > .side").forEach(side => { side.style.visibility = side.classList.contains("front") ? "inherit" : "hidden" })
+    copy.querySelector(".over")?.classList.remove("turned")
     if (!card) return
     const set = (selector: string, text: string) => copy.querySelectorAll(selector).forEach(element => { element.textContent = text })
     set("[data-card-title]", card.title)

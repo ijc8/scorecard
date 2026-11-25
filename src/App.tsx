@@ -3,12 +3,11 @@ import './App.css'
 import { Tab } from "./tabs"
 import { NO_TITLE, cardFragment, cardURL, generateCard, formatTime, formatSeed, generateSeed, parseCardURL } from "./card"
 import AudioDevice from "pixelarticons/svg/audio-device.svg?react"
-import { Face, SourceFace, SourceHandle } from "./SourceFace"
+import { BackHandle, CardBack, Face, Workbench, WorkbenchHandle } from "./Workbench"
 import { Scan } from "./Scan"
 import { Settings, SettingsTab, loadSettings } from "./Settings"
-import { Deck, LoadCard, PACK_FORMAT, parsePack, starterPack } from "./Deck"
+import { LoadCard, PACK_FORMAT, parsePack, starterPack } from "./packs"
 import library from "./library.json"
-import { RolodexTops, neighbour, useRolodex } from "./Rolodex"
 import { flushSync } from "react-dom"
 import { raise, throwTop, turn, useDissolve, usePile } from "./Pile"
 import { Place, Spread, placeOf } from "./Spread"
@@ -17,7 +16,6 @@ import { decodeSteps } from "./qrDecode"
 import { playDecode } from "./decodeAnimation"
 import { motionOff } from "./Settings"
 import { holdMediaSession, useMediaSession } from "./mediaSession"
-import { DeckCard } from "./deck"
 import QRCode from "qrcode"
 import { encodeBlob, decodeBlob } from "./base43Encoder"
 import Play from "pixelarticons/svg/play.svg?react"
@@ -44,13 +42,12 @@ import { TraceMap } from "./wasmTracer"
 import { MemoryTrace, findDataSegments } from "./memoryTrace"
 import { initDebug, dlog, DEBUG } from "./debug"
 import Heart from "pixelarticons/svg/heart.svg?react"
-import Repeat from "pixelarticons/svg/repeat.svg?react"
-import Printer from "pixelarticons/svg/print.svg?react"
+import Redo from "pixelarticons/svg/redo.svg?react"
 import { canPrintDirectly, printCard, saveCardImage } from "./print"
 import Headphone from "pixelarticons/svg/headphone.svg?react"
 import Sliders from "pixelarticons/svg/sliders.svg?react"
 import InfoBox from "pixelarticons/svg/info-box.svg?react"
-import { Pack, addCard, addPack, clearDeck, loadDeck, loadPacks, removeCard, savePacks, toggleSeed } from "./deck"
+import { Pack, addCard, addPack, clearDeck, loadDeck, loadPacks, neighbour, removeCard, savePacks, toggleSeed } from "./deck"
 import { audioDebugSnapshot, audioHealthy, needTracer, onStall, sendToWorklet, setEchoCancellation, setInputWanted, setWorkletMessageHandler, startAudio } from "./audio"
 
 
@@ -110,25 +107,23 @@ function SeedInput({ seed, setSeed }: any) {
 }
 
 // TODO: Specify types
-function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, played, tracing, toggleTracing, kept, toggleKept, face, code, loadBinary, rolodex, loadCard, lockSeed, printed, description, turnOver, pile }: {
+function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, played, tracing, toggleTracing, kept, toggleKept, face, code, loadBinary, lockSeed, description }: {
     qrCanvas: RefObject<HTMLCanvasElement>, title: string, listens: boolean, size: number, seed: number, setSeed: (s: number) => void, seedLock: boolean,
     state: any, setState: any, time: number, reset: any, error: any, buffer: Uint8Array | null, played: Uint8Array | null,
     tracing: boolean, toggleTracing: () => void, face: Face, code: string | null, loadBinary: (b: Uint8Array) => Promise<void>,
     kept: boolean, toggleKept: () => void, lockSeed: (lock: boolean) => void,
-    rolodex: DeckCard[] | null, loadCard: LoadCard,
-    printed: boolean, description?: string, turnOver: () => void,
-    pile: boolean,
+    description?: string,
 }) {
-    const { swipe } = useRolodex(rolodex ?? [], code, loadCard)
+    // The card's front shows its QR code, or (tracing) its bits.
+    const front = face === "qr" || face === "bits"
     const bigIconStyle = { height: "10cqw", verticalAlign: "middle" }
     const smallIconStyle = { height: "5cqw", flexShrink: 0, verticalAlign: "middle" }
     const inlineIconStyle = { height: "11cqh", verticalAlign: "bottom" }
     const DiceIcon = seedLock ? CloseBox : Dice
-    // (You can always write a new card, even with nothing loaded.)
-    const showMessage = (error || (size === 0)) && face !== "source"
-    // (In the pile look, the QR code dissolves into the card's bits.)
+    const showMessage = (error || (size === 0)) && front
+    // (The QR code dissolves into the card's bits.)
     const dissolve = useDissolve(tracing && !showMessage)
-    // When tracing is turned on there, the QR code is first read, step by step, into those bits
+    // When tracing is turned on, the QR code is first read, step by step, into those bits
     // (see decodeAnimation.ts); the animation plays on a canvas of its own, over both. Tap it to skip.
     const decodeCanvas = useRef<HTMLCanvasElement>(null)
     const [decoding, setDecoding] = useState(false)
@@ -136,7 +131,7 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
     useEffect(() => {
         const turnedOn = tracing && !wasTracing.current, changed = tracing !== wasTracing.current
         wasTracing.current = tracing
-        if (!changed || !pile || !binary || !code || showMessage || face === "source" || motionOff()) return
+        if (!changed || !binary || !code || showMessage || !front || motionOff()) return
         let steps
         try {
             steps = decodeSteps(cardURL(code, seedLock ? seed : undefined), code.length)
@@ -156,11 +151,12 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
     }, [tracing, binary])
 
     // The card has two sides: the front (its QR code, which tracing sees through to its bits) and
-    // the back (its source). Turning it over always goes the same way round.
-    const side = face === "source" ? 1 : 0
-    const [flip, setFlip] = useState({ turns: side, side })
-    if (flip.side !== side) setFlip({ turns: flip.turns + 1, side })
-    const source = useRef<SourceHandle>(null)
+    // the back (what it holds, as WebAssembly text). The workbench (the Create tab's card) is laid
+    // out the same way, with the editor in the middle, so it takes this card's place.
+    const back = useRef<BackHandle>(null)
+    const workbench = useRef<WorkbenchHandle>(null)
+    // The last card built on the workbench: while that's the one loaded, the workbench shows its name and size.
+    const [ownBuild, setOwnBuild] = useState<Uint8Array | null>(null)
     const setStateRef = useRef(setState)
     setStateRef.current = setState
     // Hacking around unwanted input latency and duplicate events... ugh.
@@ -267,12 +263,12 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
         oldTraceLogs.forEach((count, id) => {
             trace!.logs[id] = Math.max(trace!.logs[id] ?? 0, count * 0.6)
         })
-        if (face === "source") {
-            // On the source side, light up the lines of WebAssembly text that are running.
+        if (face === "back") {
+            // On the back, light up the lines of WebAssembly text that are running.
             const lines = new Float32Array(trace.map[Object.keys(trace.map).length - 1].end.line + 1)
             const max = Math.max(...Object.values(trace.logs))
             trace.logs.forEach((count, id) => lines.fill(count / max, trace!.map[id].start.line, trace!.map[id].end.line))
-            source.current?.showHeat(state === "playing" ? lines : null)
+            back.current?.showHeat(state === "playing" ? lines : null)
         }
         draw()
     }
@@ -281,57 +277,49 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
 
     const togglePlay = async () => {
         if (state === "playing") return setState("paused")
-        if (face === "source") {
-            // Playing from the source side rebuilds the card first, if the source has changed.
+        if (face === "write") {
+            // Playing from the workbench builds what's written there first, if that isn't the loaded card.
             // Building takes a moment, so get audio going now, while we're still inside the gesture (for iOS).
             startAudio()
-            if (!await source.current?.build()) return
+            if (!await workbench.current?.build()) return
             // (Let the freshly-loaded card settle in before starting it.)
             await new Promise(resolve => setTimeout(resolve))
         }
         setStateRef.current("playing")
     }
     const TraceIcon = tracing ? BullseyeArrow : Bullseye
-    // null: the print options are hidden; otherwise, how printing is going.
-    const [printing, setPrinting] = useState<string | null>(null)
+    // How printing is going.
+    const [printing, setPrinting] = useState("")
     const printable = () => ({ url: cardURL(code!, seedLock ? seed : undefined), title, size, description })
     const traceClick = () => {
-        // On the source side, tracing lights up lines of the card's WebAssembly text (so turn to that);
-        // otherwise the front fades to the card's bits.
-        if (face === "source") {
-            if (!tracing) source.current?.showWasm()
-            else source.current?.showHeat(null)
-        }
+        // (On the back, tracing lights up lines of the card's WebAssembly text.)
+        if (tracing) back.current?.showHeat(null)
         toggleTracing()
     }
-    // The printed look: the card as it's printed (see docs/CARD-DESIGN.md). Its name and size go
-    // under the QR code, with the wordmark above; everything you can press is off the card.
-    const foot = <div className="card-foot">
-        <div className="card-name"><span>{title}</span><span>|&nbsp;{size}</span></div>
-        {description && <div className="card-desc">{description}</div>}
-    </div>
     const KeptIcon = kept ? HeartFull : Heart
-    const header = <h2 style={{ userSelect: "none", margin: "0 0 12px", fontSize: "6cqw", fontWeight: "normal", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", textAlign: "left", lineHeight: 1.2 }}>
+    const header = (title: string, size: number | null, live: boolean) =>
+            <h2 style={{ userSelect: "none", margin: "0 0 12px", fontSize: "6cqw", fontWeight: "normal", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", textAlign: "left", lineHeight: 1.2 }}>
                 <span data-card-title="">{title}</span>
-                <span style={{ whiteSpace: "nowrap" }}>
+                {size !== null && <span style={{ whiteSpace: "nowrap" }}>
                     {listens && <span title="This card listens: it plays what the microphone hears, changed"><AudioDevice style={{ height: "6cqw", verticalAlign: "middle" }} /> </span>}
                     <span data-card-size="">{size}</span> bytes {/* TODO: add link and perhaps download buttons with icons */}
-                    {/* Beside the size: a look at those bytes at work. (The printed look has it on its tray.) */}
-                    {binary && !printed && <button title="Show the card at work" style={{ fontSize: 0, lineHeight: 0, border: "none", padding: "0 0 0 6px", verticalAlign: "middle" }} onClick={traceClick}>
+                    {/* Beside the size: a look at those bytes at work. */}
+                    {binary && live && <button title="Show the card at work" style={{ fontSize: 0, lineHeight: 0, border: "none", padding: "0 0 0 6px", verticalAlign: "middle" }} onClick={traceClick}>
                         <TraceIcon style={{ height: "6cqw", verticalAlign: "middle" }} />
                     </button>}
-                </span>
+                </span>}
             </h2>
+    const side = (name: string, shown: boolean) => ({ className: `side ${name}`, style: { visibility: shown ? "inherit" : "hidden" } as React.CSSProperties, ...(shown ? {} : { inert: "" }) })
+    const builtHere = !!binary && binary === ownBuild
     return <div>
-        {/* The whole card turns over: on each side, title and size on top (as in the deck), picture below. */}
-        {rolodex && <RolodexTops deck={rolodex} current={code} loadCard={loadCard} />}
-        <div className="card3d" style={{ transform: `perspective(2000px) rotateY(${flip.turns * 180}deg)` }}>
-            <div className="side" style={{ visibility: side ? "hidden" : "inherit" }} {...(side ? { inert: "" } : {})}>
-                {printed ? <img className="wordmark" src={logoUrl} alt="ScoreCard" /> : header}
-                <div className="square" {...(rolodex ? { ...swipe, style: { touchAction: "none" } } : {})}>
+        {/* On each side: title and size on top, and a square below. (The whole card turns over; see `turn`.) */}
+        <div className="faces">
+            <div {...side("front", front)}>
+                {header(title, size, true)}
+                <div className="square">
                     <canvas ref={qrCanvas} data-qr="" width="1" height="1" style={{ visibility: showMessage ? "hidden" : "inherit" }}></canvas>
                     {/* Tracing: the card's bits, seen through the QR code. */}
-                    <canvas ref={traceCanvas} width="1" height="1" className="xray" style={pile ? dissolve : { opacity: tracing && !showMessage ? 1 : 0 }}></canvas>
+                    <canvas ref={traceCanvas} width="1" height="1" className="xray" style={dissolve}></canvas>
                     <canvas ref={decodeCanvas} width="1" height="1" title="Reading the QR code (tap to skip)" style={{ display: decoding ? "block" : "none" }} onClick={() => setDecoding(false)}></canvas>
                 {showMessage && <div style={{ position: "absolute", fontSize: "48px", height: "100%", width: "100%", userSelect: "none" }}>
                     <div style={{ border: "16px solid black", height: "100%", containerType: "size", lineHeight: 1, display: "flex", flexDirection: "column", justifyContent: "space-evenly" }}>
@@ -346,14 +334,29 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
                     </div>
                 </div>}
                 </div>
-                {printed && foot}
             </div>
-            <div className="side back" style={{ visibility: side ? "inherit" : "hidden" }} {...(side ? {} : { inert: "" })}>
-                {printed ? <div className="card-foot"><div className="card-name"><span>{title}</span><span>|&nbsp;{size}</span></div></div> : header}
-                <div className="square"><SourceFace ref={source} {...{ binary: played ?? binary, code, loadBinary }} active={face === "source"} /></div>
+            <div {...side("back", face === "back")}>
+                {header(title, size, true)}
+                <div className="square">
+                    <CardBack ref={back} binary={played ?? binary} active={face === "back"}>
+                        {/* The card as a thing: printed, or as a picture. */}
+                        <button title="Save the card as a picture (or share it, to a printer's app)" onClick={() => saveCardImage(printable())}>Save picture</button>
+                        {canPrintDirectly() && <button title="Print on a Bluetooth thermal printer (paired with this device)" onClick={async () => {
+                            try {
+                                await printCard(printable(), setPrinting)
+                            } catch (e: any) {
+                                setPrinting(e?.name === "NotFoundError" ? "" : String(e?.message ?? e))
+                            }
+                        }}>Print</button>}
+                        <span>{printing}</span>
+                    </CardBack>
+                </div>
+            </div>
+            <div {...side("write", face === "write")}>
+                {header(builtHere ? title : "new card", builtHere ? size : null, false)}
+                <div className="square"><Workbench ref={workbench} {...{ binary, played, code, title, loadBinary }} onBuild={setOwnBuild} /></div>
             </div>
         </div>
-        {/* The player's own controls (in the printed look, on a console the tabs hang from). */}
         <div className="console">
             <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", fontSize: "5cqw" }}>
                 <Clock {...{ time, seed, style: smallIconStyle }} />
@@ -366,29 +369,10 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
                     <SeedInput {...{ seed, setSeed }} />
                 </div>
                 {/* Beside the seed: keep this performance. */}
-                {!printed && <button style={{ fontSize: 0 }} disabled={!binary} title={kept ? "Forget this performance" : "Keep this performance (its seed is saved with the card)"} onClick={toggleKept}>
+                <button style={{ fontSize: 0 }} disabled={!binary} title={kept ? "Forget this performance" : "Keep this performance (its seed is saved with the card)"} onClick={toggleKept}>
                     <KeptIcon style={smallIconStyle} />
-                </button>}
+                </button>
             </div>
-            {/* In the printed look, what you can do with the card (rather than play it) sits on a tray below. */}
-            {printed && binary && <div className="tray">
-                <button className={kept ? "on" : ""} title={kept ? "Forget this performance" : "Keep this performance (its seed is saved with the card)"} onClick={toggleKept}><KeptIcon />{kept ? "Kept" : "Keep"}</button>
-                <button className={tracing ? "on" : ""} title="Show the card at work" onClick={traceClick}><TraceIcon />Inside</button>
-                <button className={face === "source" ? "on" : ""} title="Turn the card over, to its source" onClick={turnOver}><Repeat />Flip</button>
-                <button className={printing !== null ? "on" : ""} title="Print this card, or save it as a picture" onClick={() => setPrinting(printing === null ? "" : null)}><Printer />Print</button>
-                {listens && <span title="This card listens: it plays what the microphone hears, changed"><AudioDevice />Listens</span>}
-            </div>}
-            {printed && binary && printing !== null && <div className="tray">
-                {canPrintDirectly() && <button title="Print on a Bluetooth thermal printer (paired with this device)" onClick={async () => {
-                    try {
-                        await printCard(printable(), setPrinting)
-                    } catch (e: any) {
-                        setPrinting(e?.name === "NotFoundError" ? "" : String(e?.message ?? e))
-                    }
-                }}>Thermal printer</button>}
-                <button title="Save the card as a picture (or share it, to the printer's app)" onClick={() => saveCardImage(printable())}>Save picture</button>
-                {printing && <span>{printing}</span>}
-            </div>}
         </div>
     </div>
 }
@@ -460,6 +444,7 @@ function SkipButton({ style }: { style: React.CSSProperties }) {
 
 const About = memo(function About({ setTab, openDeck }: any) {
     // TODO: Make this text fill the card on both desktop and mobile...
+    const inline = { height: "1.1em", verticalAlign: "text-bottom" }
     return <div id="about" style={{ textAlign: "left", padding: "0 12px", containerType: "size", height: "100%" }}>
         <div style={{ fontSize: "4cqw" }}>
             <span style={{ fontSize: "1.1em" }}>ScoreCard is a player for "score cards": QR codes containing tiny generative music programs.</span> A score card looks like this:
@@ -467,6 +452,15 @@ const About = memo(function About({ setTab, openDeck }: any) {
             Each QR code contains a valid URL (linking to this web app, the score card player) and an entire audio-generating <a href="https://webassembly.org/">WebAssembly</a> program. Because the QR code contains the piece itself, even if the link breaks, the code can still be read and played back by an instance of the ScoreCard player hosted somewhere else, or by a player that runs outside of the browser.
             <p>This also implies that piece must fit in a QR code, implying an max executable size of just 2,953 bytes (more like 2,900 bytes after encoding it in a URL).</p>
             <p>To get started, pick a score card from the <a href="#" onClick={openDeck} style={{ textDecoration: "underline" }}>Deck</a>, <a href="#" onClick={() => setTab(Tab.Scan)} style={{ textDecoration: "underline" }}>Scan</a> one, or <a href="#" onClick={() => setTab(Tab.Create)} style={{ textDecoration: "underline" }}>Create</a> your own. For more information, check out the <a href="https://github.com/ijc8/scorecard" style={{ textDecoration: "underline" }}>README</a>.</p>
+            <p>Things to try:</p>
+            <ul style={{ margin: 0, paddingLeft: "1.2em" }}>
+                <li>Flick the top card aside for the next one in your deck.</li>
+                <li>Tap <Headphone style={inline} /> (or the table) to spread the whole pile out, along with any packs waiting to be opened.</li>
+                <li>Tap <Redo style={inline} /> at a card's corner to turn it over and read its code. On the back you can also print it, or save it as a picture.</li>
+                <li>Tap <Bullseye style={inline} /> to watch the QR code being read into the card's bits, and the bits at work as they play.</li>
+                <li>Tap <Forward style={inline} /> to skip ahead, or hold it to fast-forward. Tap the clock to go to a time.</li>
+                <li>Each performance of a card has a seed. <Dice style={inline} /> locks it, and <Heart style={inline} /> keeps that performance with the card.</li>
+            </ul>
             <p style={{ marginBottom: 0 }}>Happy hacking & joyful jamming!<br />- ijc</p>
         </div>
     </div>
@@ -523,7 +517,6 @@ function App() {
     const [tracing, _setTracing] = useState(false)
     const [deck, setDeck] = useState(loadDeck)
     const [packs, setPacks] = useState(() => loadPacks(starterPack))
-    const [deckOpen, setDeckOpen] = useState(false)
     const [settings, _setSettings] = useState(loadSettings)
     const setSettings = (settings: Settings) => {
         _setSettings(settings)
@@ -561,7 +554,7 @@ function App() {
             document.removeEventListener("visibilitychange", acquire)
         }
     }, [settings.awake, state])
-    // The pile look's own way of showing the deck: the pile, spread out on the table (see Spread.tsx).
+    // The whole deck is shown by spreading the pile out on the table (see Spread.tsx).
     const [spread, setSpread] = useState(false)
     const pilePlace = useRef<Place | null>(null)
     const openSpread = () => {
@@ -569,9 +562,7 @@ function App() {
         if (top) pilePlace.current = placeOf(top)
         setSpread(true)
     }
-    const showDeck = useRef(() => {})
-    showDeck.current = () => settings.look === "pile" ? openSpread() : setDeckOpen(true)
-    const openDeck = useRef(() => showDeck.current()).current
+    const openDeck = useRef(openSpread).current
     const code = useMemo(() => binary && encodeBlob(binary), [binary])
     const deckCard = deck.find(card => card.code === code)
 
@@ -608,6 +599,8 @@ function App() {
         sendToWorklet({ cmd: "loadModule", binary, trace: tracing, meter: settings.meter })
         setBinary(binary)
         setPlayed(played)
+        // (A card arrives face up.)
+        setTurned(false)
         reset(seed)
     }
     const loadBinaryRef = useRef(loadBinary)
@@ -644,7 +637,7 @@ function App() {
         }
         // setLink(url)
         // setDownload(window.URL.createObjectURL(new Blob([buffer])))
-        // Show the card (unless it's being worked on, in which case stay on its source side).
+        // Show the card (unless it was built on the workbench: then stay there).
         setTab(tab => tab === Tab.Create ? tab : Tab.Listen)
         qrContents.current = seedLock ? [binary, seed] : [binary]
     }, [binary, seed, seedLock])
@@ -719,7 +712,7 @@ function App() {
         const pack = await parsePack(await file.text())
         if (!pack) return window.alert("That doesn't look like a pack of score cards.")
         setPacks(packs => savePacks([...packs, pack]))
-        showDeck.current()
+        openSpread()
     }
     const importPackRef = useRef(importPack)
     importPackRef.current = importPack
@@ -750,7 +743,7 @@ function App() {
     })
     // The heart keeps a performance: this seed is saved with the card in the deck (which keeps the
     // card, if it wasn't there). Again, and the seed is forgotten. (Cards leave the deck from the
-    // spread, or the drawer.) Locking the seed is something else: it stops a new one being drawn.
+    // spread.) Locking the seed is something else: it stops a new one being drawn.
     const kept = !!deckCard?.seeds.includes(seed)
     const toggleKept = () => {
         if (!binary) return
@@ -849,52 +842,42 @@ function App() {
     //     })();
     // } , [])
 
-    const pile = settings.look === "pile"
-    // In the pile look, the tabs belong to cards at the back of the pile: tapping one brings its card
-    // to the top, and tapping it again sends the card back. (Create is the top card, turned over.)
+    // The top card of the pile is the loaded card, unless one of the cards kept at the back of the
+    // pile has been brought to the top by its tab: Scan, Create (the workbench), Settings or About.
+    // Tapping such a card's tab again sends it back. The music pile has a tab of its own, which
+    // brings it back from any of those, and from there spreads the pile out.
     const nextCard = (direction: 1 | -1) => {
         const card = neighbour(deck, code, direction)
         return card && card.code !== code ? card : undefined
     }
-    // The Create tab's card is the top music card turned over, to write on. The card can also be
-    // turned over by its folded corner, just to see its source: then no tab goes with it.
-    const [writing, setWriting] = useState(false)
+    // Is the loaded card turned over, to its back?
+    const [turned, setTurned] = useState(false)
     const pickTab = (index: number) => {
-        if (index === Tab.Create && tab === Tab.Create && !writing) return setWriting(true)
-        const change = () => flushSync(() => {
-            setTab(index === tab ? Tab.Listen : index)
-            setWriting(index === Tab.Create)
-        })
-        // (The source is the back of the top card: with a music card on top, the whole card turns over.)
-        if (index === Tab.Create && (tab === Tab.Listen || tab === Tab.Create)) turn(change, nextCard(1))
-        else if (index === tab) throwTop("down", change)
+        if (index === Tab.Listen && tab === Tab.Listen) return openSpread()
+        const change = () => flushSync(() => setTab(index === tab ? Tab.Listen : index))
+        if (index === tab || index === Tab.Listen) throwTop("down", change)
         else raise(change)
     }
-    const flip = () => turn(() => flushSync(() => {
-        setTab(tab === Tab.Create ? Tab.Listen : Tab.Create)
-        setWriting(false)
-    }), nextCard(1))
-    // Is the top card one with a tab of its own?
-    const tabbed = tab !== Tab.Listen && (tab !== Tab.Create || writing)
+    const flip = () => turn(() => flushSync(() => setTurned(!turned)), nextCard(1))
     const pileHandlers = usePile({
-        enabled: pile && !spread,
+        enabled: !spread,
         current: code,
         next: nextCard,
         go: card => loadCard(card.code),
-        dismiss: tab !== Tab.Listen && tab !== Tab.Create ? () => flushSync(() => setTab(Tab.Listen)) : undefined,
+        dismiss: tab !== Tab.Listen ? () => flushSync(() => setTab(Tab.Listen)) : undefined,
     })
 
     useEffect(() => {
         // A tap on the table (beside the pile) spreads the pile out.
-        if (!pile || spread) return
+        if (spread) return
         const click = (e: MouseEvent) => {
             if (e.target instanceof Element && e.target.matches("html, body, #root, #layout, #app, .pile")) openSpread()
         }
         document.addEventListener("click", click)
         return () => document.removeEventListener("click", click)
-    }, [pile, spread])
+    }, [spread])
 
-    const face: Face = tab === Tab.Create ? "source" : tracing ? "bits" : "qr"
+    const face: Face = tab === Tab.Create ? "write" : turned ? "back" : tracing ? "bits" : "qr"
     const toggleTracing = () => setTracing(!tracing)
     // Changing the guard takes hold at once (the card carries on from where it was).
     const guarded = useRef(settings.meter)
@@ -926,30 +909,29 @@ function App() {
     const settingsProps = {
         measure,
         settings, setSettings, deckSize: deck.length, hasStarter: packs.some(pack => pack.id === starterPack.id),
-        freshStarter: () => { setPacks(savePacks([...packs, starterPack])); showDeck.current() },
+        freshStarter: () => { setPacks(savePacks([...packs, starterPack])); openSpread() },
         emptyDeck: () => setDeck(clearDeck()),
     }
     const tabs = [
-        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, played, tracing, toggleTracing, face, code, loadBinary, kept, toggleKept, lockSeed, printed: settings.look === "printed", description: deckCard?.description ?? library.find(card => card.code === code)?.description, turnOver: () => setTab(tab === Tab.Create ? Tab.Listen : Tab.Create), rolodex: settings.deckStyle === "rolodex" && !pile ? deck : null, loadCard, pile }} /> },
+        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, played, tracing, toggleTracing, face, code, loadBinary, kept, toggleKept, lockSeed, description: deckCard?.description ?? library.find(card => card.code === code)?.description }} /> },
         { name: "Scan", Icon: Camera, component: <Scan {...{ onScan, tab }} /> },
-        // Creating happens on the back of the card, so this tab shows the Listen tab's card turned over.
+        // The workbench is laid out like a music card (and shares its controls), so it's drawn by Listen.
         { name: "Create", Icon: EditBox, component: null },
         { name: "Settings", Icon: Sliders, component: <SettingsTab {...settingsProps} /> },
         { name: "About", Icon: InfoBox, component: <About {...{ setTab, openDeck }} /> },
     ]
 
-    const border = `1px ${dragging ? "dashed" : "solid"} black`
     const logo = <h1 className="app-logo" style={{ margin: "0 0 20px 0" }}><a href="/"><img src={logoUrl} style={{ imageRendering: "pixelated", width: "100%" }} /></a></h1>
     const panes = <div className="panes" style={{ display: "flex" }}>
         {tabs.map(({ component }, index) => component &&
             <div key={index} data-pane={index === Tab.Listen ? "listen" : "sheet"} className={index !== Tab.Listen ? "sheet" : tab === Tab.Listen || tab === Tab.Create ? "" : "away"} style={{ display: "flex", flexDirection: "column", justifyContent: "center", visibility: index === tab || (index === Tab.Listen && tab === Tab.Create) ? "visible" : "hidden", width: "100%", marginRight: "-100%" }}>{component}</div>
         )}
     </div>
-    const tabButtons = (own: boolean) => tabs.map(({ name, Icon }, index) => index !== Tab.Listen &&
-        <button key={index} title={name} aria-label={name} className={own ? "active" : ""} style={{ visibility: (index === tab && tabbed) === own ? "visible" : "hidden" }} onClick={() => pickTab(index)}><Icon /></button>)
+    // Each tab is drawn twice: sticking out from the back of the pile, and (white) hanging from the top card when it's that card's own.
+    const tabButtons = (own: boolean) => tabs.map(({ name, Icon }, index) =>
+        <button key={index} data-tab={index} title={index === Tab.Listen && tab === Tab.Listen ? "Spread the pile out" : name} aria-label={name} className={own ? "active" : ""} style={{ visibility: (index === tab) === own ? "visible" : "hidden" }} onClick={() => pickTab(index)}><Icon /></button>)
     return <div id="layout">
-    {!pile && <Deck {...{ deck, packs, openPack, importPack, exportPack, current: code, loadCard, discard: (code: string) => setDeck(removeCard(deck, code)), open: deckOpen, setOpen: setDeckOpen }} />}
-    {pile ? <div id="app" className="pile-look" style={{ containerType: "inline-size" }}>
+    <div id="app" style={{ containerType: "inline-size" }}>
         {spread && <Spread {...{ deck, packs, openPack, importPack, exportPack, current: tab === Tab.Listen || tab === Tab.Create ? code : null, pile: pilePlace.current }}
             tabbed={[
                 { index: Tab.Scan, name: "Scan", Icon: Camera, face: <>
@@ -967,35 +949,21 @@ function App() {
             close={() => setSpread(false)}
             pick={(picked, seed) => {
                 setSpread(false)
-                if (tab !== Tab.Create) setTab(Tab.Listen)
+                setTab(Tab.Listen)
                 if (picked !== code || seed !== undefined) loadCard(picked, seed)
             }}
-            pickTab={index => { setSpread(false); setTab(index); setWriting(index === Tab.Create) }} />}
+            pickTab={index => { setSpread(false); setTab(index) }} />}
         <div className="pile" style={spread ? { display: "none" } : undefined}>
             <div className="pile-edges"></div>
             <div className="tabs pile-tabs">{tabButtons(false)}</div>
-            <div className={"pile-card pile-top" + (binary && (tab === Tab.Listen || tab === Tab.Create) ? " eared" : "")} style={{ borderStyle: dragging ? "dashed" : "solid" }} {...pileHandlers}>
+            <div className="pile-card pile-top" style={{ borderStyle: dragging ? "dashed" : "solid" }} {...pileHandlers}>
                 <div style={{ margin: "20px" }}>{logo}{panes}</div>
-                {tabbed && <div className="tabs own-tab">{tabButtons(true)}</div>}
-                {binary && (tab === Tab.Listen || tab === Tab.Create) && <button className="dog-ear" title={tab === Tab.Create ? "Turn the card back over" : "Turn the card over, to its source"} onClick={flip}></button>}
+                <div className="tabs own-tab">{tabButtons(true)}</div>
+                {/* Printed at the corner, as index cards say "over". */}
+                {binary && tab === Tab.Listen && <button className={"over" + (turned ? " turned" : "")} title={turned ? "Turn the card back over" : "Turn the card over, to read its code"} onClick={flip}><Redo /></button>}
             </div>
         </div>
-    </div> :
-    <div id="app" className={settings.look === "printed" ? "printed" + (new URLSearchParams(location.search).has("console") ? " console-look" : "") : ""} style={{ display: "flex", flexDirection: "column", alignItems: "stretch", containerType: "inline-size", borderTop: border }}>
-        <div style={{ borderLeft: border, borderRight: border, margin: "0 -1px" }}>
-            <div style={{ margin: "20px" }} >
-                {logo}
-                {panes}
-            </div>
-        </div>
-        <div className="tabs" style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
-            <div style={{ borderTop: border, flexGrow: "1", alignSelf: "stretch" }}></div>
-            {tabs.map(({ name, Icon }, index) =>
-                <button key={index} title={name} aria-label={name} className={index === tab ? "active" : ""} onClick={() => setTab(index)}><Icon /></button>
-            )}
-            <div style={{ borderTop: border, flexGrow: "1", alignSelf: "stretch" }}></div>
-        </div>
-    </div>}
+    </div>
     </div>
 }
 

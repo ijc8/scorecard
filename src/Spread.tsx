@@ -1,7 +1,7 @@
-// The pile, spread out (part of the pile look; see Pile.tsx): every card in the deck dealt across the
+// The pile, spread out (see Pile.tsx): every card in the deck dealt across the
 // table as a small copy of the whole panel, along with the tabbed cards and any sealed packs. Tap a
 // card and the pile is gathered up again with that card on top; tap the table to gather it as it was.
-import { useEffect, useLayoutEffect, useRef } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import Play from "pixelarticons/svg/play.svg?react"
 import Prev from "pixelarticons/svg/prev.svg?react"
 import ClockIcon from "pixelarticons/svg/clock.svg?react"
@@ -13,7 +13,6 @@ import Close from "pixelarticons/svg/close.svg?react"
 import { Forward, HeartFull } from "./icons"
 import logoUrl from "./assets/logo.png"
 import { DeckCard, Pack } from "./deck"
-import { SealedPack } from "./Deck"
 import { cardFace, formatSeed } from "./card"
 import { motionOff } from "./Settings"
 
@@ -52,6 +51,26 @@ function Face({ card }: { card: DeckCard }) {
             <SeedIcon style={small} /><span style={{ width: "4.6em" }}>{card.seeds.length ? formatSeed(card.seeds[0]) : "--------"}</span><KeptIcon style={small} />
         </div>
     </div>
+}
+
+// A sealed pack of cards, waiting on the table to be torn open.
+function SealedPack({ pack, open }: { pack: Pack, open: () => void }) {
+    const [opening, setOpening] = useState(false)
+    const tear = () => {
+        if (opening) return
+        setOpening(true)
+        setTimeout(open, motionOff() ? 0 : 600)
+    }
+    return <button className={"pack" + (opening ? " opening" : "")} onClick={tear}>
+        <span className="pack-top"></span>
+        <span className="pack-body">
+            <span className="pack-label">
+                <b>{pack.name}</b>
+                <span>{pack.cards.length} {pack.cards.length === 1 ? "card" : "cards"}</span>
+            </span>
+            <span className="pack-hint">Open</span>
+        </span>
+    </button>
 }
 
 // A card with a tab: `face` is what's on it (drawn small, and not to be used there).

@@ -81,3 +81,10 @@ export function toggleSeed(deck: DeckCard[], code: string, seed: number) {
         seeds: card.seeds.includes(seed) ? card.seeds.filter(s => s !== seed) : [...card.seeds, seed],
     }))
 }
+
+// The card that many places along from this one in the deck (the deck's first, if this isn't in it).
+export function neighbour(deck: DeckCard[], current: string | null, direction: number) {
+    if (deck.length === 0) return
+    const index = deck.findIndex(card => card.code === current)
+    return index < 0 ? deck[0] : deck[((index + direction) % deck.length + deck.length) % deck.length]
+}
