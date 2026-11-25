@@ -22,13 +22,26 @@ export function disassembleWasm(binary: Uint8Array) {
     return dis.getResult()
 }
 
-// Gas metering (an experiment): the card's WebAssembly text with a counter added, so that a card
-// that never returns can be stopped. Every pass through a loop takes one from a global, `gas`
-// (exported, for whoever runs the card to top up before each call); when it reaches zero the card
-// traps. Loops are the only place this is needed: endless recursion runs out of stack by itself.
+// Gas metering: the card's WebAssembly text with a counter added, so that a card that never
+// returns can be stopped. Loops are the only place this is needed: endless recursion runs out of
+// stack by itself. Each function counts its own passes through loops in a local (which costs next
+// to nothing: an add and a compare, in a register), and every 64th pass takes 64 from a global,
+// `gas` (exported, for whoever runs the card to top up before each call); when that runs out, the
+// card traps. So what's metered is one call that goes on and on, to within 64 passes a function:
+// short loops in a function that returns are never charged at all.
 export const GAS_EXPORT = "gas"
 const GAS_GLOBAL = `(global $gas (export "${GAS_EXPORT}") (mut i32) (i32.const 0))`
-const GAS_CHECK = ["global.get $gas", "i32.const 1", "i32.sub", "global.set $gas", "global.get $gas", "i32.eqz", "if", "unreachable", "end"]
+const GAS_LOCAL = "(local $gas_n i32)"
+const GAS_CHECK = [
+    "local.get $gas_n", "i32.const 1", "i32.add", "local.tee $gas_n", "i32.const 64", "i32.ge_u",
+    "if",
+    "i32.const 0", "local.set $gas_n",
+    "global.get $gas", "i32.const 64", "i32.sub", "global.set $gas",
+    "global.get $gas", "i32.const 0", "i32.le_s", "if", "unreachable", "end",
+    "end",
+]
+// (A function's own locals come first; ours go after them, so as not to renumber any.)
+const endsHeader = (lines: string[], index: number) => /^ *\((func|local) /.test(lines[index]) && !/^ *\(local/.test(lines[index + 1] ?? "")
 // The card's WebAssembly text, with calls out to `scorecard.log` (execution) and `scorecard.read` and
 // `scorecard.write` (memory) added, and where each block of code that's counted lies in the text.
 // With `meter`, it's given a gas counter as well (see `meterWat`).
@@ -74,6 +87,7 @@ export function instrumentWat(binary: Uint8Array, meter = false) {
         if (s.match(/^ *\((func|local) /) && !result.lines[index+1]?.match(/^ *\(local/)) {
             // (Scratch locals for traced stores go after the function's own, so as not to renumber them.)
             out.push("(local $trace_i32 i32) (local $trace_i64 i64) (local $trace_f32 f32) (local $trace_f64 f64)")
+            if (meter) out.push(GAS_LOCAL)
             out.push(`(call $log (i32.const ${id++}))`)
         } else if (s.match(/^ *(br_if|if|else|loop|end)/)) {
             const line = `(call $log (i32.const ${id++}))`
@@ -108,6 +122,7 @@ export function meterWat(binary: Uint8Array) {
     lines.forEach((line, index) => {
         if (index === end) out.push(GAS_GLOBAL)
         out.push(line)
+        if (endsHeader(lines, index)) out.push(GAS_LOCAL)
         if (/^ *loop\b/.test(line)) out.push(...GAS_CHECK)
     })
     return out.join("\n")

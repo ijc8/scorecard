@@ -33,10 +33,12 @@ export function generate(binary: Uint8Array, seed: number): Generated {
         title = titleOf(exports) ?? title
         if (typeof next !== "number" || next === 0) {
             const process = (exports.p ?? exports.process) as ((...args: number[]) => number) | undefined
+            // (A card that hands the player another needn't be able to play. The last one must.)
+            if (typeof process !== "function") throw new Error("This card has nothing to play: it has no process function, and doesn't generate a card that has.")
             // Try the card out for a tenth of a second of sound, so that one that gets stuck straight
             // away is caught here and never reaches the audio thread (which can't be interrupted).
-            for (let i = 0; process && i < 4410; i++) process(0)
-            return { binary, title, listens: !!process && process.length > 0 }
+            for (let i = 0; i < 4410; i++) process(0)
+            return { binary, title, listens: process.length > 0 }
         }
         const memory = ((exports.m ?? exports.memory) as WebAssembly.Memory).buffer
         const at = next >>> 0

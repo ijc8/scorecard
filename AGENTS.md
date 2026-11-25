@@ -52,7 +52,8 @@ so check the size after changing `deck.h` or the converter's player code.
 ## Score card ABI (don't break it)
 
 A scorecard `.wasm` exports:
-- `p`: `() -> f32`, called once per sample at 44.1 kHz. **Required.** It may instead be
+- `p`: `() -> f32`, called once per sample at 44.1 kHz. **Required** of the card that ends up
+  playing (see `s`, below: a card may hand the player another card instead). It may instead be
   `(f32) -> f32`, which makes the card an effect: the argument is a sample from the microphone
   (in C: `#define INPUT` before including `deck.h`). The player tells the two apart by the
   exported function's `length`, and only asks for the microphone for cards that take input,
@@ -73,13 +74,13 @@ A scorecard `.wasm` exports:
   pack a card smaller: a ~450-byte unpacker (context-mixing arithmetic decoder, in WebAssembly text
   in that script) plus the packed card. `examples/seed-beat.c` is a card that writes a different
   program for each seed (a bytebeat). Not settled: whether this stays, and generating during play.
-- **Gas metering** (experimental, off by default: Settings > "Guard against stuck cards"): the
-  worklet rewrites every card it runs (`meterWat` in `src/wasmTracer.ts`, through the same second
-  worklet module as tracing) so that each pass through a loop takes one from an exported global,
-  `gas`, which the worklet tops up before each block; a card that runs out traps and is stopped
-  (`failed`). This matters most on iOS, where one card stuck in `p` leaves the page without audio.
-  `scripts/gas-check.ts` measures the cost (2-25% on this laptop); Settings has a button that
-  measures the loaded card on the device.
+- **Gas metering** (Settings > "Guard against stuck cards"; on by default on iOS only, where one
+  card stuck in `p` leaves the page without audio): the worklet rewrites every card it runs
+  (`meterWat` in `src/wasmTracer.ts`, through the same second worklet module as tracing). Each
+  function counts its passes through loops in a local, and every 64th takes 64 from an exported
+  global, `gas`, which the worklet tops up before each block; a card that runs out traps and is
+  stopped (`failed`). `scripts/gas-check.ts` checks it and measures the cost; Settings has a button
+  that measures the loaded card on the device.
 
 The player also accepts the legacy names (`process`/`setup`/`title`/`memory`) for old cards. Keep
 that fallback in `src/generate.ts` and in `public/worklet.js`.
