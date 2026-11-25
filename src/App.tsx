@@ -1,4 +1,4 @@
-import { RefObject, memo, useEffect, useMemo, useRef, useState } from 'react'
+import { RefObject, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import { Tab } from "./tabs"
 import { NO_TITLE, cardFragment, cardURL, generateCard, formatTime, formatSeed, generateSeed, parseCardURL } from "./card"
@@ -558,12 +558,15 @@ function App() {
     }, [settings.awake, state])
     // The whole deck is shown by spreading the pile out on the table (see Spread.tsx).
     const [spread, setSpread] = useState(false)
-    const pilePlace = useRef<Place | null>(null)
+    const pilePlace = useRef<Place | null>(null), pileScroll = useRef(0)
     const openSpread = () => {
         const top = document.querySelector(".pile-top")
         if (top) pilePlace.current = placeOf(top)
+        pileScroll.current = window.scrollY
         setSpread(true)
     }
+    // (The table may have been scrolled a long way; the pile is where it was.)
+    useLayoutEffect(() => { if (!spread) window.scrollTo(0, pileScroll.current) }, [spread])
     const openDeck = useRef(openSpread).current
     const code = useMemo(() => binary && encodeBlob(binary), [binary])
     const deckCard = deck.find(card => card.code === code)
@@ -938,7 +941,7 @@ function App() {
         <button key={index} data-tab={index} title={index === Tab.Listen && tab === Tab.Listen ? "Spread the pile out" : name} aria-label={name} className={own ? "active" : ""} style={{ visibility: (index === tab) === own ? "visible" : "hidden" }} onClick={() => pickTab(index)}><Icon /></button>)
     return <div id="layout">
     <div id="app" style={{ containerType: "inline-size" }}>
-        {spread && <Spread {...{ deck, packs, openPack, importPack, exportPack, current: tab === Tab.Listen || tab === Tab.Create ? code : null, pile: pilePlace.current }}
+        {spread && <Spread {...{ deck, packs, openPack, importPack, exportPack, current: tab === Tab.Listen || tab === Tab.Create ? code : null, pile: pilePlace.current, scroll: pileScroll.current }}
             tabbed={[
                 { index: Tab.Scan, name: "Scan", Icon: Camera, face: <>
                     <div className="viewfinder"><div></div></div>

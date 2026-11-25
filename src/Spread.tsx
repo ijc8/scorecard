@@ -76,23 +76,32 @@ function SealedPack({ pack, open }: { pack: Pack, open: () => void }) {
 // A card with a tab: `face` is what's on it (drawn small, and not to be used there).
 export interface TabbedCard { index: number, name: string, face: React.ReactNode, Icon: React.FunctionComponent<React.SVGProps<SVGSVGElement>> }
 
-export function Spread({ deck, packs, tabbed, current, pile, pick, pickTab, close, discard, openPack, importPack, exportPack }: {
+export function Spread({ deck, packs, tabbed, current, pile: pileThen, scroll, pick, pickTab, close, discard, openPack, importPack, exportPack }: {
     deck: DeckCard[], packs: Pack[], tabbed: TabbedCard[], current: string | null,
     // Where the pile is when gathered: the cards are dealt from there, and go back there.
-    pile: Place | null,
+    // (`scroll` is how far down the page was then, which is where it will be again.)
+    pile: Place | null, scroll: number,
     pick: (code: string, seed?: number) => void, pickTab: (index: number) => void, close: () => void,
     discard: (code: string) => void, openPack: (pack: Pack) => void, importPack: (file: File) => void, exportPack: () => void,
 }) {
     const table = useRef<HTMLDivElement>(null)
     const gathering = useRef(false)
+    // Where the pile is to be seen from here, however far down the table we are.
+    const pileNow = () => pileThen && { ...pileThen, top: pileThen.top - scroll + window.scrollY }
 
-    // Deal the cards out from the pile: the card that was on top first, then the rest in turn, each
-    // leaving from under the ones still to go. (Cards far down a long table come all together.)
+    // Deal the cards out from the pile: the card that was on top first, then the rest in turn (its
+    // neighbours first), each leaving from under the ones still to go. (The furthest come all
+    // together.) On a long table, start where the card that was on top lands.
     useLayoutEffect(() => {
+        const all = [...table.current!.querySelectorAll<HTMLElement>(".mini, .pack")]
+        const first = Math.max(0, all.findIndex(card => card.classList.contains("current")))
+        if (first > 0) {
+            const { top, height } = all[first].getBoundingClientRect()
+            window.scrollTo(0, Math.max(0, top + window.scrollY + height / 2 - window.innerHeight / 2))
+        }
+        const pile = pileNow()
         if (!pile || motionOff()) return
-        const cards = [...table.current!.querySelectorAll<HTMLElement>(".mini, .pack")]
-        const first = cards.findIndex(card => card.classList.contains("current"))
-        if (first > 0) cards.unshift(...cards.splice(first, 1))
+        const cards = all.map((card, i) => ({ card, far: Math.abs(i - first) })).sort((a, b) => a.far - b.far).map(({ card }) => card)
         cards.forEach((card, i) => {
             if (!card.animate) return
             const turn = Math.min(i, 14)
@@ -108,6 +117,7 @@ export function Spread({ deck, packs, tabbed, current, pile, pick, pickTab, clos
     // Gather the pile up again, around the chosen card (or as it was), and then do something with it.
     const gather = (chosen: Element | null | undefined, then: () => void) => {
         if (gathering.current) return
+        const pile = pileNow()
         if (!pile || motionOff() || !(chosen instanceof HTMLElement) || !chosen.animate) return then()
         gathering.current = true
         table.current!.classList.add("gathering")
