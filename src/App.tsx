@@ -604,8 +604,8 @@ function App() {
         // (The worklet has the card generate again for each performance, with that performance's
         // seed; when tracing, it instruments the card that results, and says which card that is.)
         trace = null
-        if (tracing) await needTracer()
-        sendToWorklet({ cmd: "loadModule", binary, trace: tracing })
+        if (tracing || settings.meter) await needTracer()
+        sendToWorklet({ cmd: "loadModule", binary, trace: tracing, meter: settings.meter })
         setBinary(binary)
         setPlayed(played)
         reset(seed)
@@ -681,9 +681,9 @@ function App() {
     const setTracing = async (tracing: boolean) => {
         _setTracing(tracing)
         if (!binary) return
-        if (tracing) await needTracer()
-        else trace = null
-        sendToWorklet({ cmd: "loadModule", binary, trace: tracing })
+        if (tracing || settings.meter) await needTracer()
+        if (!tracing) trace = null
+        sendToWorklet({ cmd: "loadModule", binary, trace: tracing, meter: settings.meter })
         if (state === "stopped" || time === 0) {
             reset()
         } else {
@@ -813,7 +813,14 @@ function App() {
             } else if (Array.isArray(e.data)) {
                 handleTraceLogs?.(e.data)
             } else {
-                if (e.data.traced) {
+                if (e.data.failed) {
+                    // The card was stopped in the worklet: it ran out of gas (see the guard, in Settings), or broke.
+                    holdMediaSession(false)
+                    _setState("paused")
+                    window.alert(`This card was stopped: ${/unreachable/i.test(e.data.failed) ? "it went on too long without finishing" : e.data.failed}.`)
+                } else if (e.data.bench) {
+                    benchDone.current?.(e.data.bench)
+                } else if (e.data.traced) {
                     // The worklet has instrumented the card it's playing: this is that card, and what its counters count.
                     const { binary, map } = e.data.traced
                     trace = { binary, map, logs: [], memory: new MemoryTrace(findDataSegments(binary)) }
@@ -889,7 +896,35 @@ function App() {
 
     const face: Face = tab === Tab.Create ? "source" : tracing ? "bits" : "qr"
     const toggleTracing = () => setTracing(!tracing)
+    // Changing the guard takes hold at once (the card carries on from where it was).
+    const guarded = useRef(settings.meter)
+    useEffect(() => {
+        if (guarded.current === settings.meter) return
+        guarded.current = settings.meter
+        if (!binary) return
+        ;(async () => {
+            if (tracing || settings.meter) await needTracer()
+            sendToWorklet({ cmd: "loadModule", binary, trace: tracing, meter: settings.meter })
+            sendToWorklet({ cmd: "reset", seed, resume: true })
+        })()
+    }, [settings.meter])
+    // How fast is the loaded card, as scanned and guarded? (The worklet times itself making sound nobody hears.)
+    const benchDone = useRef<((result: { samples: number, ms: number, error?: string }) => void) | null>(null)
+    const measure = async () => {
+        if (!binary) return "No card is loaded."
+        if (state === "playing") setState("paused")
+        await needTracer()
+        const run = (meter: boolean) => new Promise<{ samples: number, ms: number, error?: string }>(resolve => {
+            benchDone.current = resolve
+            sendToWorklet({ cmd: "bench", seed, meter })
+        })
+        const plain = await run(false), metered = await run(true)
+        if (plain.error || metered.error) return `Couldn't measure: ${plain.error ?? metered.error}`
+        const speed = (r: { samples: number, ms: number }) => r.samples / 44.1 / r.ms
+        return `${title}: ${speed(plain).toFixed(0)}x real time as scanned, ${speed(metered).toFixed(0)}x guarded (${((speed(plain) / speed(metered) - 1) * 100).toFixed(0)}% slower).`
+    }
     const settingsProps = {
+        measure,
         settings, setSettings, deckSize: deck.length, hasStarter: packs.some(pack => pack.id === starterPack.id),
         freshStarter: () => { setPacks(savePacks([...packs, starterPack])); showDeck.current() },
         emptyDeck: () => setDeck(clearDeck()),

@@ -1,7 +1,8 @@
+import { useState } from "react"
 import Volume from "pixelarticons/svg/volume-2.svg?react"
 
 // Settings, kept in localStorage.
-export const defaultSettings = { collect: true, motion: true, volume: 1, awake: false, echo: true, deckStyle: "drawer" as "drawer" | "rolodex", look: "pile" as "pile" | "printed" | "classic" }
+export const defaultSettings = { collect: true, motion: true, volume: 1, awake: false, echo: true, meter: false, deckStyle: "drawer" as "drawer" | "rolodex", look: "pile" as "pile" | "printed" | "classic" }
 export type Settings = typeof defaultSettings
 
 export function loadSettings(): Settings {
@@ -20,10 +21,13 @@ export function motionOff() {
     return document.documentElement.classList.contains("still") || window.matchMedia("(prefers-reduced-motion: reduce)").matches
 }
 
-export function SettingsTab({ settings, setSettings, deckSize, hasStarter, freshStarter, emptyDeck }: {
-    settings: Settings, setSettings: (s: Settings) => void, deckSize: number, hasStarter: boolean, freshStarter: () => void, emptyDeck: () => void
+export function SettingsTab({ settings, setSettings, deckSize, hasStarter, freshStarter, emptyDeck, measure }: {
+    settings: Settings, setSettings: (s: Settings) => void, deckSize: number, hasStarter: boolean, freshStarter: () => void, emptyDeck: () => void,
+    // Times the loaded card, as scanned and guarded, and says how it went.
+    measure: () => Promise<string>,
 }) {
-    const toggle = (key: "collect" | "motion" | "awake" | "echo", label: string, hint: string) =>
+    const [measured, setMeasured] = useState("")
+    const toggle = (key: "collect" | "motion" | "awake" | "echo" | "meter", label: string, hint: string) =>
         <label>
             <input type="checkbox" checked={settings[key]} onChange={e => setSettings({ ...settings, [key]: e.target.checked })} />
             <span>{label}<small>{hint}</small></span>
@@ -54,6 +58,9 @@ export function SettingsTab({ settings, setSettings, deckSize, hasStarter, fresh
         {toggle("motion", "Animations", "Cards that deal, fly and flip.")}
         {"wakeLock" in navigator && toggle("awake", "Stay awake", "Keep the screen on while a card is playing.")}
         {toggle("echo", "Echo cancellation", "Stops cards that listen from hearing themselves and howling. Sounds cleaner off, with headphones.")}
+        {toggle("meter", "Guard against stuck cards", "An experiment: counts each card's loops as it plays, and stops a card that never finishes. Slows cards a little.")}
+        <button onClick={async () => { setMeasured("Measuring..."); setMeasured(await measure()) }}>Measure this card's speed</button>
+        {measured && <small style={{ marginTop: "-8px" }}>{measured}</small>}
         <button disabled={hasStarter} onClick={freshStarter}>Get a fresh starter pack</button>
         <button disabled={deckSize === 0} onClick={() => window.confirm(`Throw away all ${deckSize} cards in your deck, and their saved seeds?`) && emptyDeck()}>Empty my deck</button>
     </div>

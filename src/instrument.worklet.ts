@@ -1,11 +1,13 @@
-// The tracer, for the audio worklet: added to its scope (as a second module, only once tracing is
-// wanted) so that the worklet can instrument whatever card it ends up playing, itself. That way a
-// card that generates another is traced as the card it generated this time, with this seed.
+// The tracer, for the audio worklet: added to its scope (as a second module, only once tracing or
+// metering is wanted) so that the worklet can rewrite whatever card it ends up playing, itself.
+// That way a card that generates another is traced as the card it generated this time, with this seed.
 import "./workletPolyfill"
 import { compile } from "watr"
-import { instrumentWat } from "./wasmTracer"
+import { instrumentWat, meterWat } from "./wasmTracer"
 
-;(globalThis as any).scorecardInstrument = (binary: Uint8Array) => {
-    const { text, map } = instrumentWat(binary)
+// `trace`: report what runs and what memory is touched. `meter`: stop if a loop goes round too long.
+;(globalThis as any).scorecardInstrument = (binary: Uint8Array, trace: boolean, meter: boolean) => {
+    if (!trace) return { binary: compile(meterWat(binary)) }
+    const { text, map } = instrumentWat(binary, meter)
     return { binary: compile(text), map }
 }

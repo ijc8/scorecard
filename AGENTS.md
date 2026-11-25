@@ -71,7 +71,15 @@ A scorecard `.wasm` exports:
   never settles) and `public/worklet.js` implement it; the trace view and the Wasm source shown are
   the generated card's, the size and QR code the generator's. `scripts/pack-card.mjs` uses it to
   pack a card smaller: a ~450-byte unpacker (context-mixing arithmetic decoder, in WebAssembly text
-  in that script) plus the packed card. Not settled: whether this stays, and generating during play.
+  in that script) plus the packed card. `examples/seed-beat.c` is a card that writes a different
+  program for each seed (a bytebeat). Not settled: whether this stays, and generating during play.
+- **Gas metering** (experimental, off by default: Settings > "Guard against stuck cards"): the
+  worklet rewrites every card it runs (`meterWat` in `src/wasmTracer.ts`, through the same second
+  worklet module as tracing) so that each pass through a loop takes one from an exported global,
+  `gas`, which the worklet tops up before each block; a card that runs out traps and is stopped
+  (`failed`). This matters most on iOS, where one card stuck in `p` leaves the page without audio.
+  `scripts/gas-check.ts` measures the cost (2-25% on this laptop); Settings has a button that
+  measures the loaded card on the device.
 
 The player also accepts the legacy names (`process`/`setup`/`title`/`memory`) for old cards. Keep
 that fallback in `src/generate.ts` and in `public/worklet.js`.
