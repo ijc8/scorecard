@@ -71,7 +71,7 @@ A scorecard `.wasm` exports:
   (run in a worker, which is abandoned if a card takes over 3 s: the only guard against a card that
   never settles) and `public/worklet.js` implement it; the trace view and the Wasm source shown are
   the generated card's, the size and QR code the generator's. `scripts/pack-card.mjs` uses it to
-  pack a card smaller: a ~450-byte unpacker (context-mixing arithmetic decoder, in WebAssembly text
+  pack a card smaller: a 408-byte unpacker (context-mixing arithmetic decoder, in WebAssembly text
   in that script) plus the packed card. `examples/seed-beat.c` is a card that writes a different
   program for each seed (a bytebeat). Not settled: whether this stays, and generating during play.
 - **Gas metering** (Settings > "Guard against stuck cards", on by default; without it, on iOS, one
@@ -87,11 +87,10 @@ that fallback in `src/generate.ts` and in `public/worklet.js`.
 
 ## Architecture
 
-- `src/App.tsx`: the app's state and the Listen tab. The other pieces of the UI (Listen / Scan /
-  Create / Settings / About tabs, shown as icons, plus the deck) live in `Scan.tsx`, `SourceFace.tsx`,
-  `Settings.tsx` and `Deck.tsx`; `card.ts` has what concerns cards themselves (links, size limit,
-  titles, faces).
-  1. URL load, the deck, QR scan, drag-and-drop and builds from the source face all call `loadBinary(Uint8Array)`.
+- `src/App.tsx`: the app's state and the music card (`Listen`). The other pieces of the UI live in
+  `Pile.tsx`, `Spread.tsx`, `Scan.tsx`, `Workbench.tsx` and `Settings.tsx`; `card.ts` has what
+  concerns cards themselves (links, size limit, titles, faces), `deck.ts` the deck and `packs.ts` packs.
+  1. URL load, the deck, QR scan, drag-and-drop and builds on the workbench all call `loadBinary(Uint8Array)`.
   2. The binary goes to the AudioWorklet (`public/worklet.js`), which instantiates it and calls
      `p` per sample. **Send the binary, not a `WebAssembly.Module`**: posting a Module breaks on
      iOS Safari.
@@ -118,27 +117,33 @@ that fallback in `src/generate.ts` and in `public/worklet.js`.
 - `src/print.ts`: a card drawn as printed (576 dots, black and white), saved or shared as a PNG,
   or sent to a Phomemo-style thermal printer over Web Serial (Bluetooth RFCOMM; the printer must be
   paired with the device). It waits for the printer's `1a 0f 0c` before closing the port: closing
-  early stops the print. Only tried against a saved image so far, not a printer.
-- Looks (Settings): the pile look (default, a prototype; `src/Pile.tsx`) makes the classic panel the
-  top card of a pile: flick it aside for the next card in the deck, and Scan, Create, Settings and
-  About are cards at the back of the pile whose index tabs stick out below. React only draws the top
-  card; what moves, and what shows under a dragged card, are DOM copies of it. Tapping the table
-  spreads the pile out (`src/Spread.tsx`): small copies of every card, the tabbed cards and sealed
-  packs, which stands in for the deck drawer in this look. Turning tracing on there first plays the
-  QR code being read into the card's bits (`src/decodeAnimation.ts`, from the module-by-module
-  account in `src/qrDecode.ts`; `npx tsx scripts/qr-decode-check.ts <cards>.wasm` checks that
-  account by reading the link back off the modules). The printed look
-  (another prototype) draws the card as printed and puts
-  every control on the player around it; the classic look is the earlier panel. The rolodex deck
-  style (`src/Rolodex.tsx`) is the other prototype. Background in `docs/CARD-DESIGN.md`.
+  early stops the print. Works from desktop Chrome (Ian, 11-25); Chrome on Android has no Web
+  Serial, so there it's Save picture and the printer's own app. Firefox offers no serial ports.
+- The pile (`src/Pile.tsx`; background in `docs/CARD-DESIGN.md`): the panel is the top card of a
+  pile, which is the deck. Flick it aside for the next card; Scan, Create, Settings and About are
+  cards at the back of the pile whose index tabs stick out below, and the music cards share the
+  headphones tab (back to the music, and from there, spread the pile). React only draws the top
+  card; what moves, and what shows under a dragged card, are DOM copies of it (`snapshot`, `dress`:
+  keep those in step with the card's markup). Tapping the table spreads the pile out
+  (`src/Spread.tsx`): small copies of every card, the tabbed cards and sealed packs. Turning
+  tracing on first plays the QR code being read into the card's bits (`src/decodeAnimation.ts`,
+  from the module-by-module account in `src/qrDecode.ts`; `npx tsx scripts/qr-decode-check.ts
+  <cards>.wasm` checks that account by reading the link back off the modules). This is the only
+  look: the drawer, the rolodex and the "printed" and "classic" looks were removed on 11-25.
 - `src/base43Encoder.ts` (mirrored by `base43.py`): base43 over the QR alphanumeric set minus `%`
   and space, so the binary shares the QR's dense alphanumeric mode with the URL and stays valid in
   a query string.
-- The big card has three faces: its QR code, its bits (the trace view, via the bullseye) and its
-  source (the Create tab, which shows the Listen tab's card turned over, so the transport stays
-  put). `SourceFace` shows what the card was written in when that's known (`src/sources.ts`: the
-  starter pack's sources ship with the app, and anything built here is remembered in localStorage
-  under `scorecard-sources`) and the card's disassembly otherwise. There are four modes:
+- A music card has a front (its QR code, or with the bullseye its bits: the trace view) and a back,
+  reached by the "over" arrow at its corner: what the card holds, as WebAssembly text (`CardBack`
+  in `src/Workbench.tsx`; read-only), with Print and Save picture under it. The text is the
+  tracer's own disassembly (`disassembleWasm`), so that with tracing on, the lines that are running
+  can be lit up (`showHeat`, drawn on a canvas behind the text). Nothing that isn't in the card is
+  shown as the card. Writing happens on the Create tab's card, the `Workbench`, which `Listen`
+  draws in the card's place (same layout and transport, an editor where the QR code goes). It
+  keeps its own text whatever card is loaded; "from <card>" in its menu starts from the loaded
+  card: from what it was written in when that's known (`src/sources.ts`: the starter pack's
+  sources ship with the app, and anything built here is remembered in localStorage under
+  `scorecard-sources`), from its disassembly otherwise. There are four modes:
   - **C**, compiled by `src/compiler.ts` (below).
   - **Beat** (`src/bytebeat.ts`): one bytebeat expression in `t`, translated straight to
     WebAssembly text and assembled with watr. No compiler download; division by zero gives 0.
@@ -149,13 +154,14 @@ that fallback in `src/generate.ts` and in `public/worklet.js`.
     which ships as `src/patternPlayer.ts` (rebuild with `examples/build-pattern-player.sh`). No
     compiler download. The player reads the pattern from a fixed address (`PATTERN`); keep that
     and the layout in step with `patternToCard`.
-  - **Wasm**: the tracer's own disassembly (`disassembleWasm`), so that with tracing on, the lines
-    that are running can be lit up (`showHeat`, drawn on a canvas behind the text). Pressing Play on the source face
-  rebuilds the card first if the editor has changed. Syntax colours (`src/highlight.tsx`) come from a
+  - **Wasm**: WebAssembly text, assembled with watr.
+
+  Pressing Play on the workbench builds what's written first, if that isn't the loaded card
+  already. Syntax colours (`src/highlight.tsx`) come from a
   highlighted copy of the text drawn behind a transparent textarea, so the two must keep identical
   text and metrics; `startAudio()` is still called synchronously
   in that gesture, before the (asynchronous) build.
-- `src/compiler.ts` / `src/compiler.worker.ts`: compiling C for the source face. A worker runs Clang and
+- `src/compiler.ts` / `src/compiler.worker.ts`: compiling C for the workbench. A worker runs Clang and
   LLD (`@yowasp/clang`, ~100 MB of assets, ~27 MB gzipped, fetched on the first compile; the
   worker fetches it with `runLLVM` on its own first, because `clang` drops `fetchProgress`; a
   download with no progress for 30 s is abandoned, and Play pressed again stops a build) against the
@@ -209,15 +215,13 @@ two `__EMSCRIPTEN__` branches let the same source build as a card or as a native
 
 ## Deck and starter pack
 
-The deck sits beside the player (a slide-out drawer below 800px wide, pulled out by the card
-edges peeking from the left of the screen). It shows the user's collected cards (`src/deck.ts`, kept in localStorage
-under `scorecard-deck`, keyed by each card's base43 code, with any saved seeds) as a pile of
-overlapping cards; the playing card is pulled out. Cards are collected when scanned or opened from
-a link, by hand with the heart (Keep), or by locking a seed (a locked seed is saved with its card;
-unlocking forgets it); drag-and-drop and Create don't collect, so work-in-progress builds stay out.
-Mini cards keep their title and size on top, as an index strip for the pile.
+The deck is the pile (above): the user's collected cards (`src/deck.ts`, kept in localStorage
+under `scorecard-deck`, keyed by each card's base43 code, with any saved seeds). Cards are
+collected when scanned or opened from a link, or by keeping a performance with the heart (which
+saves the seed with the card); drag-and-drop and the workbench don't collect, so work-in-progress
+builds stay out. Cards are removed in the spread.
 
-Below the pile are sealed packs (`scorecard-packs` in localStorage): bundles of cards that join the
+In the spread are sealed packs (`scorecard-packs` in localStorage): bundles of cards that join the
 deck when opened. The starter pack is there until opened. "Wrap as a pack" exports the deck as a
 JSON pack file (`format: "scorecard-pack"`); "Add a pack", or dropping the file on the page,
 imports one. Imported cards are validated, and their titles and sizes are read from the binaries.
@@ -225,8 +229,8 @@ imports one. Imported cards are validated, and their titles and sizes are read f
 Settings (`scorecard-settings` in localStorage) cover volume (applied in the worklet, and re-sent
 by `audio.ts` when the context is rebuilt), auto-collecting, animations and a screen wake lock.
 
-The motion is CSS (`.pcard`, `.pack`, `.flip` in `App.css`) plus `flyToPlayer`, and honours
-`prefers-reduced-motion`.
+The motion is the Web Animations API in `Pile.tsx` and `Spread.tsx`, plus CSS for packs, and
+honours `prefers-reduced-motion` and the Animations setting (`motionOff`).
 
 `examples/library/*.c` are the starter pack. `examples/library/build.sh`
 builds them all and runs `index.py`, which writes `src/library.json` (title, description, size and
