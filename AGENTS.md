@@ -159,7 +159,12 @@ that fallback in `src/generate.ts` and in `public/worklet.js`.
   very dense codes; rerun that benchmark before changing decoders.
 - `src/wasmTracer.ts`: the bullseye toggle reassembles the binary with a `scorecard.log(i32)`
   import at basic-block boundaries, and with every load/store address passed through
-  `scorecard.read`/`scorecard.write`. The worklet posts block counts and touched addresses back, and
+  `scorecard.read`/`scorecard.write`. This happens in the worklet, on the card it's about to play
+  (so a card that generates another is traced as what it generated this time): the tracer is a
+  second worklet module (`src/instrument.worklet.ts`, bundled with watr and wasmparser, ~150 KB),
+  added by `needTracer` in `audio.ts` when tracing is first wanted; `workletPolyfill.ts` gives that
+  scope the TextEncoder/TextDecoder it lacks. The worklet tells the page which card it instrumented
+  (`{traced: {binary, map}}`), then posts block counts and touched addresses back, and
   the Listen tab draws a heatmap over a bit-grid of the binary: green for executed code, blue/red
   for data-segment bytes read/written. Memory outside the data segments (`src/memoryTrace.ts`) is
   drawn in a band under the card. Instrumentation must not change a card's output.

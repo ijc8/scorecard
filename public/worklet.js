@@ -47,6 +47,7 @@ class CustomProcessor extends AudioWorkletProcessor {
         this.sincePost = 0
         this.port.onmessage = async e => {
             if (e.data.cmd === "loadModule") {
+                this.binary = e.data.binary
                 this.module = new WebAssembly.Module(e.data.binary)
                 this.trace = e.data.trace
             } else if (e.data.cmd === "reset") {
@@ -73,13 +74,36 @@ class CustomProcessor extends AudioWorkletProcessor {
     async setup(seed, skip = 0) {
         this.pos = 0
         this.skipping = 0
-        // Instantiate WebAssembly module.
-        if (this.trace) {
+        // Set the card up (short export name "s", or the legacy "setup" of old cards). Its setup may
+        // return the address in its memory of another card (a 32-bit length, then that many bytes of
+        // WebAssembly), to be played in its place; and that one's may do the same.
+        const setupOf = instance => instance.exports.s ?? instance.exports.setup
+        let instance = await WebAssembly.instantiate(this.module)
+        let binary = this.binary
+        for (;;) {
+            const next = setupOf(instance)?.(seed)
+            if (typeof next !== "number" || next === 0) break
+            const memory = (instance.exports.m ?? instance.exports.memory).buffer
+            const length = new DataView(memory).getUint32(next >>> 0, true)
+            binary = new Uint8Array(memory.slice((next >>> 0) + 4, (next >>> 0) + 4 + length))
+            instance = await WebAssembly.instantiate(new WebAssembly.Module(binary))
+        }
+
+        // Tracing: the card that plays (whichever that turned out to be) is rewritten to report
+        // what it runs and touches, by the tracer (instrument.worklet.ts, added to this scope when
+        // tracing is first wanted), and set up again. The page is told which card it is.
+        const instrument = this.trace && globalThis.scorecardInstrument
+        if (instrument) {
+            let key = binary.length + ":", hash = 2166136261
+            for (const byte of binary) hash = Math.imul(hash ^ byte, 16777619)
+            key += hash >>> 0
+            if (this.traced?.key !== key) {
+                const { binary: rewritten, map } = instrument(binary)
+                this.traced = { key, map, module: new WebAssembly.Module(rewritten) }
+            }
             const traceLogs = []
-            this.traceLogs = traceLogs
-            const reads = this.reads = makeTouchTracker()
-            const writes = this.writes = makeTouchTracker()
-            this.wasm = await WebAssembly.instantiate(this.module, {
+            const reads = makeTouchTracker(), writes = makeTouchTracker()
+            instance = await WebAssembly.instantiate(this.traced.module, {
                 scorecard: {
                     log(i) { traceLogs[i] = (traceLogs[i] ?? 0) + 1 },
                     // These pass the address through, so they can sit in front of each load and store.
@@ -87,24 +111,17 @@ class CustomProcessor extends AudioWorkletProcessor {
                     write(address, offset, size) { writes.touch((address >>> 0) + offset, size); return address },
                 }
             })
+            setupOf(instance)?.(seed)
+            this.traceLogs = traceLogs
+            this.reads = reads
+            this.writes = writes
+            this.port.postMessage({ traced: { binary, map: this.traced.map } })
         } else {
             this.traceLogs = null
-            this.wasm = await WebAssembly.instantiate(this.module)
         }
+        this.wasm = instance
 
-        // Set the card up (short export name "s", or the legacy "setup" of old cards). Its setup may
-        // return the address in its memory of another card (a 32-bit length, then that many bytes of
-        // WebAssembly), to be played in its place; and that one's may do the same. (When tracing,
-        // the main thread has already done this, and what's here is the card that plays.)
-        for (;;) {
-            const next = (this.wasm.exports.s ?? this.wasm.exports.setup)?.(seed)
-            if (this.trace || typeof next !== "number" || next === 0) break
-            const memory = (this.wasm.exports.m ?? this.wasm.exports.memory).buffer
-            const length = new DataView(memory).getUint32(next >>> 0, true)
-            this.wasm = await WebAssembly.instantiate(new WebAssembly.Module(memory.slice((next >>> 0) + 4, (next >>> 0) + 4 + length)))
-        }
-
-        if (this.trace) this.postTrace()
+        if (this.traceLogs) this.postTrace()
         // (Only now, so the card being replaced doesn't do the skipping.)
         this.skipping = skip
     }

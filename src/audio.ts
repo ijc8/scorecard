@@ -15,6 +15,7 @@
 //   the player shows "paused" instead of failing silently; the next Play then rebuilds the context.
 
 import { DEBUG, dlog } from "./debug"
+import instrumenterUrl from "./instrument.worklet.ts?worker&url"
 
 // (`hung`: the card itself seems to be stuck, and has been taken off the audio thread.)
 type Listener = (hung: boolean) => void
@@ -26,6 +27,9 @@ let wasInterrupted = false
 // Last loadModule message, re-sent to each new worklet node.
 let moduleMessage: any = null
 let wantPlaying = false
+// The tracer is a second module in the worklet's scope, added only once tracing is wanted (see `needTracer`).
+let tracerWanted = false
+let tracerReady: Promise<unknown> = Promise.resolve()
 let seed = 0
 let volume = 1
 // For cards that take sound in: whether the loaded card does, and the microphone while it's in use.
@@ -72,7 +76,9 @@ function createContext() {
             tryResume()
         }
     }
-    nodePromise = c.audioWorklet.addModule("worklet.js").then(() => {
+    tracerReady = tracerWanted ? c.audioWorklet.addModule(instrumenterUrl).catch(e => dlog("tracer unavailable", String(e))) : Promise.resolve()
+    const tracer = tracerReady
+    nodePromise = c.audioWorklet.addModule("worklet.js").then(() => tracer).then(() => {
         const node = new AudioWorkletNode(c, "custom-processor")
         node.connect(c.destination)
         node.port.onmessage = e => {
@@ -223,6 +229,15 @@ export function sendToWorklet(message: any) {
         // A message for a node that has since been replaced is covered by the replay in createContext.
         if (p === nodePromise) node.port.postMessage(message)
     })
+}
+
+// Resolves once the worklet can instrument cards for tracing (now, and in any context made later).
+export function needTracer() {
+    if (!tracerWanted) {
+        tracerWanted = true
+        tracerReady = ctx.audioWorklet.addModule(instrumenterUrl).catch(e => dlog("tracer unavailable", String(e)))
+    }
+    return tracerReady
 }
 
 export function setWorkletMessageHandler(handler: (e: MessageEvent) => void) {

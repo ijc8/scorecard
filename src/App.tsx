@@ -40,8 +40,8 @@ import BullseyeArrow from "pixelarticons/svg/bullseye-arrow.svg?react"
 import { readQR } from "./qrReader"
 import logoUrl from "./assets/logo.png"
 import exampleCardUrl from "./assets/example-card.png"
-import { TraceMap, instrumentWasm } from "./wasmTracer"
-import { MemoryTrace } from "./memoryTrace"
+import { TraceMap } from "./wasmTracer"
+import { MemoryTrace, findDataSegments } from "./memoryTrace"
 import { initDebug, dlog, DEBUG } from "./debug"
 import Heart from "pixelarticons/svg/heart.svg?react"
 import Repeat from "pixelarticons/svg/repeat.svg?react"
@@ -51,7 +51,7 @@ import Headphone from "pixelarticons/svg/headphone.svg?react"
 import Sliders from "pixelarticons/svg/sliders.svg?react"
 import InfoBox from "pixelarticons/svg/info-box.svg?react"
 import { Pack, addCard, addPack, clearDeck, loadDeck, loadPacks, removeCard, savePacks, toggleSeed } from "./deck"
-import { audioDebugSnapshot, audioHealthy, onStall, sendToWorklet, setEchoCancellation, setInputWanted, setWorkletMessageHandler, startAudio } from "./audio"
+import { audioDebugSnapshot, audioHealthy, needTracer, onStall, sendToWorklet, setEchoCancellation, setInputWanted, setWorkletMessageHandler, startAudio } from "./audio"
 
 
 initDebug(audioDebugSnapshot)
@@ -206,8 +206,9 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
     const draw = () => {
         if (trace && !tracing) trace.logs.length = 0
         if (!tracing || !traceCanvas.current || !binary) return
-        // (The bits shown are those of the card that's running: for a card that generates another, the other.)
-        const shown = played ?? binary
+        // (The bits shown are those of the card that's running: for a card that generates another, the
+        // other; the worklet says which once it's tracing.)
+        const shown = trace?.binary ?? played ?? binary
         const canvas = traceCanvas.current
         const context = canvas.getContext("2d")!
         // Arrange the bits in the top four-fifths of a square, leaving the rest for memory.
@@ -574,13 +575,6 @@ function App() {
     const code = useMemo(() => binary && encodeBlob(binary), [binary])
     const deckCard = deck.find(card => card.code === code)
 
-    const setupTracing = async (originalBinary: Uint8Array) => {
-        // Instrument Wasm for execution tracing.
-        const { binary, map, data } = await instrumentWasm(originalBinary)
-        // TODO: set fixed WAT for tracing (line highlighting) in Create tab
-        trace = { binary, map, logs: [], memory: new MemoryTrace(data) }
-    }
-
     // `keep` adds the card to the deck. `seed` loads the card with that seed locked in, or (if null)
     // unlocked with a fresh seed; by default the seed lock is left as it is.
     const loadBinary = async (binary: Uint8Array, { keep, seed }: { keep?: boolean, seed?: number | null } = {}) => {
@@ -607,14 +601,11 @@ function App() {
 
         // Send to AudioWorklet
         // NOTE: We send the binary here because sending the WebAssembly.Module doesn't work in iOS Safari...
-        if (tracing) {
-            await setupTracing(played)
-            sendToWorklet({ cmd: "loadModule", binary: trace!.binary, trace: true })
-        } else {
-            trace = null
-            // (The worklet has the card generate again for each performance, with that performance's seed.)
-            sendToWorklet({ cmd: "loadModule", binary })
-        }
+        // (The worklet has the card generate again for each performance, with that performance's
+        // seed; when tracing, it instruments the card that results, and says which card that is.)
+        trace = null
+        if (tracing) await needTracer()
+        sendToWorklet({ cmd: "loadModule", binary, trace: tracing })
         setBinary(binary)
         setPlayed(played)
         reset(seed)
@@ -690,14 +681,9 @@ function App() {
     const setTracing = async (tracing: boolean) => {
         _setTracing(tracing)
         if (!binary) return
-        if (tracing) {
-            if (!trace) {
-                await setupTracing(played ?? binary)
-            }
-            sendToWorklet({ cmd: "loadModule", binary: trace!.binary, trace: true })
-        } else {
-            sendToWorklet({ cmd: "loadModule", binary })
-        }
+        if (tracing) await needTracer()
+        else trace = null
+        sendToWorklet({ cmd: "loadModule", binary, trace: tracing })
         if (state === "stopped" || time === 0) {
             reset()
         } else {
@@ -827,7 +813,13 @@ function App() {
             } else if (Array.isArray(e.data)) {
                 handleTraceLogs?.(e.data)
             } else {
-                trace?.memory.update(e.data.reads, e.data.writes)
+                if (e.data.traced) {
+                    // The worklet has instrumented the card it's playing: this is that card, and what its counters count.
+                    const { binary, map } = e.data.traced
+                    trace = { binary, map, logs: [], memory: new MemoryTrace(findDataSegments(binary)) }
+                } else {
+                    trace?.memory.update(e.data.reads, e.data.writes)
+                }
             }
         })
         return () => setWorkletMessageHandler(() => {})
