@@ -315,8 +315,9 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
                 <span style={{ whiteSpace: "nowrap" }}>
                     {listens && <span title="This card listens: it plays what the microphone hears, changed"><AudioDevice style={{ height: "6cqw", verticalAlign: "middle" }} /> </span>}
                     <span data-card-size="">{size}</span> bytes {/* TODO: add link and perhaps download buttons with icons */}
-                    {binary && <button title={kept ? "Forget this performance" : "Keep this performance (its seed is saved with the card)"} style={{ fontSize: 0, lineHeight: 0, border: "none", padding: "0 0 0 6px", verticalAlign: "middle" }} onClick={toggleKept}>
-                        <KeptIcon style={{ height: "6cqw", verticalAlign: "middle" }} />
+                    {/* Beside the size: a look at those bytes at work. (The printed look has it on its tray.) */}
+                    {binary && !printed && <button title="Show the card at work" style={{ fontSize: 0, lineHeight: 0, border: "none", padding: "0 0 0 6px", verticalAlign: "middle" }} onClick={traceClick}>
+                        <TraceIcon style={{ height: "6cqw", verticalAlign: "middle" }} />
                     </button>}
                 </span>
             </h2>
@@ -363,8 +364,9 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
                     &nbsp;
                     <SeedInput {...{ seed, setSeed }} />
                 </div>
-                {!printed && <button style={{ fontSize: 0 }} title="Show the card at work" onClick={traceClick}>
-                    <TraceIcon style={smallIconStyle} />
+                {/* Beside the seed: keep this performance. */}
+                {!printed && <button style={{ fontSize: 0 }} disabled={!binary} title={kept ? "Forget this performance" : "Keep this performance (its seed is saved with the card)"} onClick={toggleKept}>
+                    <KeptIcon style={smallIconStyle} />
                 </button>}
             </div>
             {/* In the printed look, what you can do with the card (rather than play it) sits on a tray below. */}

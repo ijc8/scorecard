@@ -44,12 +44,12 @@ function Face({ card }: { card: DeckCard }) {
         <Logo />
         <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", margin: "0 0 12px", fontSize: "6cqw", lineHeight: 1.2 }}>
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{card.title}</span>
-            <span style={{ whiteSpace: "nowrap" }}>{card.size} bytes <KeptIcon style={{ height: "6cqw", verticalAlign: "middle" }} /></span>
+            <span style={{ whiteSpace: "nowrap" }}>{card.size} bytes <Bullseye style={{ height: "6cqw", verticalAlign: "middle" }} /></span>
         </div>
         <img src={cardFace(card.code)} alt="" style={{ display: "block", width: "100%", aspectRatio: "1", marginBottom: "20px", imageRendering: "pixelated" }} />
         <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "1.6cqw", fontSize: "5cqw" }}>
             <ClockIcon style={small} /><span>0:00</span><Prev style={big} /><Play style={big} /><Forward style={{ ...big, height: "8cqw" }} />
-            <SeedIcon style={small} /><span style={{ width: "4.6em" }}>{card.seeds.length ? formatSeed(card.seeds[0]) : "--------"}</span><Bullseye style={small} />
+            <SeedIcon style={small} /><span style={{ width: "4.6em" }}>{card.seeds.length ? formatSeed(card.seeds[0]) : "--------"}</span><KeptIcon style={small} />
         </div>
     </div>
 }

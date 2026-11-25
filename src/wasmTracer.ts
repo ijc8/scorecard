@@ -89,3 +89,22 @@ export async function instrumentWasm(binary: Uint8Array) {
     const { text, map } = instrumentWat(binary)
     return { binary: await assembleWat(text), map, data: findDataSegments(binary) }
 }
+
+// Gas metering (an experiment): the card's WebAssembly text with a counter added, so that a card
+// that never returns can be stopped. Every pass through a loop takes one from a global, `gas`
+// (exported, for whoever runs the card to top up before each call); when it reaches zero the card
+// traps. Loops are the only place this is needed: endless recursion runs out of stack by itself.
+export const GAS_EXPORT = "gas"
+export function meterWat(binary: Uint8Array) {
+    const { lines } = disassembleWasm(binary)
+    const out: string[] = []
+    const end = lines.lastIndexOf(")")
+    lines.forEach((line, index) => {
+        if (index === end) out.push(`(global $gas (export "${GAS_EXPORT}") (mut i32) (i32.const 0))`)
+        out.push(line)
+        if (/^ *loop\b/.test(line)) {
+            out.push("global.get $gas", "i32.const 1", "i32.sub", "global.set $gas", "global.get $gas", "i32.eqz", "if", "unreachable", "end")
+        }
+    })
+    return out.join("\n")
+}
