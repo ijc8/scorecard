@@ -219,11 +219,9 @@ export const Workbench = forwardRef<WorkbenchHandle, {
         </div>
         {log && <pre className="log">{log}</pre>}
         <div>
-            <div className="modes">
-                {(Object.keys(MODES) as Mode[]).map(m =>
-                    <button key={m} className={m === mode ? "active" : ""} title={MODES[m]} onClick={() => { setMode(m); setLog("") }}>{m}</button>
-                )}
-            </div>
+            <select className="language" value={mode} title={MODES[mode]} aria-label="Language" onChange={e => { setMode(e.target.value as Mode); setLog("") }}>
+                {(Object.keys(MODES) as Mode[]).map(m => <option key={m} value={m} title={MODES[m]}>{m}</option>)}
+            </select>
             <select value="" title="Start from an example, or from the card on the pile" onChange={e => startFrom(e.target.value)}>
                 <option value="" disabled>New...</option>
                 {binary && <option value={THIS_CARD}>from {title}</option>}

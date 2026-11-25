@@ -338,22 +338,8 @@
     font: inherit;
 }
 
-/* Parts of one switch. */
-.modes {
-    display: flex;
-}
-
-.modes > button {
-    padding: 0 5px;
-}
-
-.modes > button + button {
-    border-left: none;
-}
-
-.modes > button.active {
-    background: black;
-    color: white;
+.source select.language {
+    width: auto;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -364,7 +350,7 @@
 }
 
 /* The same, when animations are turned off in Settings. */
-.still :is(.pack, .pack > *, .xray) {
+.still :is(.pack, .pack > *, .xray, .spread *) {
     animation: none !important;
     transition: none;
 }
@@ -628,6 +614,15 @@
     padding: 4px 0 30px;
 }
 
+/* (What isn't a card comes in once the cards are down.) */
+.spread h3, .spread .deck-actions, .mini-x, .mini-seeds {
+    animation: settle 0.2s 0.35s backwards;
+}
+
+@keyframes settle {
+    from { opacity: 0; }
+}
+
 .spread h3 {
     margin: 0 0 16px;
     font-size: 1em;
@@ -771,7 +766,7 @@
 }
 
 /* Gathering the pile up again: the chosen card goes back to where the pile was, and the rest go. */
-.gathering .mini:not(.chosen), .gathering .pack, .gathering .deck-actions, .gathering h3 {
+.gathering .mini-x, .gathering .mini-seeds, .gathering .deck-actions, .gathering h3 {
     opacity: 0;
     transition: opacity 0.18s;
 }

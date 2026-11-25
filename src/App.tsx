@@ -871,14 +871,17 @@ function App() {
     })
 
     useEffect(() => {
-        // A tap on the table (beside the pile) spreads the pile out.
+        // A tap on the table (beside the pile) spreads the pile out. So does a tap on the pile: its
+        // edges, or the music card on top, anywhere that isn't something to press (or the row of controls).
         if (spread) return
         const click = (e: MouseEvent) => {
-            if (e.target instanceof Element && e.target.matches("html, body, #root, #layout, #app, .pile")) openSpread()
+            if (!(e.target instanceof Element)) return
+            if (e.target.matches("html, body, #root, #layout, #app, .pile, .pile-edges")) openSpread()
+            else if (tab === Tab.Listen && e.target.closest(".pile-top") && !e.target.closest("button, input, textarea, select, label, a, video, .source, .play-controls, canvas[title]")) openSpread()
         }
         document.addEventListener("click", click)
         return () => document.removeEventListener("click", click)
-    }, [spread])
+    }, [spread, tab])
 
     const face: Face = tab === Tab.Create ? "write" : turned ? "back" : tracing ? "bits" : "qr"
     const toggleTracing = () => setTracing(!tracing)

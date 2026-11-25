@@ -86,12 +86,22 @@ export function Spread({ deck, packs, tabbed, current, pile, pick, pickTab, clos
     const table = useRef<HTMLDivElement>(null)
     const gathering = useRef(false)
 
-    // Deal the cards out from the pile.
+    // Deal the cards out from the pile: the card that was on top first, then the rest in turn, each
+    // leaving from under the ones still to go. (Cards far down a long table come all together.)
     useLayoutEffect(() => {
         if (!pile || motionOff()) return
-        table.current!.querySelectorAll<HTMLElement>(".mini, .pack").forEach((card, i) => {
+        const cards = [...table.current!.querySelectorAll<HTMLElement>(".mini, .pack")]
+        const first = cards.findIndex(card => card.classList.contains("current"))
+        if (first > 0) cards.unshift(...cards.splice(first, 1))
+        cards.forEach((card, i) => {
             if (!card.animate) return
-            card.animate([{ transform: toPile(card, pile), offset: 0 }], { duration: 330, delay: Math.min(i, 16) * 24, easing: "cubic-bezier(.2, .8, .3, 1.08)", fill: "backwards" })
+            const turn = Math.min(i, 14)
+            card.style.zIndex = String(40 - turn)
+            card.animate([
+                { transform: toPile(card, pile), offset: 0, easing: "cubic-bezier(.3, 0, .2, 1)" },
+                // (It lands a little low and crooked, and settles.)
+                { transform: `translateY(5px) rotate(${(parseFloat(card.style.getPropertyValue("--tilt")) || -1) * 2.5}deg) scale(1.04)`, offset: 0.8, easing: "cubic-bezier(.3, 1.6, .5, 1)" },
+            ], { duration: 380, delay: turn * 32, fill: "backwards" }).onfinish = () => { card.style.zIndex = "" }
         })
     }, [])
 
@@ -102,7 +112,16 @@ export function Spread({ deck, packs, tabbed, current, pile, pick, pickTab, clos
         gathering.current = true
         table.current!.classList.add("gathering")
         chosen.classList.add("chosen")
-        chosen.animate([{ transform: toPile(chosen, pile), offset: 1 }], { duration: 260, easing: "cubic-bezier(.4, 0, .5, 1)", fill: "forwards" }).onfinish = then
+        // The other cards are swept back to where the pile was, the furthest first, and the chosen one is laid on top.
+        const others = [...table.current!.querySelectorAll<HTMLElement>(".mini, .pack")].filter(card => card !== chosen).reverse()
+        const step = Math.min(18, 150 / Math.max(others.length, 1))
+        others.forEach((card, i) => {
+            card.animate([{ transform: toPile(card, pile), offset: 1 }], { duration: 230, delay: i * step, easing: "cubic-bezier(.5, 0, .7, .6)", fill: "forwards" })
+        })
+        chosen.animate([
+            { transform: `translateY(-10px) rotate(0deg) scale(1.12)`, offset: 0.3, easing: "cubic-bezier(.4, 0, .3, 1)" },
+            { transform: toPile(chosen, pile), offset: 1 },
+        ], { duration: 340, delay: 90, easing: "cubic-bezier(.2, .8, .4, 1)", fill: "forwards" }).onfinish = then
     }
     const closeRef = useRef(close)
     closeRef.current = close

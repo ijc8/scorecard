@@ -124,7 +124,7 @@ that fallback in `src/generate.ts` and in `public/worklet.js`.
   cards at the back of the pile whose index tabs stick out below, and the music cards share the
   headphones tab (back to the music, and from there, spread the pile). React only draws the top
   card; what moves, and what shows under a dragged card, are DOM copies of it (`snapshot`, `dress`:
-  keep those in step with the card's markup). Tapping the table spreads the pile out
+  keep those in step with the card's markup). Tapping the table, or the pile itself (its edges, or the music card on top away from its controls), spreads the pile out
   (`src/Spread.tsx`): small copies of every card, the tabbed cards and sealed packs. Turning
   tracing on first plays the QR code being read into the card's bits, and for a card that
   generates another, those giving way to the bits of the card it wrote (`src/decodeAnimation.ts`,
