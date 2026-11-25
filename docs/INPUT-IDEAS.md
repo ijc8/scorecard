@@ -82,3 +82,12 @@ room supplies the notes.
 
 If one were to be built first, **12 (the handshake)** says the most about what score cards are for,
 and **1 (sitting in a card)** is the smallest and the most plainly a score.
+
+## Built since (11-25), as things to try
+
+- **1** is `examples/sitting.c` (385 bytes). Each turn is played back as loud as the first, so the
+  level neither dies away nor runs off; a silent room stays silent.
+- **12** is `examples/fireflies.c` (849 bytes). Each blinks a note about every 1.2 s and hurries its
+  next blink when it hears another. Tried only in simulation (phones that hear each other 120 ms
+  late): three or five fall within 30 to 60 ms of each other in under half a minute, and keep their
+  own time if they can't hear each other. Not yet tried with real phones in a real room.
