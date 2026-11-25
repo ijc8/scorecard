@@ -1,15 +1,13 @@
 import { useState } from "react"
-import { iOS } from "./audio"
 import Volume from "pixelarticons/svg/volume-2.svg?react"
 
 // Settings, kept in localStorage.
-export const defaultSettings = { collect: true, motion: true, volume: 1, awake: false, echo: true, meter: false, deckStyle: "drawer" as "drawer" | "rolodex", look: "pile" as "pile" | "printed" | "classic" }
+export const defaultSettings = { collect: true, motion: true, volume: 1, awake: false, echo: true, meter: true, deckStyle: "drawer" as "drawer" | "rolodex", look: "pile" as "pile" | "printed" | "classic" }
 export type Settings = typeof defaultSettings
 
 export function loadSettings(): Settings {
     try {
-        // (The guard against stuck cards is on unless turned off on iOS, where one stuck card leaves the page without sound.)
-        const settings = { ...defaultSettings, meter: iOS(), ...JSON.parse(localStorage.getItem("scorecard-settings") ?? "{}") }
+        const settings = { ...defaultSettings, ...JSON.parse(localStorage.getItem("scorecard-settings") ?? "{}") }
         // (An earlier mock.)
         if (settings.look === "stack") settings.look = "pile"
         return settings
@@ -60,7 +58,7 @@ export function SettingsTab({ settings, setSettings, deckSize, hasStarter, fresh
         {toggle("motion", "Animations", "Cards that deal, fly and flip.")}
         {"wakeLock" in navigator && toggle("awake", "Stay awake", "Keep the screen on while a card is playing.")}
         {toggle("echo", "Echo cancellation", "Stops cards that listen from hearing themselves and howling. Sounds cleaner off, with headphones.")}
-        {toggle("meter", "Guard against stuck cards", "Counts each card's loops as it plays, and stops a card that never finishes. Slows some cards a little. (On to begin with on iPhones and iPads, where a stuck card would leave the page without sound.)")}
+        {toggle("meter", "Guard against stuck cards", "Counts each card's loops as it plays, and stops a card that never finishes (which, on iPhones and iPads, would leave the page without sound). Slows some cards a little.")}
         <button onClick={async () => { setMeasured("Measuring..."); setMeasured(await measure()) }}>Measure this card's speed</button>
         {measured && <small style={{ marginTop: "-8px" }}>{measured}</small>}
         <button disabled={hasStarter} onClick={freshStarter}>Get a fresh starter pack</button>

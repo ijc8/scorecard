@@ -74,7 +74,7 @@ A scorecard `.wasm` exports:
   pack a card smaller: a ~450-byte unpacker (context-mixing arithmetic decoder, in WebAssembly text
   in that script) plus the packed card. `examples/seed-beat.c` is a card that writes a different
   program for each seed (a bytebeat). Not settled: whether this stays, and generating during play.
-- **Gas metering** (Settings > "Guard against stuck cards"; on by default on iOS only, where one
+- **Gas metering** (Settings > "Guard against stuck cards", on by default; without it, on iOS, one
   card stuck in `p` leaves the page without audio): the worklet rewrites every card it runs
   (`meterWat` in `src/wasmTracer.ts`, through the same second worklet module as tracing). Each
   function counts its passes through loops in a local, and every 64th takes 64 from an exported
