@@ -126,7 +126,8 @@ that fallback in `src/generate.ts` and in `public/worklet.js`.
   card; what moves, and what shows under a dragged card, are DOM copies of it (`snapshot`, `dress`:
   keep those in step with the card's markup). Tapping the table spreads the pile out
   (`src/Spread.tsx`): small copies of every card, the tabbed cards and sealed packs. Turning
-  tracing on first plays the QR code being read into the card's bits (`src/decodeAnimation.ts`,
+  tracing on first plays the QR code being read into the card's bits, and for a card that
+  generates another, those giving way to the bits of the card it wrote (`src/decodeAnimation.ts`,
   from the module-by-module account in `src/qrDecode.ts`; `npx tsx scripts/qr-decode-check.ts
   <cards>.wasm` checks that account by reading the link back off the modules). This is the only
   look: the drawer, the rolodex and the "printed" and "classic" looks were removed on 11-25.

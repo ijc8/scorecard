@@ -1,4 +1,4 @@
-// Shows a card's QR code being read (in the pile look, when tracing is turned on), ending at the
+// Shows a card's QR code being read (when tracing is turned on), ending at the
 // card's bits as the trace view draws them. The steps are the real ones, worked out in qrDecode.ts:
 //   1. the function patterns (finders, timing, alignment, format) are set aside;
 //   2. the mask comes off, row by row;
@@ -7,11 +7,16 @@
 // The last step is the one liberty taken: a module doesn't become one particular bit (base 43 and
 // QR's alphanumeric packing lie between them), so each flies to roughly where its share of the
 // program ends up, and what settles there is the true bit.
+//
+// A card that generates the card that plays (a packed card, say: see generate.ts) has a fifth step:
+//   5. its bits give way, from the top down, to the bits of the card it wrote.
+// (Another liberty: that's the order an unpacker works in, more or less, but the picture isn't a trace of it.)
 import { Decoding, Kind } from "./qrDecode"
 
 const BLACK = 0xff000000, WHITE = 0xffffffff, LAVENDER = 0xffffcccc  // (as ABGR)
 const PATTERNS = 350, UNMASK = 500, CLEAR = 350, FLIGHT = 450, STREAM = 900
 export const DECODE_MS = PATTERNS + UNMASK + CLEAR + STREAM + FLIGHT
+const GENERATE = 700
 
 const grey = (level: number) => {
     const v = Math.round(255 * Math.min(Math.max(level, 0), 1))
@@ -22,7 +27,9 @@ const grey = (level: number) => {
 const REWIND = 2.2
 
 // Plays on `canvas` (which should cover the QR code); returns a function that stops it.
-export function playDecode(canvas: HTMLCanvasElement, steps: Decoding, binary: Uint8Array, done: () => void, backwards = false) {
+// `generated` gives the card that `binary` wrote, if it did (asked when that step begins, since
+// with a seed in play it's only known once the worklet says).
+export function playDecode(canvas: HTMLCanvasElement, steps: Decoding, binary: Uint8Array, done: () => void, backwards = false, generated?: () => Uint8Array | null) {
     const { size, dark, mask, kind, progress } = steps
     // The trace view's grid of bits (see `draw` in App.tsx): the top four fifths of a square.
     const bits = binary.length * 8
@@ -42,9 +49,29 @@ export function playDecode(canvas: HTMLCanvasElement, steps: Decoding, binary: U
 
     let frame = 0
     const start = performance.now()
+    const length = DECODE_MS + (generated ? GENERATE : 0)
+    let written: Uint8Array | null | undefined
     const draw = (now: number) => {
-        const t = backwards ? DECODE_MS - (now - start) * REWIND : now - start
+        const t = backwards ? length - (now - start) * REWIND : now - start
         pixels.fill(WHITE)
+        if (t > DECODE_MS && written === undefined) written = generated?.()
+        if (t > DECODE_MS && written) {
+            // The card it wrote, as far down as that has got; below, what's left of this one.
+            const bits2 = written.length * 8, grid2 = Math.ceil(Math.sqrt(bits2 / 0.8)), landed2 = width / grid2
+            const done2 = Math.min(Math.floor((t - DECODE_MS) / GENERATE * bits2), bits2)
+            for (let i = 0; i < done2; i++) {
+                if (written[i >> 3] >> (i % 8) & 1) block(i % grid2 * landed2, Math.floor(i / grid2) * landed2, landed2, LAVENDER)
+            }
+            const front = Math.ceil(done2 / grid2) * landed2
+            for (let i = Math.floor(front / landed) * grid; i < bits; i++) {
+                const y = Math.floor(i / grid) * landed
+                if (y >= front && bitAt(i)) block(i % grid * landed, y, landed, LAVENDER)
+            }
+            context.putImageData(image, 0, 0)
+            if (backwards || t < length) frame = requestAnimationFrame(draw)
+            else done()
+            return
+        }
         const flying = t - PATTERNS - UNMASK - CLEAR
         if (flying > 0) {
             // The program's bits that have settled so far.
@@ -88,7 +115,7 @@ export function playDecode(canvas: HTMLCanvasElement, steps: Decoding, binary: U
             block(x, y, cell + (landed - cell) * ease, grey(ease * ease * 0.75))
         }
         context.putImageData(image, 0, 0)
-        if (backwards ? t > 0 : t < DECODE_MS) frame = requestAnimationFrame(draw)
+        if (backwards ? t > 0 : t < length) frame = requestAnimationFrame(draw)
         else done()
     }
     // (Something to show at once, before the first frame.)

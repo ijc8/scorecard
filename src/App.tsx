@@ -142,7 +142,9 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
         let timer = 0
         // (Once it's done, it stays a moment while the bits dissolve in underneath. Turning tracing
         // off plays it backwards: the bits are written out as the QR code again.)
-        const stop = playDecode(decodeCanvas.current!, steps, binary, () => { timer = window.setTimeout(() => setDecoding(false), turnedOn ? 450 : 0) }, !turnedOn)
+        // (A card that wrote the one that plays goes on to show that: see `played`, and `trace` once the worklet has said which.)
+        const wrote = !!played && (played.length !== binary.length || played.some((byte, i) => byte !== binary[i]))
+        const stop = playDecode(decodeCanvas.current!, steps, binary, () => { timer = window.setTimeout(() => setDecoding(false), turnedOn ? 450 : 0) }, !turnedOn, wrote ? () => trace?.binary ?? played : undefined)
         return () => {
             stop()
             clearTimeout(timer)
@@ -853,7 +855,8 @@ function App() {
     // Is the loaded card turned over, to its back?
     const [turned, setTurned] = useState(false)
     const pickTab = (index: number) => {
-        if (index === Tab.Listen && tab === Tab.Listen) return openSpread()
+        // (With no card loaded there is no music card to go back to: straight to the spread.)
+        if (index === Tab.Listen && (tab === Tab.Listen || !binary)) return openSpread()
         const change = () => flushSync(() => setTab(index === tab ? Tab.Listen : index))
         if (index === tab || index === Tab.Listen) throwTop("down", change)
         else raise(change)
