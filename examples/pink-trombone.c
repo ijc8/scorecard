@@ -5,7 +5,7 @@
 // constriction shaping, the LF-model glottis with aspiration noise, turbulence noise at
 // constrictions, and the click as a closure opens. Changed: the UI is replaced by a singer (below);
 // the tract is reshaped every 32 samples rather than interpolated across 512-sample blocks;
-// simplex-noise wobble is a low-passed random walk; exp/sin/log are small approximations; voicing
+// simplex-noise wobble is twice low-passed noise; exp/sin/log are small approximations; voicing
 // weakens while the tract is closed; and the output is averaged over two samples and soft-clipped.
 //
 // Pink Trombone: Copyright (c) 2017 Neil Thapen. MIT licence:
@@ -154,7 +154,7 @@ struct { signed char deg, beats, vowel, cons; } phrase[8];
 char scale[8];
 int len, k, root, resting, cons;
 float timer, cons_timer, beat, base_tense, f_target, f_smooth, int_target, tense_target;
-float wob, tongue_i, tongue_d, lips, v_i, v_d, v_l, vib_phase, vib, vib_amt;
+float wob, wob1, tongue_i, tongue_d, lips, v_i, v_d, v_l, vib_phase, vib, vib_amt;
 
 void new_phrase(void) {
     if (!len || rnd(2)) {
@@ -223,8 +223,10 @@ void control(void) {
     vib += (vib_amt - vib) * 0.002f;
     vib_phase += 5.5f * bt;
     vib_phase -= floorf(vib_phase);
-    // A slow random wobble in pitch and tension (Pink Trombone uses simplex noise).
-    wob += (frand() * 2 - 1 - wob) * 0.02f;
+    // A slow random wobble in pitch and tension (Pink Trombone uses simplex noise). Low-passed
+    // twice, at about 2 Hz: once, it still changes enough from one period to the next to sound hoarse.
+    wob1 += (frand() * 2 - 1 - wob1) * 0.01f;
+    wob += (wob1 - wob) * 0.01f;
     // While resting, the voice is just breath.
     tense = resting == 2 ? 0 : tense_target + wob;
 
@@ -320,7 +322,7 @@ float process() {
     ph += freq * dt;
     if (ph >= 1) {
         ph -= 1;
-        freq = f_smooth * (1 + vib * sin1(vib_phase) + 0.15f * wob);
+        freq = f_smooth * (1 + vib * sin1(vib_phase) + 0.3f * wob);
         setup_waveform();
     }
     float g = ph > Te ? (shift - EXP(-eps * (ph - Te))) / delta : E0 * EXP(alpha * ph) * sin1(ph * wscale);
