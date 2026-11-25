@@ -2,6 +2,7 @@
 // title and QR code, play and pause, skip ahead, and the next or previous card in the deck.
 import { useEffect, useRef } from "react"
 import { iOS } from "./audio"
+import { dlog } from "./debug"
 
 export interface MediaControls {
     play: () => void
@@ -31,8 +32,14 @@ function silence(seconds: number) {
 export function holdMediaSession(playing: boolean) {
     if (!("mediaSession" in navigator) || iOS()) return
     if (playing) {
-        keepAlive ??= Object.assign(document.createElement("audio"), { src: silence(10), loop: true })
-        keepAlive.play().catch(() => {})
+        if (!keepAlive) {
+            const audio = keepAlive = Object.assign(document.createElement("audio"), { src: silence(10), loop: true })
+            // (These don't show on a Pixel 9 as of 11-24, and it isn't known why: say what the element does, for ?debug.)
+            for (const event of ["playing", "pause", "error", "stalled", "suspend"]) {
+                audio.addEventListener(event, () => dlog("media element", event, audio.error?.message ?? "", `t=${audio.currentTime.toFixed(1)}`))
+            }
+        }
+        keepAlive.play().then(() => dlog("media element play() ok"), e => dlog("media element play() refused", e?.name))
     } else {
         keepAlive?.pause()
     }
