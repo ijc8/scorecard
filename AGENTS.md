@@ -140,13 +140,14 @@ that fallback in `src/generate.ts` and in `public/worklet.js`.
   from the module-by-module account in `src/qrDecode.ts`; `npx tsx scripts/qr-decode-check.ts
   <cards>.wasm` checks that account by reading the link back off the modules). This is the only
   look: the drawer, the rolodex and the "printed" and "classic" looks were removed on 11-25.
-- `src/Score.tsx`: the card's score, shown in place of its QR code by the button beside the size.
-  It's a spectrogram of the performance to come (this card, this seed): 64 seconds to a page, half
-  a second a column, 128 bands of pitch from 40 Hz to 14 kHz, dithered to black and white, with a
-  line where the music has got to; tapping goes to that moment (`seekTo`, as the clock does).
-  `src/score.worker.ts` runs the card ahead in silence (setting it up as the player does, generated
-  cards included) and sends the columns back as they're made; it's abandoned if nothing comes for
-  5 s, the guard against a stuck card. A card that listens is scored as if the room were silent.
+- `src/Score.tsx`: the card's score, one of the card's four views. It's a spectrogram of the
+  performance (this card, this seed) going by: 128 columns of about a tenth of a second (twelve
+  seconds across), 128 bands of pitch from 40 Hz to 14 kHz, dithered to black and white. A line a
+  third of the way across marks now: to its left what has been heard, to its right what's coming.
+  Tapping goes to that moment (`seekTo`, as the clock does). `src/score.worker.ts` runs the card
+  ahead in silence (setting it up as the player does, generated cards included) and is kept about
+  five seconds past the right-hand edge; it's abandoned if nothing comes for 5 s when there's work
+  to do, the guard against a stuck card. A card that listens is scored as if the room were silent.
 - `src/base43Encoder.ts` (mirrored by `base43.py`): base43 over the QR alphanumeric set minus `%`
   and space, so the binary shares the QR's dense alphanumeric mode with the URL and stays valid in
   a query string.
