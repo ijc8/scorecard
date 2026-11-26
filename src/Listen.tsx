@@ -2,7 +2,7 @@ import { RefObject, useEffect, useRef, useState } from "react"
 import Play from "pixelarticons/svg/play.svg?react"
 import Pause from "pixelarticons/svg/pause.svg?react"
 import Prev from "pixelarticons/svg/prev.svg?react"
-import Clock from "pixelarticons/svg/clock.svg?react"
+import ClockIcon from "pixelarticons/svg/clock.svg?react"
 import Dice from "pixelarticons/svg/dice.svg?react"
 import CloseBox from "pixelarticons/svg/close-box.svg?react"
 import Downasaur from "pixelarticons/svg/downasaur.svg?react"
@@ -18,7 +18,8 @@ import BullseyeArrow from "pixelarticons/svg/bullseye-arrow.svg?react"
 import { formatSeed, formatTime } from "./card"
 import { tracer } from "./trace"
 import { dlog } from "./debug"
-import { audioHealthy } from "./audio"
+import { audioHealthy, sendToWorklet } from "./audio"
+import { Forward } from "./icons"
 
 function SeedInput({ seed, setSeed }: any) {
     const [contents, setContents] = useState("")
@@ -53,6 +54,71 @@ function SeedInput({ seed, setSeed }: any) {
         }}
         onBlur={submit}
     />
+}
+
+// Go to a time in the performance (in seconds): ahead by skipping, back by starting again with the
+// same seed and skipping to there. Either way the card has to work its way through every sample in
+// between (unheard), at up to 64 times real time.
+function seekTo(target: number, time: number, seed: number) {
+    if (target >= time) sendToWorklet({ cmd: "skip", samples: Math.round((target - time) * 44100 / 128) * 128 })
+    else sendToWorklet({ cmd: "reset", seed, skip: Math.round(target * 44100 / 128) * 128 })
+}
+
+// The clock. Tap it to type a time to go to.
+function Clock({ time, seed, style }: { time: number, seed: number, style: React.CSSProperties }) {
+    const [editing, setEditing] = useState<string | null>(null)
+    const go = (text: string) => {
+        setEditing(null)
+        const match = text.trim().match(/^(?:(\d+):)?(\d+(?:\.\d*)?)$/)
+        if (!match) return
+        seekTo(Number(match[1] ?? 0) * 60 + Number(match[2]), time, seed)
+    }
+    return <div style={{ userSelect: "none", display: "flex", alignItems: "center", width: "3.8em", flexShrink: 0, whiteSpace: "nowrap", justifyContent: "right" }}>
+        <ClockIcon style={style} />
+        &nbsp;
+        {editing === null
+            ? <span title="Go to a time" style={{ verticalAlign: "middle", display: "inline-block", cursor: "pointer" }} onClick={() => setEditing(formatTime(time))}>{
+                // sysfont has proportional digits ("1" is narrow, "4" wide); give each digit a
+                // fixed cell so the colon and clock icon don't jitter while counting.
+                [...formatTime(time)].map((c, i) => c === ":" ? c :
+                    <span key={i} style={{ display: "inline-block", width: "0.63em", textAlign: "center" }}>{c}</span>)
+            }</span>
+            : <input autoFocus value={editing} aria-label="Go to time (minutes:seconds)" style={{ width: "2.6em", font: "inherit", padding: 0, border: "none", borderBottom: "1px solid black", background: "transparent" }}
+                onChange={e => setEditing(e.target.value)} onFocus={e => e.target.select()}
+                onKeyDown={e => { if (e.key === "Enter") go(editing); else if (e.key === "Escape") setEditing(null) }}
+                onBlur={() => setEditing(null)} />}
+    </div>
+}
+
+const SKIP_SECONDS = 10, FAST_FORWARD = 4, HOLD_MS = 350
+
+// Tap to skip ahead; hold to fast-forward (you hear snatches of the card as it goes by).
+function SkipButton({ style }: { style: React.CSSProperties }) {
+    const hold = useRef<{ timer?: number, fast?: boolean } | null>(null)
+    const down = (e: React.PointerEvent) => {
+        e.currentTarget.setPointerCapture(e.pointerId)
+        const h: { timer?: number, fast?: boolean } = {}
+        h.timer = window.setTimeout(() => {
+            h.fast = true
+            sendToWorklet({ cmd: "speed", value: FAST_FORWARD })
+        }, HOLD_MS)
+        hold.current = h
+    }
+    const up = (cancelled: boolean) => {
+        const h = hold.current
+        if (!h) return
+        hold.current = null
+        clearTimeout(h.timer)
+        if (h.fast) {
+            sendToWorklet({ cmd: "speed", value: 1 })
+        } else if (!cancelled) {
+            sendToWorklet({ cmd: "skip", samples: SKIP_SECONDS * 44100 })
+        }
+    }
+    return <button id="skip" title={`Tap: skip ${SKIP_SECONDS} seconds. Hold: fast-forward.`} style={{ touchAction: "none", userSelect: "none", WebkitTouchCallout: "none", paddingLeft: 0 } as React.CSSProperties}
+        onPointerDown={down} onPointerUp={() => up(false)} onPointerCancel={() => up(true)} onContextMenu={e => e.preventDefault()}>
+        <Forward style={style} />
+    </button>
 }
 
 // TODO: Specify types
@@ -191,18 +257,10 @@ export function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeed
         </div>
         <h2 style={{ userSelect: "none", margin: "20px", fontSize: "6cqw" }}>{title} | {size} bytes {/* TODO: add link and perhaps download buttons with icons */}</h2>
         <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", fontSize: "5cqw" }}>
-            <div style={{ userSelect: "none", display: "flex", alignItems: "center", width: "4em", justifyContent: "right" }}>
-                <Clock style={smallIconStyle} />
-                &nbsp;
-                <span style={{ verticalAlign: "middle", display: "inline-block" }}>{
-                    // sysfont has proportional digits ("1" is narrow, "4" wide); give each digit a
-                    // fixed cell so the colon and clock icon don't jitter while counting.
-                    [...formatTime(time)].map((c, i) => c === ":" ? c :
-                        <span key={i} style={{ display: "inline-block", width: "0.63em", textAlign: "center" }}>{c}</span>)
-                }</span>
-            </div>
+            <Clock {...{ time, seed, style: smallIconStyle }} />
             <button onTouchStart={touchStartReset} onMouseDown={mouseReset} onMouseUp={() => { events.current.reset = false }} style={{ touchAction: "manipulation" }}><Prev style={bigIconStyle} /></button>
             <button id="start" onTouchStart={touchStartToggle} onMouseDown={mouseToggle} onMouseUp={() => { events.current.toggle = false }}>{state === "playing" ? <Pause style={bigIconStyle} /> : <Play style={bigIconStyle} />}</button>
+            <SkipButton style={{ ...bigIconStyle, height: "8cqw" }} />
             <div style={{ display: "flex", alignItems: "center", userSelect: "none" }}>
                 <button style={{ fontSize: 0 }}><DiceIcon style={smallIconStyle} onClick={() => setSeedLock(!seedLock)} /></button>
                 &nbsp;

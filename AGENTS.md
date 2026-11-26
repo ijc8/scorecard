@@ -87,6 +87,12 @@ that fallback in `extractTitle` (`src/card.ts`) and in `public/worklet.js`.
   sample-for-sample the same.
 - `vite.config.ts` sets `base: "./"`, which the `ijc8.me/s` subpath deployment depends on.
 
+Skipping and seeking happen in the worklet, and a card can only get anywhere by being run: `skip`
+makes samples unheard (at up to 64 times real time, a bounded amount per render quantum),
+fast-forward (`speed`) alternates a 60 ms snatch of the card with a silent jump, and going back is a
+`reset` with the same seed and a `skip` to the time wanted. The forward button is tap to skip 10 s,
+hold to fast-forward; tapping the clock takes a time to go to.
+
 Transport buttons handle `touchstart` and `mousedown` separately (with de-duplication) so play and
 reset respond instantly: cards are meant to be started in sync or played rhythmically. Don't
 "simplify" this without testing on iOS.
