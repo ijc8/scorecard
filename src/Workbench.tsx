@@ -8,48 +8,90 @@ import { highlight } from "./highlight"
 import { assembleWat } from "./assemble"
 import { disassembleWasm } from "./wasmTracer"
 import { maxCardSize } from "./card"
+import { DataSegment, MemoryTrace, findDataSegments } from "./memoryTrace"
 
-const LINE_HEIGHT = 12 * 1.3, PADDING = 6 // of the text; see `.editor` in App.css
+const LINE_HEIGHT = 12 * 1.3, PADDING = 6, FONT = "12px ui-monospace, Menlo, Consolas, monospace" // of the text; see `.editor` in App.css
 
-// A strip of colour behind each line of text, for how much it's running (tracing).
-function drawHeat(canvas: HTMLCanvasElement | null, lines: Float32Array | null, scroll: number) {
+// Where the bytes of a card's data are written out in its text: for each data segment (that's
+// placed in memory to begin with), its line, and the column at which each of its bytes starts.
+interface DataText { segment: DataSegment, line: number, columns: number[] }
+function findDataText(binary: Uint8Array, lines: string[]) {
+    const segments = findDataSegments(binary), found: DataText[] = []
+    lines.forEach((text, line) => {
+        const start = /^\s*\(data \(i32\.const -?\d+\) "/.exec(text)?.[0].length
+        const segment = segments[found.length]
+        if (start === undefined || !segment) return
+        // (In the text, a byte is a character, or a backslash and two hex digits, or a backslash and another character.)
+        const columns = [start]
+        for (let at = start; columns.length <= segment.length && at < text.length;) {
+            at += text[at] !== "\\" ? 1 : /[0-9a-fA-F]/.test(text[at + 1]) ? 3 : 2
+            columns.push(at)
+        }
+        found.push({ segment, line, columns })
+    })
+    return found
+}
+
+// What tracing shows behind the text: a strip of green behind each line, for how much it's running;
+// and behind each byte of data, blue for being read and red for being written.
+function drawHeat(canvas: HTMLCanvasElement | null, lines: Float32Array | null, memory: MemoryTrace | null, data: DataText[], scroll: { left: number, top: number }) {
     if (!canvas) return
     canvas.width = canvas.clientWidth
     canvas.height = canvas.clientHeight
     if (!lines) return
     const context = canvas.getContext("2d")!
-    const first = Math.max(0, Math.floor((scroll - PADDING) / LINE_HEIGHT))
-    for (let line = first; line < lines.length && (line - first) * LINE_HEIGHT < canvas.height + LINE_HEIGHT; line++) {
+    const first = Math.max(0, Math.floor((scroll.top - PADDING) / LINE_HEIGHT))
+    const seen = (line: number) => line >= first && (line - first) * LINE_HEIGHT < canvas.height + LINE_HEIGHT
+    for (let line = first; line < lines.length && seen(line); line++) {
         if (!lines[line]) continue
         context.fillStyle = `rgb(0 255 0 / ${lines[line] * 45}%)`
-        context.fillRect(0, PADDING + line * LINE_HEIGHT - scroll, canvas.width, LINE_HEIGHT)
+        context.fillRect(0, PADDING + line * LINE_HEIGHT - scroll.top, canvas.width, LINE_HEIGHT)
+    }
+    if (!memory) return
+    context.font = FONT
+    const width = context.measureText("0").width
+    for (const { segment, line, columns } of data) {
+        if (!seen(line)) continue
+        for (const [heat, colour] of [[memory.reads, "0 110 255"], [memory.writes, "255 50 0"]] as const) {
+            for (let byte = 0; byte + 1 < columns.length; byte++) {
+                const value = heat.get(segment.address + byte)
+                if (!value) continue
+                context.fillStyle = `rgb(${colour} / ${value * 70}%)`
+                context.fillRect(PADDING + columns[byte] * width - scroll.left, PADDING + line * LINE_HEIGHT - scroll.top, (columns[byte + 1] - columns[byte]) * width, LINE_HEIGHT)
+            }
+        }
     }
 }
 
 export interface BackHandle {
-    // Colour the lines of the card's WebAssembly text by how much each is running (null to stop).
-    showHeat: (heat: Float32Array | null) => void
+    // Colour the lines of the card's WebAssembly text by how much each is running, and the bytes of
+    // its data by how much they're read and written (null to stop).
+    showHeat: (heat: Float32Array | null, memory?: MemoryTrace) => void
 }
 
 // The back of a card: what the card itself holds, as WebAssembly text. It's only for reading (with
 // tracing on, the lines that are running light up); writing happens on the workbench, below.
 // `children` go in the strip under the text.
 export const CardBack = forwardRef<BackHandle, { binary: Uint8Array | null, active: boolean, children?: React.ReactNode }>(function CardBack({ binary, active, children }, ref) {
-    const [shown, setShown] = useState<{ binary: Uint8Array, text: string } | null>(null)
+    const [shown, setShown] = useState<{ binary: Uint8Array, text: string, data: DataText[] } | null>(null)
     useEffect(() => {
         // (This is the same disassembly that tracing works from, so its line numbers match.)
-        if (active && binary && binary !== shown?.binary) setShown({ binary, text: disassembleWasm(binary).lines.join("\n") })
+        if (active && binary && binary !== shown?.binary) {
+            const { lines } = disassembleWasm(binary)
+            setShown({ binary, text: lines.join("\n"), data: findDataText(binary, lines) })
+        }
     }, [binary, active])
     const text = shown?.binary === binary ? shown!.text : ""
     const highlighted = useMemo(() => highlight(text, "Wasm"), [text])
     const heatCanvas = useRef<HTMLCanvasElement>(null)
-    const heat = useRef<Float32Array | null>(null)
+    const heat = useRef<Float32Array | null>(null), memory = useRef<MemoryTrace | null>(null)
     const pre = useRef<HTMLPreElement>(null)
-    const draw = () => drawHeat(heatCanvas.current, heat.current, pre.current?.scrollTop ?? 0)
+    const draw = () => drawHeat(heatCanvas.current, heat.current, memory.current, shown?.binary === binary ? shown!.data : [], { left: pre.current?.scrollLeft ?? 0, top: pre.current?.scrollTop ?? 0 })
     useEffect(draw, [text, active])
     useImperativeHandle(ref, () => ({
-        showHeat: lines => {
+        showHeat: (lines, touched) => {
             heat.current = lines
+            memory.current = touched ?? null
             draw()
         },
     }))

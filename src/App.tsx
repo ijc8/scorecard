@@ -271,7 +271,7 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
             const lines = new Float32Array(trace.map[Object.keys(trace.map).length - 1].end.line + 1)
             const max = Math.max(...Object.values(trace.logs))
             trace.logs.forEach((count, id) => lines.fill(count / max, trace!.map[id].start.line, trace!.map[id].end.line))
-            back.current?.showHeat(state === "playing" ? lines : null)
+            back.current?.showHeat(state === "playing" ? lines : null, trace.memory)
         }
         draw()
     }
