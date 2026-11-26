@@ -112,8 +112,8 @@ that fallback in `src/generate.ts` and in `public/worklet.js`.
   a context that was interrupted or whose clock is frozen is replaced, not resumed; a watchdog
   pauses the player if the clock stalls. Don't call `resume()` while the state is `"interrupted"`.
 - Playback extras, in the worklet: `{cmd: "skip", samples}` makes samples silently, up to 64x
-  real time per render quantum (even while paused); `{cmd: "speed", value}` makes `value` samples
-  per output sample and averages them (fast-forward, heard sped up); `{cmd: "reset", seed, skip}`
+  real time per render quantum (even while paused); `{cmd: "speed", value}` is fast-forward, as a CD player
+  searches: 60 ms of the card at its own pitch, then a silent jump over `value - 1` times as much; `{cmd: "reset", seed, skip}`
   starts again and skips. The skip button (tap: 10 s, hold: 4x) and the clock (tap it to go to a
   time; going back restarts with the same seed) use these.
 - `src/mediaSession.ts`: lock-screen controls. Non-iOS browsers only show them while a media

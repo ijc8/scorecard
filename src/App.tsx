@@ -21,7 +21,6 @@ import { encodeBlob, decodeBlob } from "./base43Encoder"
 import Play from "pixelarticons/svg/play.svg?react"
 import Pause from "pixelarticons/svg/pause.svg?react"
 import Prev from "pixelarticons/svg/prev.svg?react"
-import SpeedFast from "pixelarticons/svg/speed-fast.svg?react"
 import ClockIcon from "pixelarticons/svg/clock.svg?react"
 import Dice from "pixelarticons/svg/dice.svg?react"
 import CloseBox from "pixelarticons/svg/close-box.svg?react"
@@ -411,16 +410,14 @@ function Clock({ time, seed, style }: { time: number, seed: number, style: React
 
 const SKIP_SECONDS = 10, FAST_FORWARD = 4, HOLD_MS = 350
 
-// Tap to skip ahead; hold to fast-forward (the card runs faster, and you hear it, sped up).
+// Tap to skip ahead; hold to fast-forward (you hear snatches of the card as it goes by).
 function SkipButton({ style }: { style: React.CSSProperties }) {
-    const [fast, setFast] = useState(false)
     const hold = useRef<{ timer?: number, fast?: boolean } | null>(null)
     const down = (e: React.PointerEvent) => {
         e.currentTarget.setPointerCapture(e.pointerId)
         const h: { timer?: number, fast?: boolean } = {}
         h.timer = window.setTimeout(() => {
             h.fast = true
-            setFast(true)
             sendToWorklet({ cmd: "speed", value: FAST_FORWARD })
         }, HOLD_MS)
         hold.current = h
@@ -431,16 +428,14 @@ function SkipButton({ style }: { style: React.CSSProperties }) {
         hold.current = null
         clearTimeout(h.timer)
         if (h.fast) {
-            setFast(false)
             sendToWorklet({ cmd: "speed", value: 1 })
         } else if (!cancelled) {
             sendToWorklet({ cmd: "skip", samples: SKIP_SECONDS * 44100 })
         }
     }
-    const Icon = fast ? SpeedFast : Forward
     return <button title={`Tap: skip ${SKIP_SECONDS} seconds. Hold: fast-forward.`} style={{ touchAction: "none", userSelect: "none", WebkitTouchCallout: "none", paddingLeft: 0 } as React.CSSProperties}
         onPointerDown={down} onPointerUp={() => up(false)} onPointerCancel={() => up(true)} onContextMenu={e => e.preventDefault()}>
-        <Icon style={style} />
+        <Forward style={style} />
     </button>
 }
 

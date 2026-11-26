@@ -34,6 +34,8 @@ function makeTouchTracker() {
 // sound, or its setup) before it's stopped. Cards use tens of thousands; this is a fraction of a second's work.
 const GAS = 20000000
 
+// How long each snatch of a card heard while fast-forwarding is, in samples (60 ms).
+const SNATCH = 2646
 // How much faster than real time skipping ahead goes, at most.
 const SKIP_RATE = 64
 
@@ -46,6 +48,7 @@ class CustomProcessor extends AudioWorkletProcessor {
         this.inputPeak = 0
         // Fast-forward: this many samples are made for every one played (and averaged).
         this.speed = 1
+        this.snatch = 0
         // Skipping ahead: samples still to be made (silently) before playing on.
         this.skipping = 0
         this.sincePost = 0
@@ -216,6 +219,7 @@ class CustomProcessor extends AudioWorkletProcessor {
 
         // (A metered card gets its allowance for this block. If it runs out, or fails, that's the end of it.)
         if (this.gas) this.gas.value = GAS
+        let made = 0
         try {
             if (this.skipping > 0) {
                 // Get ahead as fast as we reasonably can (in silence), a bounded amount per call so
@@ -229,11 +233,24 @@ class CustomProcessor extends AudioWorkletProcessor {
             }
 
             if (!this.playing) return true
+            made = speakers[0].length
+            // Fast-forward goes as a CD player searches: a snatch of the card at its own pitch, then
+            // a jump over `speed - 1` times as much (in silence), and so on.
             const speed = this.speed
+            if (speed === 1) this.snatch = 0
             for (let i = 0; i < speakers[0].length; i++) {
-                let x = 0
-                for (let j = 0; j < speed; j++) x += process(input ? input[i] : 0)
-                x *= this.volume / speed
+                let x = process(input ? input[i] : 0) * this.volume
+                if (speed > 1) {
+                    if (this.snatch <= 0) {
+                        const jump = SNATCH * (speed - 1)
+                        for (let j = 0; j < jump; j++) process(0)
+                        made += jump
+                        this.snatch = SNATCH
+                    }
+                    // (Each snatch fades in and out, so that the joins don't click.)
+                    x *= Math.min(1, this.snatch / 150, (SNATCH + 1 - this.snatch) / 150)
+                    this.snatch--
+                }
                 for (const channel of speakers) {
                     channel[i] = x
                 }
@@ -245,7 +262,7 @@ class CustomProcessor extends AudioWorkletProcessor {
             return true
         }
 
-        this.pos += 128 * this.speed
+        this.pos += made
         this.sincePost += 128
         if (this.sincePost >= 1024) {
             this.sincePost = 0
