@@ -4,7 +4,6 @@ import QRCode from "qrcode"
 import { encodeBlob } from "./base43Encoder"
 import logoUrl from "./assets/logo.png"
 import { instrumentWasm } from "./wasmTracer"
-import { getWabt } from './lazyWabt'
 import { initDebug, dlog, DEBUG } from "./debug"
 import { audioDebugSnapshot, onStall, sendToWorklet, setWorkletMessageHandler, startAudio } from "./audio"
 import { NO_TITLE, cardURL, extractTitle, generateSeed, parseCardURL } from "./card"
@@ -289,7 +288,5 @@ function App() {
         {/* <a download="a.wasm" href={download}>Download</a> */}
     </div>
 }
-
-getWabt()
 
 export default App

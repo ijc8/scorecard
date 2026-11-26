@@ -2,7 +2,7 @@ module.exports = {
     root: true,
     env: { browser: true, es2022: true, worker: true },
     extends: ["eslint:recommended", "plugin:@typescript-eslint/recommended", "plugin:react-hooks/recommended"],
-    ignorePatterns: ["dist", "wabt", "public", ".eslintrc.cjs"],
+    ignorePatterns: ["dist", "public", ".eslintrc.cjs"],
     parser: "@typescript-eslint/parser",
     rules: {
         // The code leans on `any` at its edges (worklet messages, vendored libraries).

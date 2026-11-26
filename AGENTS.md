@@ -81,8 +81,10 @@ that fallback in `extractTitle` (`src/card.ts`) and in `public/worklet.js`.
 - `src/wasmTracer.ts`: the bullseye toggle reassembles the binary with a `scorecard.log(i32)`
   import at basic-block boundaries; the worklet posts counts back and the Listen tab draws a
   heatmap over a bit-grid of the binary.
-- `wabt/` is vendored and loaded lazily through `src/lazyWabt.ts` (it's large). Use `getWabt()`
-  rather than importing it directly.
+- WebAssembly text is assembled by `watr` (`src/assemble.ts`, ~50 KB, loaded when first needed)
+  and disassembled by `wasmparser`. After touching the tracer or the disassembly, run
+  `npx tsx scripts/watr-check.ts <cards>.wasm`: reassembled and instrumented cards must play
+  sample-for-sample the same.
 - `vite.config.ts` sets `base: "./"`, which the `ijc8.me/s` subpath deployment depends on.
 
 Transport buttons handle `touchstart` and `mousedown` separately (with de-duplication) so play and
