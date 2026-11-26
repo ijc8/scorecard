@@ -12,7 +12,8 @@ import { flushSync } from "react-dom"
 import { Score } from "./Score"
 import { raise, throwTop, turn, useDissolve, usePile } from "./Pile"
 import { Place, Spread, placeOf } from "./Spread"
-import { Forward, HeartFull } from "./icons"
+import { Forward, HeartFull, QRIcon } from "./icons"
+import CodeIcon from "pixelarticons/svg/code.svg?react"
 import { decodeSteps } from "./qrDecode"
 import { playDecode } from "./decodeAnimation"
 import { motionOff } from "./Settings"
@@ -35,7 +36,6 @@ import EditBox from "pixelarticons/svg/edit-box.svg?react"
 import DragAndDrop from "pixelarticons/svg/drag-and-drop.svg?react"
 import Bullseye from "pixelarticons/svg/bullseye.svg?react"
 import ScoreIcon from "pixelarticons/svg/analytics.svg?react"
-import BullseyeArrow from "pixelarticons/svg/bullseye-arrow.svg?react"
 import { readQR } from "./qrReader"
 import logoUrl from "./assets/logo.png"
 import exampleCardUrl from "./assets/example-card.png"
@@ -43,7 +43,6 @@ import { TraceMap } from "./wasmTracer"
 import { MemoryTrace, findDataSegments } from "./memoryTrace"
 import { initDebug, dlog, DEBUG } from "./debug"
 import Heart from "pixelarticons/svg/heart.svg?react"
-import Redo from "pixelarticons/svg/redo.svg?react"
 import { canPrintDirectly, printCard, saveCardImage } from "./print"
 import Headphone from "pixelarticons/svg/headphone.svg?react"
 import Sliders from "pixelarticons/svg/sliders.svg?react"
@@ -107,11 +106,21 @@ function SeedInput({ seed, setSeed }: any) {
     />
 }
 
+// What a music card can show, and the buttons at its corner that choose.
+type View = "qr" | "bits" | "score" | "text"
+const FRONT: View[] = ["qr", "bits"]
+const VIEWS: { name: View, title: string, Icon: React.FunctionComponent<React.SVGProps<SVGSVGElement>> }[] = [
+    { name: "qr", title: "The card's QR code", Icon: QRIcon },
+    { name: "bits", title: "The card's bits, at work as it plays", Icon: Bullseye },
+    { name: "score", title: "The card's score: the music to come, drawn out", Icon: ScoreIcon },
+    { name: "text", title: "The card's code, as WebAssembly text", Icon: CodeIcon },
+]
+
 // TODO: Specify types
-function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, played, tracing, toggleTracing, toggleScore, kept, toggleKept, face, code, loadBinary, lockSeed, description }: {
+function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, played, tracing, kept, toggleKept, face, code, loadBinary, lockSeed, description }: {
     qrCanvas: RefObject<HTMLCanvasElement>, title: string, listens: boolean, size: number, seed: number, setSeed: (s: number) => void, seedLock: boolean,
     state: any, setState: any, time: number, reset: any, error: any, buffer: Uint8Array | null, played: Uint8Array | null,
-    tracing: boolean, toggleTracing: () => void, toggleScore: () => void, face: Face, code: string | null, loadBinary: (b: Uint8Array) => Promise<void>,
+    tracing: boolean, face: Face, code: string | null, loadBinary: (b: Uint8Array) => Promise<void>,
     kept: boolean, toggleKept: () => void, lockSeed: (lock: boolean) => void,
     description?: string,
 }) {
@@ -123,16 +132,18 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
     const DiceIcon = seedLock ? CloseBox : Dice
     const showMessage = (error || (size === 0)) && front
     // (The QR code dissolves into the card's bits.)
-    const dissolve = useDissolve(tracing && !showMessage)
-    // When tracing is turned on, the QR code is first read, step by step, into those bits
+    const dissolve = useDissolve(face === "bits" && !showMessage)
+    // Going from the QR code to the bits, the code is first read, step by step, into those bits
     // (see decodeAnimation.ts); the animation plays on a canvas of its own, over both. Tap it to skip.
+    // (Those two share a side of the card. Any other change of view turns the card over: see `setView`.)
     const decodeCanvas = useRef<HTMLCanvasElement>(null)
     const [decoding, setDecoding] = useState(false)
-    const wasTracing = useRef(tracing)
+    const lastFace = useRef(face)
     useEffect(() => {
-        const turnedOn = tracing && !wasTracing.current, changed = tracing !== wasTracing.current
-        wasTracing.current = tracing
-        if (!changed || !binary || !code || showMessage || !front || motionOff()) return
+        const from = lastFace.current
+        lastFace.current = face
+        const turnedOn = face === "bits", changed = (from === "qr" && face === "bits") || (from === "bits" && face === "qr")
+        if (!changed || !binary || !code || showMessage || motionOff()) return
         let steps
         try {
             steps = decodeSteps(cardURL(code, seedLock ? seed : undefined), code.length)
@@ -151,7 +162,9 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
             clearTimeout(timer)
             setDecoding(false)
         }
-    }, [tracing, binary])
+    }, [face, binary])
+    // (On the back, tracing lights up lines of the card's WebAssembly text: not once it's off.)
+    useEffect(() => { if (!tracing) back.current?.showHeat(null) }, [tracing])
 
     // The card has two sides: the front (its QR code, which tracing sees through to its bits) and
     // the back (what it holds, as WebAssembly text). The workbench (the Create tab's card) is laid
@@ -290,29 +303,16 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
         }
         setStateRef.current("playing")
     }
-    const TraceIcon = tracing ? BullseyeArrow : Bullseye
     // How printing is going.
     const [printing, setPrinting] = useState("")
     const printable = () => ({ url: cardURL(code!, seedLock ? seed : undefined), title, size, description })
-    const traceClick = () => {
-        // (On the back, tracing lights up lines of the card's WebAssembly text.)
-        if (tracing) back.current?.showHeat(null)
-        toggleTracing()
-    }
     const KeptIcon = kept ? HeartFull : Heart
-    const header = (title: string, size: number | null, live: boolean) =>
+    const header = (title: string, size: number | null) =>
             <h2 style={{ userSelect: "none", margin: "0 0 12px", fontSize: "6cqw", fontWeight: "normal", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", textAlign: "left", lineHeight: 1.2 }}>
                 <span data-card-title="">{title}</span>
                 {size !== null && <span style={{ whiteSpace: "nowrap" }}>
                     {listens && <span title="This card listens: it plays what the microphone hears, changed"><AudioDevice style={{ height: "6cqw", verticalAlign: "middle" }} /> </span>}
                     <span data-card-size="">{size}</span> bytes {/* TODO: add link and perhaps download buttons with icons */}
-                    {/* Beside the size: a look at those bytes at work. */}
-                    {binary && live && <button title="Show the card's score: the music to come, drawn out" style={{ fontSize: 0, lineHeight: 0, border: "none", padding: "0 0 0 6px", verticalAlign: "middle" }} onClick={toggleScore}>
-                        <ScoreIcon style={{ height: "6cqw", verticalAlign: "middle", background: face === "score" ? "black" : undefined, color: face === "score" ? "white" : undefined }} />
-                    </button>}
-                    {binary && live && <button title="Show the card at work" style={{ fontSize: 0, lineHeight: 0, border: "none", padding: "0 0 0 6px", verticalAlign: "middle" }} onClick={traceClick}>
-                        <TraceIcon style={{ height: "6cqw", verticalAlign: "middle" }} />
-                    </button>}
                 </span>}
             </h2>
     const side = (name: string, shown: boolean) => ({ className: `side ${name}`, style: { visibility: shown ? "inherit" : "hidden" } as React.CSSProperties, ...(shown ? {} : { inert: "" }) })
@@ -321,7 +321,7 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
         {/* On each side: title and size on top, and a square below. (The whole card turns over; see `turn`.) */}
         <div className="faces">
             <div {...side("front", front)}>
-                {header(title, size, true)}
+                {header(title, size)}
                 <div className="square">
                     <canvas ref={qrCanvas} data-qr="" width="1" height="1" style={{ visibility: showMessage ? "hidden" : "inherit" }}></canvas>
                     {/* Tracing: the card's bits, seen through the QR code. */}
@@ -343,7 +343,7 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
                 </div>
             </div>
             <div {...side("back", face === "back")}>
-                {header(title, size, true)}
+                {header(title, size)}
                 <div className="square">
                     <CardBack ref={back} binary={played ?? binary} active={face === "back"}>
                         {/* The card as a thing: printed, or as a picture. */}
@@ -360,7 +360,7 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
                 </div>
             </div>
             <div {...side("write", face === "write")}>
-                {header(builtHere ? title : "new card", builtHere ? size : null, false)}
+                {header(builtHere ? title : "new card", builtHere ? size : null)}
                 <div className="square"><Workbench ref={workbench} {...{ binary, played, code, title, loadBinary }} onBuild={setOwnBuild} /></div>
             </div>
         </div>
@@ -461,10 +461,11 @@ const About = memo(function About({ setTab, openDeck }: any) {
             <p>To get started, pick a score card from the <a href="#" onClick={openDeck} style={{ textDecoration: "underline" }}>Deck</a>, <a href="#" onClick={() => setTab(Tab.Scan)} style={{ textDecoration: "underline" }}>Scan</a> one, or <a href="#" onClick={() => setTab(Tab.Create)} style={{ textDecoration: "underline" }}>Create</a> your own. For more information, check out the <a href="https://github.com/ijc8/scorecard" style={{ textDecoration: "underline" }}>README</a>.</p>
             <p>Things to try:</p>
             <ul style={{ margin: 0, paddingLeft: "1.2em" }}>
-                <li>Flick the top card aside for the next one in your deck.</li>
+                <li>Flick the top card off to the left for the next one in your deck, or drag to the right for the one before.</li>
                 <li>Tap <Headphone style={inline} /> (or the table) to spread the whole pile out, along with any packs waiting to be opened.</li>
-                <li>Tap <Redo style={inline} /> at a card's corner to turn it over and read its code. On the back you can also print it, or save it as a picture.</li>
-                <li>Tap <Bullseye style={inline} /> to watch the QR code being read into the card's bits, and the bits at work as they play.</li>
+                <li>The four buttons at a card's corner choose what it shows. <Bullseye style={inline} /> watches the QR code being read into the card's bits, and the bits at work as they play.</li>
+                <li><ScoreIcon style={inline} /> is the card's score: the music to come, drawn out. Tap it to go to a moment.</li>
+                <li><CodeIcon style={inline} /> turns the card over to read its code. From there you can also print it, or save it as a picture.</li>
                 <li>Tap <Forward style={inline} /> to skip ahead, or hold it to fast-forward. Tap the clock to go to a time.</li>
                 <li>Each performance of a card has a seed. <Dice style={inline} /> locks it, and <Heart style={inline} /> keeps that performance with the card.</li>
             </ul>
@@ -611,8 +612,6 @@ function App() {
         sendToWorklet({ cmd: "loadModule", binary, trace: tracing, meter: settings.meter })
         setBinary(binary)
         setPlayed(played)
-        // (A card arrives face up.)
-        setTurned(false)
         reset(seed)
     }
     const loadBinaryRef = useRef(loadBinary)
@@ -860,8 +859,8 @@ function App() {
         const card = neighbour(deck, code, direction)
         return card && card.code !== code ? card : undefined
     }
-    // Is the loaded card turned over, to its back?
-    const [turned, setTurned] = useState(false)
+    // What the loaded card shows: its QR code, its bits (at work), its score, or its WebAssembly text.
+    const [view, _setView] = useState<View>("qr")
     const pickTab = (index: number) => {
         // (With no card loaded there is no music card to go back to: straight to the spread.)
         if (index === Tab.Listen && (tab === Tab.Listen || !binary)) return openSpread()
@@ -869,7 +868,15 @@ function App() {
         if (index === tab || index === Tab.Listen) throwTop("down", change)
         else raise(change)
     }
-    const flip = () => turn(() => flushSync(() => setTurned(!turned)), nextCard(1))
+    // The QR code and the bits share a side of the card (one is read into the other); to show
+    // anything else, the card turns over. The card is traced while its bits or its text show.
+    const setView = (next: View) => {
+        if (next === view) return
+        const traced = next === "bits" || next === "text"
+        if (traced !== tracing) setTracing(traced)
+        if (FRONT.includes(view) && FRONT.includes(next)) _setView(next)
+        else turn(() => flushSync(() => _setView(next)), nextCard(1))
+    }
     const pileHandlers = usePile({
         enabled: !spread,
         current: code,
@@ -891,12 +898,7 @@ function App() {
         return () => document.removeEventListener("click", click)
     }, [spread, tab])
 
-    // Is the card's score showing, where its QR code (or its bits) would be?
-    const [score, setScore] = useState(false)
-    const face: Face = tab === Tab.Create ? "write" : turned ? "back" : score ? "score" : tracing ? "bits" : "qr"
-    // (With the score in front of the card's bits, the tracing button brings those back.)
-    const toggleTracing = () => score && tracing ? setScore(false) : (setScore(false), setTracing(!tracing))
-    const toggleScore = () => setScore(!score)
+    const face: Face = tab === Tab.Create ? "write" : view === "text" ? "back" : view
     // Changing the guard takes hold at once (the card carries on from where it was).
     const guarded = useRef(settings.meter)
     useEffect(() => {
@@ -926,7 +928,7 @@ function App() {
     const settingsProps = { settings, setSettings, measure: DEBUG ? measure : undefined }
     const hasStarter = packs.some(pack => pack.id === starterPack.id)
     const tabs = [
-        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, played, tracing, toggleTracing, toggleScore, face, code, loadBinary, kept, toggleKept, lockSeed, description: deckCard?.description ?? library.find(card => card.code === code)?.description }} /> },
+        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, played, tracing, face, code, loadBinary, kept, toggleKept, lockSeed, description: deckCard?.description ?? library.find(card => card.code === code)?.description }} /> },
         { name: "Scan", Icon: Camera, component: <Scan {...{ onScan, tab }} /> },
         // The workbench is laid out like a music card (and shares its controls), so it's drawn by Listen.
         { name: "Create", Icon: EditBox, component: null },
@@ -973,8 +975,10 @@ function App() {
             <div className="pile-card pile-top" style={{ borderStyle: dragging ? "dashed" : "solid" }} {...pileHandlers}>
                 <div style={{ margin: "20px" }}>{logo}{panes}</div>
                 <div className="tabs own-tab">{tabButtons(true)}</div>
-                {/* Printed at the corner, as index cards say "over". */}
-                {binary && tab === Tab.Listen && <button className={"over" + (turned ? " turned" : "")} title={turned ? "Turn the card back over" : "Turn the card over, to read its code"} onClick={flip}><Redo /></button>}
+                {/* At the card's corner: what it shows. */}
+                {binary && tab === Tab.Listen && <div className="views">
+                    {VIEWS.map(({ name, title, Icon }) => <button key={name} className={name === view ? "on" : ""} title={title} aria-pressed={name === view} onClick={() => setView(name)}><Icon /></button>)}
+                </div>}
             </div>
         </div>
     </div>

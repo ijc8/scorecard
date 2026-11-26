@@ -588,29 +588,33 @@
     overflow: hidden auto;
 }
 
-/* "Over", printed at the card's corner: turn the card over. (At the same corner on both sides.) */
-.over {
+/* At the card's corner: buttons for what it shows (its QR code, bits, score or text). */
+.views {
     position: absolute;
-    right: 1px;
-    bottom: 1px;
-    width: 20px;
-    height: 20px;
-    padding: 0;
+    right: 3px;
+    bottom: 2px;
+    display: flex;
+    gap: 1px;
+}
+
+.views > button {
+    width: 25px;
+    height: 24px;
+    padding: 3px;
     border: none;
+    border-radius: 0;
     background: none;
     font-size: 0;
     cursor: pointer;
 }
 
-/* (Easier to hit than to see.) */
-.over::before {
-    content: "";
-    position: absolute;
-    inset: -10px -2px -2px -10px;
+.views > button > svg {
+    height: 18px;
 }
 
-.over > svg {
-    height: 18px;
+.views > button.on {
+    background: black;
+    color: white;
 }
 
 .pile-top.lifted > .own-tab {

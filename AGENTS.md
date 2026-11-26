@@ -150,11 +150,14 @@ that fallback in `src/generate.ts` and in `public/worklet.js`.
 - `src/base43Encoder.ts` (mirrored by `base43.py`): base43 over the QR alphanumeric set minus `%`
   and space, so the binary shares the QR's dense alphanumeric mode with the URL and stays valid in
   a query string.
-- A music card has a front (its QR code, or with the bullseye its bits: the trace view) and a back,
-  reached by the "over" arrow at its corner: what the card holds, as WebAssembly text (`CardBack`
-  in `src/Workbench.tsx`; read-only), with Print and Save picture under it. The text is the
-  tracer's own disassembly (`disassembleWasm`), so that with tracing on, the lines that are running
-  can be lit up (`showHeat`, drawn on a canvas behind the text). Nothing that isn't in the card is
+- A music card shows one of four things, chosen by the buttons at its corner (`VIEWS`, `setView` in
+  `src/App.tsx`): its QR code; its bits (the trace view); its score (`src/Score.tsx`); or what it
+  holds, as WebAssembly text (`CardBack` in `src/Workbench.tsx`; read-only), with Print and Save
+  picture under it. The QR code and the bits share a side, so that one can be read into the other
+  (the decode animation); any other change turns the card over. The card is traced while its bits
+  or its text show, and not otherwise. The text is the
+  tracer's own disassembly (`disassembleWasm`), so that the lines that are running
+  can be lit up, and the bytes of data being read and written (`showHeat`, drawn on a canvas behind the text). Nothing that isn't in the card is
   shown as the card. Writing happens on the Create tab's card, the `Workbench`, which `Listen`
   draws in the card's place (same layout and transport, an editor where the QR code goes). It
   keeps its own text whatever card is loaded; "from <card>" in its menu starts from the loaded
@@ -189,7 +192,7 @@ that fallback in `src/generate.ts` and in `public/worklet.js`.
 - `src/qrReader.ts`: QR decoding for the Scan tab (live camera frames, photos, dropped images)
   using `zxing-wasm`, loaded lazily. It was picked with `scripts/scanbench` because score cards are
   very dense codes; rerun that benchmark before changing decoders.
-- `src/wasmTracer.ts`: the bullseye toggle reassembles the binary with a `scorecard.log(i32)`
+- `src/wasmTracer.ts`: tracing reassembles the binary with a `scorecard.log(i32)`
   import at basic-block boundaries, and with every load/store address passed through
   `scorecard.read`/`scorecard.write`. This happens in the worklet, on the card it's about to play
   (so a card that generates another is traced as what it generated this time): the tracer is a

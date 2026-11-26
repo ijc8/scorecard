@@ -45,7 +45,7 @@ function dress(copy: HTMLElement, card: DeckCard | undefined) {
     copy.querySelectorAll<HTMLElement>(".score, .score-message").forEach(score => { score.style.display = "none" })
     // (Face up, even if the card it was copied from is turned over.)
     copy.querySelectorAll<HTMLElement>(".faces > .side").forEach(side => { side.style.visibility = side.classList.contains("front") ? "inherit" : "hidden" })
-    copy.querySelector(".over")?.classList.remove("turned")
+    copy.querySelectorAll(".views > button").forEach((button, i) => button.classList.toggle("on", i === 0))
     if (!card) return
     const set = (selector: string, text: string) => copy.querySelectorAll(selector).forEach(element => { element.textContent = text })
     set("[data-card-title]", card.title)
