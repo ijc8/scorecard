@@ -124,6 +124,10 @@ that fallback in `src/generate.ts` and in `public/worklet.js`.
   paired with the device). It waits for the printer's `1a 0f 0c` before closing the port: closing
   early stops the print. Works from desktop Chrome (Ian, 11-25); Chrome on Android has no Web
   Serial, so there it's Save picture and the printer's own app. Firefox offers no serial ports.
+  Where there's no Web Serial but there is Web Bluetooth, Print tries Bluetooth Low Energy instead
+  (`printOverBLE`): **written blind on 11-26 and never tried against a printer**; the services it
+  looks for are guesses from other small thermal printers, and its message says what the printer
+  offers if none fits.
 - The pile (`src/Pile.tsx`; background in `docs/CARD-DESIGN.md`): the panel is the top card of a
   pile, which is the deck. Flick it aside for the next card; Scan, Create, Settings and About are
   cards at the back of the pile whose index tabs stick out below, and the music cards share the

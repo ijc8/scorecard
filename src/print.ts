@@ -117,7 +117,8 @@ export async function saveCardImage(card: PrintableCard) {
     setTimeout(() => URL.revokeObjectURL(link.href), 1000)
 }
 
-export const canPrintDirectly = () => "serial" in navigator
+// Where there's no Web Serial (Chrome on Android), Web Bluetooth is tried instead: see printOverBLE.
+export const canPrintDirectly = () => "serial" in navigator || "bluetooth" in navigator
 
 const SERIAL_PORT_PROFILE = "00001101-0000-1000-8000-00805f9b34fb"
 const GS = 0x1d
@@ -146,6 +147,7 @@ function rasterChunks(canvas: HTMLCanvasElement) {
 // hears how it's going. The first time, the browser asks which (paired) printer to use.
 export async function printCard(card: PrintableCard, status: (message: string) => void) {
     const serial = (navigator as any).serial
+    if (!serial) return printOverBLE(card, status)
     let [port] = await serial.getPorts()
     if (!port) {
         status("Choose your printer...")
@@ -189,5 +191,51 @@ export async function printCard(card: PrintableCard, status: (message: string) =
         reader.releaseLock()
         writer.releaseLock()
         await port.close().catch(() => {})
+    }
+}
+
+// The services that small thermal printers are known to take their data on over Bluetooth Low
+// Energy (a page may only look at services it names beforehand).
+const PRINTER_SERVICES = [0xff00, 0xae30, 0xaf30, 0x18f0, 0xffe0, 0xfff0, "49535343-fe7d-4ae5-8fa9-9fafd205e455", "e7810a71-73ae-499d-8c15-faa9aef0c3f2"]
+
+// EXPERIMENTAL, and not yet tried against a printer (11-26): the same picture, sent over Bluetooth
+// Low Energy to the first characteristic that can be written to. Whether the M02 Pro takes prints
+// this way, and on which service, isn't known; if it doesn't, the message says what it does offer.
+async function printOverBLE(card: PrintableCard, status: (message: string) => void) {
+    status("Choose your printer...")
+    const device = await (navigator as any).bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: PRINTER_SERVICES })
+    status("Connecting...")
+    const server = await device.gatt.connect()
+    try {
+        const services: any[] = await server.getPrimaryServices().catch(() => [])
+        let out: any
+        for (const service of services) {
+            for (const characteristic of await service.getCharacteristics()) {
+                if (!out && (characteristic.properties.writeWithoutResponse || characteristic.properties.write)) out = characteristic
+            }
+        }
+        if (!out) {
+            throw new Error(`This printer doesn't take prints in a way this player knows (it offers ${services.map(service => service.uuid).join(", ") || "none of the services looked for"}). Save the picture and print it from the printer's app.`)
+        }
+        const canvas = await renderCard(card, TEAR_PAD)
+        const parts = [new Uint8Array([GS, 0x76, 0x30, 0, PRINT_WIDTH / 8, 0, 3, 0, ...new Array(PRINT_WIDTH / 8 * 3).fill(0)]), ...rasterChunks(canvas), new Uint8Array([GS, 0x56, 1])]
+        const data = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0))
+        parts.reduce((at, part) => (data.set(part, at), at + part.length), 0)
+        // A little at a time: what fits in one packet, and no faster than the printer takes it.
+        const PACKET = 160
+        for (let at = 0; at < data.length; at += PACKET) {
+            const packet = data.subarray(at, at + PACKET)
+            if (out.properties.writeWithoutResponse) await out.writeValueWithoutResponse(packet)
+            else await out.writeValueWithResponse(packet)
+            if (at % (PACKET * 16) === 0) {
+                status(`Printing... ${Math.floor(at / data.length * 100)}%`)
+                await new Promise(resolve => setTimeout(resolve, 20))
+            }
+        }
+        // (Nothing is known of how the printer says it has finished this way; give it time before hanging up.)
+        await new Promise(resolve => setTimeout(resolve, 4000))
+        status(`Sent (by ${out.service.uuid.slice(4, 8)}/${out.uuid.slice(4, 8)}).`)
+    } finally {
+        server.disconnect()
     }
 }

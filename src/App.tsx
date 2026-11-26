@@ -348,7 +348,7 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
                     <CardBack ref={back} binary={played ?? binary} active={face === "back"}>
                         {/* The card as a thing: printed, or as a picture. */}
                         <button title="Save the card as a picture (or share it, to a printer's app)" onClick={() => saveCardImage(printable())}>Save picture</button>
-                        {canPrintDirectly() && <button title="Print on a Bluetooth thermal printer (paired with this device)" onClick={async () => {
+                        {canPrintDirectly() && <button title={"serial" in navigator ? "Print on a Bluetooth thermal printer (paired with this device)" : "Print on a Bluetooth thermal printer (experimental here)"} onClick={async () => {
                             try {
                                 await printCard(printable(), setPrinting)
                             } catch (e: any) {
