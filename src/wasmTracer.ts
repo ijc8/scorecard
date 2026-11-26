@@ -151,3 +151,25 @@ export function meterWat(binary: Uint8Array) {
     })
     return out.join("\n")
 }
+
+// Where a card's globals are in its text and its bytes, and the lines that read and write each.
+// Tracing doesn't watch globals themselves: a global is being read (or written) as much as the
+// code that reads it is running, which is traced (see `globalHeat`).
+export interface GlobalUse { line: number, start: number, end: number, reads: number[], writes: number[] }
+export function findGlobalUses(binary: Uint8Array) {
+    const { lines, offsets } = disassembleWasm(binary)
+    const globals = new Map<string, GlobalUse>()
+    lines.forEach((text, line) => {
+        const defined = /^ *\(global (\$\S+) /.exec(text)
+        if (defined) globals.set(defined[1], { line, start: offsets![line - 1], end: offsets![line], reads: [], writes: [] })
+        const used = /^ *global\.(get|set) (\$\S+)/.exec(text)
+        if (used) globals.get(used[2])?.[used[1] === "get" ? "reads" : "writes"].push(line)
+    })
+    return [...globals.values()]
+}
+
+// How much each global is being read and written (0 to 1), given how much each line of the text is running.
+export function globalHeat(globals: GlobalUse[], lines: Float32Array) {
+    const most = (uses: number[]) => uses.reduce((heat, line) => Math.max(heat, lines[line] ?? 0), 0)
+    return globals.map(global => ({ global, read: most(global.reads), written: most(global.writes) }))
+}

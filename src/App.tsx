@@ -39,7 +39,7 @@ import ScoreIcon from "pixelarticons/svg/analytics.svg?react"
 import { readQR } from "./qrReader"
 import logoUrl from "./assets/logo.png"
 import exampleCardUrl from "./assets/example-card.png"
-import { TraceMap } from "./wasmTracer"
+import { GlobalUse, TraceMap, findGlobalUses, globalHeat } from "./wasmTracer"
 import { MemoryTrace, findDataSegments } from "./memoryTrace"
 import { initDebug, dlog, DEBUG } from "./debug"
 import Heart from "pixelarticons/svg/heart.svg?react"
@@ -251,6 +251,13 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
                 const endByte = trace!.map[id].end.offset
                 for (let i = startByte * 8; i < endByte * 8; i++) paint(i, 0, 255, 0, count / max * 0.4)
             })
+            // (Globals: read and written as much as the code that reads and writes them runs.)
+            for (const { global, read, written } of globalHeat(trace.globals, lineHeat())) {
+                for (let i = global.start * 8; i < global.end * 8; i++) {
+                    paintRead(i, read)
+                    paintWrite(i, written)
+                }
+            }
             const { memory } = trace
             for (const [heat, paintHeat] of [[memory.reads, paintRead], [memory.writes, paintWrite]] as const) {
                 for (const [address, value] of heat) {
@@ -271,6 +278,14 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
         context.putImageData(image, 0, 0)
     }
 
+    // How much each line of the traced card's text is running, from 0 to 1.
+    const lineHeat = () => {
+        const lines = new Float32Array(trace!.map[Object.keys(trace!.map).length - 1].end.line + 1)
+        const max = Math.max(...Object.values(trace!.logs))
+        trace!.logs.forEach((count, id) => lines.fill(count / max, trace!.map[id].start.line, trace!.map[id].end.line))
+        return lines
+    }
+
     handleTraceLogs = (traceLogs: number[]) => {
         if (trace === null || !trace.map[traceLogs.length - 1]) return
         const oldTraceLogs = trace.logs
@@ -279,13 +294,8 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
         oldTraceLogs.forEach((count, id) => {
             trace!.logs[id] = Math.max(trace!.logs[id] ?? 0, count * 0.6)
         })
-        if (face === "back") {
-            // On the back, light up the lines of WebAssembly text that are running.
-            const lines = new Float32Array(trace.map[Object.keys(trace.map).length - 1].end.line + 1)
-            const max = Math.max(...Object.values(trace.logs))
-            trace.logs.forEach((count, id) => lines.fill(count / max, trace!.map[id].start.line, trace!.map[id].end.line))
-            back.current?.showHeat(state === "playing" ? lines : null, trace.memory)
-        }
+        // On the back, light up the lines of WebAssembly text that are running.
+        if (face === "back") back.current?.showHeat(state === "playing" ? lineHeat() : null, trace.memory, trace.globals)
         draw()
     }
 
@@ -479,6 +489,7 @@ interface TraceData {
     map: TraceMap
     logs: number[]
     memory: MemoryTrace
+    globals: GlobalUse[]
 }
 let trace: TraceData | null = null
 
@@ -846,7 +857,7 @@ function App() {
                 } else if (e.data.traced) {
                     // The worklet has instrumented the card it's playing: this is that card, and what its counters count.
                     const { binary, map } = e.data.traced
-                    trace = { binary, map, logs: [], memory: new MemoryTrace(findDataSegments(binary)) }
+                    trace = { binary, map, logs: [], memory: new MemoryTrace(findDataSegments(binary)), globals: findGlobalUses(binary) }
                 } else {
                     trace?.memory.update(e.data.reads, e.data.writes)
                 }

@@ -203,7 +203,9 @@ that fallback in `src/generate.ts` and in `public/worklet.js`.
   (`{traced: {binary, map}}`), then posts block counts and touched addresses back, and
   the Listen tab draws a heatmap over a bit-grid of the binary: green for executed code, blue/red
   for data-segment bytes read/written. Memory outside the data segments (`src/memoryTrace.ts`) is
-  drawn in a band under the card. Instrumentation must not change a card's output.
+  drawn in a band under the card. Globals aren't watched themselves: each counts as read
+  or written as much as the code that reads or writes it is running (`findGlobalUses`,
+  `globalHeat`), and is tinted the same blue and red, in the bits and in the text. Instrumentation must not change a card's output.
   Every rewriting (traced, metered or neither: once the tracer module is there, the worklet
   rewrites every card) also exports the card's state: its memory as `scorecard.memory` and each
   mutable global as `scorecard.globalN`. So turning tracing or the guard on or off

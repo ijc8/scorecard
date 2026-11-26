@@ -6,7 +6,7 @@ import { compilePattern } from "./pattern"
 import { Language, getSource, saveSource, templates } from "./sources"
 import { highlight } from "./highlight"
 import { assembleWat } from "./assemble"
-import { disassembleWasm } from "./wasmTracer"
+import { GlobalUse, disassembleWasm, globalHeat } from "./wasmTracer"
 import { maxCardSize } from "./card"
 import { DataSegment, MemoryTrace, findDataSegments } from "./memoryTrace"
 
@@ -34,7 +34,7 @@ function findDataText(binary: Uint8Array, lines: string[]) {
 
 // What tracing shows behind the text: a strip of green behind each line, for how much it's running;
 // and behind each byte of data, blue for being read and red for being written.
-function drawHeat(canvas: HTMLCanvasElement | null, lines: Float32Array | null, memory: MemoryTrace | null, data: DataText[], scroll: { left: number, top: number }) {
+function drawHeat(canvas: HTMLCanvasElement | null, lines: Float32Array | null, memory: MemoryTrace | null, globals: GlobalUse[], data: DataText[], scroll: { left: number, top: number }) {
     if (!canvas) return
     canvas.width = canvas.clientWidth
     canvas.height = canvas.clientHeight
@@ -46,6 +46,15 @@ function drawHeat(canvas: HTMLCanvasElement | null, lines: Float32Array | null, 
         if (!lines[line]) continue
         context.fillStyle = `rgb(0 255 0 / ${lines[line] * 45}%)`
         context.fillRect(0, PADDING + line * LINE_HEIGHT - scroll.top, canvas.width, LINE_HEIGHT)
+    }
+    // (A global is read and written as much as the lines that read and write it are running.)
+    for (const { global, read, written } of globalHeat(globals, lines)) {
+        if (!seen(global.line)) continue
+        for (const [value, colour] of [[read, "0 110 255"], [written, "255 50 0"]] as const) {
+            if (!value) continue
+            context.fillStyle = `rgb(${colour} / ${value * 45}%)`
+            context.fillRect(0, PADDING + global.line * LINE_HEIGHT - scroll.top, canvas.width, LINE_HEIGHT)
+        }
     }
     if (!memory) return
     context.font = FONT
@@ -66,7 +75,8 @@ function drawHeat(canvas: HTMLCanvasElement | null, lines: Float32Array | null, 
 export interface BackHandle {
     // Colour the lines of the card's WebAssembly text by how much each is running, and the bytes of
     // its data by how much they're read and written (null to stop).
-    showHeat: (heat: Float32Array | null, memory?: MemoryTrace) => void
+    // (And its globals, by how much the lines that read and write them are running.)
+    showHeat: (heat: Float32Array | null, memory?: MemoryTrace, globals?: GlobalUse[]) => void
 }
 
 // The back of a card: what the card itself holds, as WebAssembly text. It's only for reading (with
@@ -84,14 +94,15 @@ export const CardBack = forwardRef<BackHandle, { binary: Uint8Array | null, acti
     const text = shown?.binary === binary ? shown!.text : ""
     const highlighted = useMemo(() => highlight(text, "Wasm"), [text])
     const heatCanvas = useRef<HTMLCanvasElement>(null)
-    const heat = useRef<Float32Array | null>(null), memory = useRef<MemoryTrace | null>(null)
+    const heat = useRef<Float32Array | null>(null), memory = useRef<MemoryTrace | null>(null), globals = useRef<GlobalUse[]>([])
     const pre = useRef<HTMLPreElement>(null)
-    const draw = () => drawHeat(heatCanvas.current, heat.current, memory.current, shown?.binary === binary ? shown!.data : [], { left: pre.current?.scrollLeft ?? 0, top: pre.current?.scrollTop ?? 0 })
+    const draw = () => drawHeat(heatCanvas.current, heat.current, memory.current, globals.current, shown?.binary === binary ? shown!.data : [], { left: pre.current?.scrollLeft ?? 0, top: pre.current?.scrollTop ?? 0 })
     useEffect(draw, [text, active])
     useImperativeHandle(ref, () => ({
-        showHeat: (lines, touched) => {
+        showHeat: (lines, touched, used) => {
             heat.current = lines
             memory.current = touched ?? null
+            globals.current = used ?? []
             draw()
         },
     }))
