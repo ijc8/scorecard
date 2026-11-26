@@ -9,6 +9,7 @@ import { initDebug, dlog, DEBUG } from "./debug"
 import { audioDebugSnapshot, onStall, sendToWorklet, setWorkletMessageHandler, startAudio } from "./audio"
 import { NO_TITLE, cardURL, extractTitle, generateSeed, parseCardURL } from "./card"
 import { tracer } from "./trace"
+import { readQR } from "./qrReader"
 import { Tab } from "./tabs"
 import { Listen } from "./Listen"
 import { Scan } from "./Scan"
@@ -183,12 +184,15 @@ function App() {
         return true
     }
 
+    const onScanRef = useRef(onScan)
+    onScanRef.current = onScan
+
     useEffect(() => {
         onScan(window.location.href)
     }, [])
 
     useEffect(() => {
-        // Support drag-and-dropping .wasm files.
+        // Support drag-and-dropping .wasm files (or images of cards).
         let target: EventTarget | null = null
 
         const drop = async (e: DragEvent) => {
@@ -197,6 +201,13 @@ function App() {
             setDragging(false)
 
             const file = e.dataTransfer!.files[0]
+            if (!file) return
+            if (file.type.startsWith("image/")) {
+                // A picture of a card: read its QR code.
+                const text = await readQR(file).catch(() => undefined)
+                if (text) onScanRef.current(text)
+                return
+            }
             const arrayBuffer = await file.arrayBuffer()
             loadBinaryRef.current(new Uint8Array(arrayBuffer))
             return false

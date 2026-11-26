@@ -21,9 +21,9 @@ Web app (Vite + React + TypeScript):
 
 There is **no test suite**. Verify changes by building and by playing a card in a browser.
 
-Fastest dev loop: `npm run dev`, then drag a `.wasm` from `examples/` onto the page. Scan, Create
-and drag-and-drop all go through the same `loadBinary` path. To make a card URL from a `.wasm`,
-base43-encode it (`base43.py`) into `?c=…`.
+Fastest dev loop: `npm run dev`, then drag a `.wasm` from `examples/` onto the page (a picture of
+a card works too). Scan, Create and drag-and-drop all go through the same `loadBinary` path. To
+make a card URL from a `.wasm`, base43-encode it (`base43.py`) into `?c=…`.
 
 C examples (`examples/`):
 - `./build.sh foo.c`: emscripten (`-Oz`, no entry, only `_process` exported), then `strip.sh`.
@@ -74,6 +74,10 @@ that fallback in `extractTitle` (`src/card.ts`) and in `public/worklet.js`.
 - `src/base43Encoder.ts` (mirrored by `base43.py`): base43 over the QR alphanumeric set minus `%`
   and space, so the binary shares the QR's dense alphanumeric mode with the URL and stays valid in
   a query string.
+- `src/qrReader.ts`: QR decoding for the Scan tab (live camera frames, photos, dropped images)
+  using `zxing-wasm`, loaded lazily. Score cards are very dense codes, and it reads them far better
+  than the pure-JS decoders. `Scan.tsx` decodes the whole camera frame at full resolution, not just
+  what the viewfinder shows.
 - `src/wasmTracer.ts`: the bullseye toggle reassembles the binary with a `scorecard.log(i32)`
   import at basic-block boundaries; the worklet posts counts back and the Listen tab draws a
   heatmap over a bit-grid of the binary.
