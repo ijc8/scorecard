@@ -1,135 +1,224 @@
 # Handoff
 
-State of the branch `claude/scorecard-library-n3huaj` at the end of a long session (19 commits on
-top of `3b5eb2a`, not merged, no pull request opened). `AGENTS.md` describes how the code works;
-this file is about what was done, what has and hasn't been checked, and what to do next.
+State of the branch `claude/brave-wilson-b37a5f` on 2026-11-26: 75 commits on top of `origin/main`
+(`3b5eb2a`), through `d9324cf` (the contract draft). It is pushed to GitHub as a branch only.
+Nothing is merged or deployed, and there is no pull request. `AGENTS.md` describes how the code
+works; `docs/CONTRACT.md` drafts what main would hold; this file is about what was done, what has
+and hasn't been checked, and what to do next.
+
+(Until 11-23 this work lived on `claude/scorecard-library-n3huaj`, 19 commits; this branch carries
+those and everything since.)
 
 ## The one thing to know first
 
-**Nothing on this branch has run on a real phone, and none of the music has been heard by the
-agent that wrote it.** Everything was built and checked in headless desktop Chromium, and the
-cards were checked by measurement (levels, note lists, spectra). Ian listened to the first,
-transcribed version of Return True ("not bad") and to nothing else that is recorded here.
+**Testing is uneven, and the newest work has only run headless.**
 
-So the first job is a pass on real devices, iOS Safari above all, with the branch served over
-https (AudioWorklet, the camera and the microphone all need a secure context).
+- Ian has been using the pile-only build on his phone and laptop (as of 11-26) and has reacted to
+  it (see decisions below). Earlier parts were tried on devices: tracing in the worklet and the
+  guard against stuck cards were verified on the iPad and the Pixel on 11-24, generated and packed
+  cards play on the iPad, and the ZXing scanner was used on devices.
+- Everything from the last two nights (11-25/26 and 11-26/27, roughly `d9255d1` onwards: view
+  buttons, tracing carry-over, scrolling score, globals in tracing, play counts, BLE print, the
+  new cards, the spread round 2 mock-ups) was checked in **headless WebKit only**, mostly as still
+  frames. None of it has been on a phone.
+- The agents that wrote the cards have not heard any of them. Cards were checked by measurement
+  and simulation.
+- The demo (systemd unit `scorecard-demo`, serving `dist/` on :4917, reachable over the tailnet on
+  port 8443) is built with listening cards on: `VITE_LISTENING_CARDS=1 npm run build`, then the
+  kit's `pages.sh` to regenerate `dist/qr.html`, `dist/links.html` and `dist/spread.html`.
+
+## Where main stands
+
+Ian (11-25): main should reflect the accepted, finalised ScoreCard contract and match what is
+deployed on his website. So nothing merges until it is ready to deploy, and this branch is the
+workshop. The plan is to cut a release-candidate branch from it with the unsettled parts switched
+off; merging that is the deploy. The branch can't usefully be merged in pieces: later commits
+rewrite or delete earlier ones (the pile replaced four other looks).
 
 ## What the branch adds
 
-Roughly in the order it was built:
+### From the first stretch (to 11-23)
 
 - **Starter cards**: eight cards in `examples/library/`, built into `src/library.json`, plus DSP
-  helpers in `examples/deck.h` (sine approximation, filters, delay, soft clip, plucked string,
-  a small PRNG).
-- **Deck**: collected cards and saved seeds in localStorage, shown as a pile of cards beside the
-  player (a drawer on narrow screens). Sealed packs, with import and export as JSON files.
-- **Scanner**: a plain viewfinder decoding full camera frames with `zxing-wasm`; photos and dropped
-  images too. Chosen with `scripts/scanbench` (synthetic frames only so far).
-- **Tracing**: memory reads and writes as well as execution; a band for memory outside the card's
-  data; on the source side, heat on the lines of WebAssembly text.
-- **Card faces**: the big card flips between QR, bits and source. Icon tabs. A Settings tab
-  (volume, collecting, animations, stay awake, echo cancellation, fresh starter pack, empty deck).
-- **Writing cards in the player**, on the source face:
-  - C, compiled in the browser by `@yowasp/clang` and `binaryen` (no Emscripten);
-  - Beat: a bytebeat expression, straight to WebAssembly;
-  - Pattern: a subset of Tidal/Strudel mini-notation, as data for a prebuilt player;
-  - Wasm: the card's disassembly, editable.
-  Play on the source face rebuilds first if the text has changed.
-- **Links**: `SCHEME://HOST/path#[seed]program`, capitals for scheme and host. Old `?c=&s=` links
-  still load. This was done with a move to `scr.cards` in mind.
-- **Input cards**: a `p` that takes an `f32` gets the microphone. `examples/canyon.c` is one.
-- **Converters**: `scripts/song2card.py` (recording to card, by transcription) and
-  `scripts/als2card.py` (Ableton set to card, exact). `examples/return-true.c` is the latter's
-  output for Ian's "Return True": all 1,458 MIDI notes, 2,862 bytes.
-- **Housekeeping**: `App.tsx` split into modules, `npm run lint`, `print.py` on the new link form.
+  helpers in `examples/deck.h`.
+- **Scanner**: full-frame `zxing-wasm` viewfinder; photos and dropped images too. Ian: "a major
+  improvement" over main's.
+- **Tracing**: memory reads and writes as well as execution, now instrumented in the worklet (the
+  tracer is a second worklet module, loaded when first wanted).
+- **Writing cards in the player**: C (in-browser `@yowasp/clang` and `binaryen`), Beat (bytebeat),
+  Pattern (a subset of Tidal/Strudel mini-notation) and Wasm.
+- **Input cards**: a `p` that takes an `f32` gets the microphone. Now off unless the build sets
+  `VITE_LISTENING_CARDS=1`.
+- **Converters**: `scripts/song2card.py` and `scripts/als2card.py`; `examples/return-true.c` is the
+  latter's output for Ian's "Return True".
+- **Skip and seek**: tap to skip 10 s, hold to fast-forward, tap the clock to go to a time (going
+  back restarts with the same seed and renders up to it).
+- **Lock-screen controls** (Media Session), and a locked seed saved with the card.
+- **Gas metering guard** against stuck cards, on by default; a card with nothing to play is refused.
+- **Cards that generate cards**: setup may return the address of another card (a length, then the
+  bytes), which is played in its place. Setup is tried in a worker with 3 s; no limit on rounds.
+  `scripts/pack-card.mjs` packs a card with its own 408-byte context-mixing unpacker (Pink
+  Trombone packs to 2,792 bytes). `examples/seed-beat.c` writes a different program per seed.
+- **Pink Trombone** card: a vocal tract that sings by itself.
+- **Printing**: render as printed (576 dots), save or share the picture, or send it to a Bluetooth
+  thermal printer over Web Serial (desktop Chrome).
+
+### The pile (11-24 to 11-25)
+
+- **The pile is the only look**; drawer, rolodex, printed and classic looks are gone. Flick the top
+  card aside for the next; dragging right draws the bottom card in from the left and lays it on top
+  (the reverse of flicking left). Scan, Create, Settings and About are tabbed cards at the back; the
+  headphones tab returns to the music, or spreads the pile when already there.
+- **Spread**: tapping the pile spreads it; the top card is dealt first and every card gathers back.
+  On long decks (tried with 36 and 120) it opens at the current card.
+- **Workbench**: Create is its own card, with the editor where the QR code goes and the language as
+  a menu.
+- **Card back**: read-only WebAssembly text with Save picture (and Print where available) under it.
+- **Link test page** `/links.html` (from `scripts/link-test-page.mjs`): the same cards as `#` and as
+  `?c=` links, for testing phone cameras.
+- **Three more cards** in `examples/`, not in the starter pack: Changes (Plain Bob on six to eight
+  bells, 1,100 bytes), and two listening cards, Sitting in a Card (after Lucier, 385 bytes) and
+  Fireflies (phones that fall into time by ear, 849 bytes).
+
+### The last two nights (11-25/26 and 11-26/27)
+
+- **Links back to `?c=`**: QR codes and the address bar use `?c=` again; `#` links are still read,
+  and `VITE_FRAGMENT_LINKS=1` draws the new form. Back and forward step through the cards loaded.
+- **Fast-forward** is heard as snatches at the card's own pitch (like a CD player searching); the
+  icon stays put.
+- **Settings pruned**: starter-pack and empty-deck buttons moved to the spread; the speed test is
+  behind `?debug`.
+- **View buttons**: four buttons at the card's bottom right choose QR code, bits, score or text.
+  The "over" arrow, the bullseye tracing toggle and the separate score button are gone. QR and
+  bits share a side and keep the encode/decode animation; every other change turns the card over.
+  The chosen view stays as you flick between cards.
+- **Tracing without restarts**: tracing is on exactly while bits or text show. Switching copies the
+  playing card's memory and globals into the newly instrumented module (`{cmd:"instrument"}` in
+  the worklet; `scripts/carry-check.ts`), so the card carries on with no catch-up, sample for
+  sample the same on every card tried. **Exception:** with the guard off, the very first switch
+  still restarts and catches up, because the tracer wasn't loaded to export the card's state.
+- **Scrolling score** (`src/Score.tsx`, `src/score.ts`, `src/score.worker.ts`): a spectrogram of
+  the performance to come, computed ahead, about 12 s across with the now-line a third of the way
+  in. Tap to go to that moment. It keeps up through fast-forward, skip and seek. Listening cards
+  can't be read ahead.
+- **Data and globals in tracing**: on the card's back, data bytes are tinted blue when read and
+  red when written; globals light up the same way in the bits and the text. Globals are derived
+  from which code runs (block counts), so they cost the card nothing.
+- **Play counts**: deck cards record performances started and time listened, on this device, kept
+  with the deck and not put in packs. Nothing shows them yet.
+- **BLE print (experimental, untested)**: where there's no Web Serial (Chrome on Android), Print
+  tries Bluetooth LE (`printOverBLE` in `src/print.ts`). Written blind: the printer's BLE services
+  are guesses from similar printers. If it fails, the status line lists what the printer offers.
+  iOS Safari has neither, so there it stays Save picture.
+- **Spread mock-ups, round 2** at `/spread.html` on the demo (generated by the kit's
+  `spread-mockups.ts` via `pages.sh`): three card-box variants on top, round 1 (A to E) below. C1
+  lifts one card out to show its picture and counts; C2 adds a small sound picture on every edge;
+  C3 makes the edge itself a band of the card's sound. **The suggestion is C2.** The real spread is
+  unchanged.
+- **Contract draft**, `docs/CONTRACT.md`: the card's exports, what a player owes a card, the `?c=`
+  link, and cards that write cards, each marked on main, proposed or open. Listening cards and `#`
+  links are outside it. The version question has three options laid out.
 
 ## What was checked, and how
 
-- Each feature was exercised in headless Chromium with Playwright. The scripts that survive are in
-  `scripts/browser-checks/` (ad hoc; read its README). Others were throwaway.
-- Tracing does not change a card's output: instrumented and plain builds of all eight starter
-  cards gave identical samples for five seconds.
-- Return True plays exactly the notes in the set (a native build logs every note; compared with
-  the parsed set). Four notes have their lengths rounded.
-- The bytebeat compiler matches JavaScript's result sample for sample on eight expressions.
-- Input cards: with Chromium's fake microphone, samples reach the card, and the microphone is
-  held only while such a card is playing.
-- Old-form links, new-form links, locked seeds and fragment-only navigation all load.
+- Each feature was exercised in headless browsers with Playwright (Chromium early on, WebKit for
+  the pile work), at phone and desktop widths (360, 390, 1100 px). Surviving scripts are in
+  `scripts/browser-checks/`; the latest night's checks (`check-*.cjs`: swipe, score, views, carry,
+  heat, globals, links, big decks) live in the shared `scorecard-kit/` notes folder, not the repo.
+- Repo checks: `npx tsc`, `npm run lint`, `npx tsx scripts/watr-check.ts`, `scripts/gas-check.ts`,
+  `scripts/qr-decode-check.ts`, `scripts/carry-check.ts`. Reported passing at `d9324cf`.
+- Tracing does not change a card's output; carried-over cards match the untraced run sample for
+  sample.
+- The packer verifies its round trip; packed cards load, play and trace in the player.
+- Changes: the first lead matches real Plain Bob Minor and it returns to rounds correctly.
+- Sitting in a Card and Fireflies were checked in simulation only (a simulated room; phones
+  hearing each other 120 ms late synced within 30 to 60 ms in under half a minute).
 
 ## What was not checked
 
-- **iOS anything.** Specific worries:
-  - Play on the source face awaits a build between the tap and the sound. `startAudio()` is
-    still called synchronously in the tap, as `docs/IOS-PLAYBACK.md` requires, but the path is new.
-  - Input cards switch the audio session to play-and-record. On iPhones that can change output
-    routing and volume. Whether echo cancellation really stops speaker-to-microphone feedback for
-    Web Audio output is unknown; it is on by default, and headphones are the safe way to try it.
-  - Whether camera apps open `HTTPS://HOST/#…` links, and whether iOS's long-URL truncation
-    behaves the same with a fragment. Check before printing cards in the new form.
-  - The scanner on a real camera, with printed cards. Near-maximum cards (QR version 40) were
-    never in the benchmark; Return True now is one.
-  - Tracing's cost on a phone (it calls out to JavaScript on every memory access).
-- **How anything sounds**: the starter cards, the pattern mode's built-in sounds, canyon, and
-  Return True in its final form with the real drum pattern.
-- **`print.py`**: its link form was changed without a printer to try it on.
-- The volume setting by ear; the wake lock on a device; animations other than as still frames.
-- A real network download of the compiler (27 MB gzipped) and its progress readout.
+- **Anything from the last two nights on a real device** (list above).
+- **How anything sounds**, to the agents: no card has been listened to by an agent.
+- **BLE printing** against the real printer (an M02 Pro; framework's `bluetoothctl` only knows its
+  serial profile).
+- **Lock-screen controls on Android**: still don't appear. `?debug` lines for the silent audio
+  element are in; it needs a run with the Pixel awake.
+- **`#` links with the iPad camera**: the camera dropped the fragment once; `/links.html` is
+  waiting for that test.
+- Listening cards in a real room; echo cancellation and iOS audio-session routing with them.
+- A real network download of the C compiler (about 27 MB gzipped, about 100 MB uncompressed).
+- `print.py` on a printer since its link form changed.
 
-## Things that will surprise you
+## Known rough edges
 
-- **The build is about 115 MB**, nearly all of it the C compiler's two files (74 MB and 30 MB),
-  fetched only on the first compile. Check the host's per-file limit before deploying.
-- **The build target is ES2022** (binaryen needs top-level await): roughly Safari 15 and later.
-- **Return True has 37 bytes to spare** at `ijc8.me/s` (2,857 bytes with Emscripten 7.0.1, in the
-  container described in AGENTS.md; this branch's first build was 2,862 with an unknown version). Changing `deck.h` or the converter's
-  player code can push it over; rebuild and check.
-- **`src/library.json` is generated and committed.** After touching a starter card or `deck.h`,
-  run `examples/library/build.sh` (needs Emscripten and binaryen). The in-browser compiler does
-  not need it, and gives sizes within a few percent of Emscripten's.
-- **Toggling tracing while a card plays restarts the card** (same seed), because the
-  instrumented module only takes hold on a reset.
-- **C mode's first build is a 27 MB download** (104 MB if the server doesn't compress, as `vite
-  preview` doesn't). Pattern and Bytebeat don't need it.
-- The Ableton drum loops used to read Return True's drum pattern are Ableton's and are not in
-  the repository; only the hit patterns are, as options in the command below.
-
-To regenerate Return True (the set file is Ian's and is not in the repository either):
-
-    python3 scripts/als2card.py Return_True.als "Return True" \
-        --loop 0x40504040405,0x3000409010104090,0x555555545555 \
-        --loop-bars 3-12,19-28,35-44,47-79 --shaker-bars 4-44 > examples/return-true.c
-    examples/build.sh examples/return-true.c
+- Seeking (clock or score) does nothing before the first Play, since the worklet isn't running.
+- The guard-off first-switch exception above.
+- In a long spread, lower rows slightly overlap the saved-seed labels of the row above; the first
+  120-card spread took about a second to open headless.
+- `scripts/watr-check.ts` can't take packed cards ("p is not a function").
+- `src/library.json` is generated and committed; after touching a starter card or `deck.h`, run
+  `examples/library/build.sh` (needs Emscripten and binaryen).
+- The build is large (about 115 MB, nearly all the C compiler, fetched only on first compile) and
+  targets ES2022 (roughly Safari 15 and later).
 
 ## Decisions Ian made along the way
 
-- No compression of programs in links: it would let cards lean on deflate instead of being
-  clever. Base43 stays.
-- Fine with serving tens of megabytes for the compiler.
-- The deck is not a tab; it should not look like a desktop window; cards in it should look like
-  the big card.
-- The program goes after `#`. Noted in passing: that means the server no longer sees which cards
-  are opened, and the app reports nothing.
-- `scr.cards` is bought and unused; the link form was designed so it costs nothing extra.
+- No compression of programs in links; Base43 stays. Fine with serving tens of MB for the compiler.
+- The deck is not a tab or a desktop window; the pile is the direction.
+- The generated-card ABI (setup returns a card) over a separate `g` export.
+- Hold off on `#` links (considered separately; affects server-side logging). Draw `?c=`.
+- Leave listening cards out for the moment.
+- Not worried about old players.
+- Consolidate view switches into one button group; flip for every change except QR and bits, which
+  share a side for the decode animation.
+- Tracing should carry the card over (a checkpoint) instead of restarting and catching up, which
+  had been surprising him in practice.
+- Main = accepted contract = what's deployed.
+
+His reactions to the pile build (11-26): likes the flipping, swiping and tab animations, the
+scanner, skip ahead, and cards that generate cards. Not yet satisfied with the spread, deck and
+packs: too much repetition on each mini card (wordmark and controls), mini QR codes of doubtful
+use, and missing information (date scanned, a hash to tell same-named cards apart). Thinks
+Settings has more than it needs. Would like printing from a mobile browser.
+
+## Waiting on Ian
+
+1. **Spread direction**: pick from `/spread.html` (round 2 C1 to C3, or round 1 A and D, which he
+   was tempted by for the spectrograms). C2 is the suggestion.
+2. **The contract draft**: accept, change or throw out `docs/CONTRACT.md`; in particular the
+   limits on generated cards (rounds, memory, whether 3 s is contract or one player's patience)
+   and whether a card declares a version (one option: in the link's path, such as `/s/2?c=`).
+3. **BLE print test on the Pixel**: open a card's text view, press Print, report the status line.
+4. **Where Save picture and Print should live** (now under the disassembly; options: the card's
+   front, or the spread beside "Wrap as a pack").
+5. **iPad camera test** of `/links.html`, and the Pixel `?debug` run for lock-screen controls.
+6. **C compiler hosting** for a deploy, and what goes into the first release candidate.
 
 ## Next steps, in the order I would take them
 
-1. Serve the branch over https somewhere and test on phones (list above).
-2. Listen to everything; fix what sounds wrong. For Return True the instruments are four
-   plain synth voices and the drums have no dynamics.
-3. Open a pull request, or split the branch if 19 commits is too much to review at once.
-4. Decide on deploying to `scr.cards`.
+1. Once the spread is picked: build it for real, showing date scanned, a short hash, and the play
+   counts already being collected.
+2. A device pass on the demo (iPad and Pixel) over the last two nights' work.
+3. Settle the contract; then cut a release candidate with listening cards, `#` drawing and
+   probably C mode off, and deploy it by merging to main.
+4. Fix the guard-off first-switch restart and seeking before the first Play.
 
-Ideas raised and not started: printable sheets of cards from the deck; a pack as a link;
-recording a card to a WAV; synchronised starts (clocks alone are too loose for rhythmic cards;
-Ian's own earlier idea was ultrasound); chaining input cards; a companion symbol or colour layer
-carrying extra data that only the player's scanner reads; album art in the QR; mapping trace
-heat back to C lines (needs debug info); more languages (Faust was named in the papers).
+Ideas raised and not started: printable sheets of cards; a pack as a link; recording a card to
+WAV; synchronised starts; chaining input cards; a live (not read-ahead) spectrogram for listening
+cards; mapping trace heat back to C lines; more languages (Faust); more ideas for listening cards
+in `docs/INPUT-IDEAS.md`.
+
+## Sibling branches
+
+`impressive-fable` (5 commits) and `impressive-opus` (8 commits) also branch from `3b5eb2a` and are
+pushed. They are separate card-making experiments (scat radio, choir, acid, guitar and radio
+cards, with build and verification tools). The packed Scat Radio card in `examples/packed/` here
+comes from `impressive-fable`'s `cards/scat-radio.c`. Neither branch is merged into this one, and
+the session transcripts for this branch don't say more about how they relate.
 
 ## Elsewhere
 
-- A private page of links to the starter cards and Return True, in old-form links that work on
-  the currently deployed player: https://claude.ai/artifact/B45Mny6B3SDCZKCoSnGrkN
-- A private copy of an early build, published to try on a phone (camera blocked there, and now
-  many commits stale): https://claude.ai/artifact/YJuPhugx9NnV9DRoUfdeHQ
-- The JAES and WAC papers' future-work sections were read during the session; the list of ideas
-  above includes what remains from them.
+- Per-night hand-over notes with more detail are in Ian's shared side-session notes folder:
+  `scorecard-handover-2026-11-24-night.md`, `-2026-11-25-overnight.md` and
+  `-2026-11-26-overnight.md`. The test kit, `scorecard-kit/`, is beside them.
+- `docs/CARD-DESIGN.md` (the pile, with open questions) and `docs/INPUT-IDEAS.md` (fourteen ideas
+  for cards that listen).
