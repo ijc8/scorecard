@@ -1,51 +1,19 @@
-import { RefObject, memo, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import QRCode from "qrcode"
-import { encodeBlob, decodeBlob, encode, decode } from "./base43Encoder"
-import Play from "pixelarticons/svg/play.svg?react"
-import Pause from "pixelarticons/svg/pause.svg?react"
-import Prev from "pixelarticons/svg/prev.svg?react"
-import Clock from "pixelarticons/svg/clock.svg?react"
-import Dice from "pixelarticons/svg/dice.svg?react"
-import CloseBox from "pixelarticons/svg/close-box.svg?react"
-import Downasaur from "pixelarticons/svg/downasaur.svg?react"
-import Flatten from "pixelarticons/svg/flatten.svg?react"
-// Alternative icon for "TOO BIG":
-// import Loader from "pixelarticons/svg/loader.svg?react"
-import Alert from "pixelarticons/svg/alert.svg?react"
-import Subscriptions from "pixelarticons/svg/subscriptions.svg?react"
-import Camera from "pixelarticons/svg/camera.svg?react"
-import EditBox from "pixelarticons/svg/edit-box.svg?react"
-import DragAndDrop from "pixelarticons/svg/drag-and-drop.svg?react"
-import Bullseye from "pixelarticons/svg/bullseye.svg?react"
-import BullseyeArrow from "pixelarticons/svg/bullseye-arrow.svg?react"
-import { Html5QrcodePlugin } from "./Html5QrcodePlugin"
+import { encodeBlob } from "./base43Encoder"
 import logoUrl from "./assets/logo.png"
-import exampleCardUrl from "./assets/example-card.png"
-import { TraceMap, instrumentWasm } from "./wasmTracer"
+import { instrumentWasm } from "./wasmTracer"
 import { getWabt } from './lazyWabt'
 import { initDebug, dlog, DEBUG } from "./debug"
-import { audioDebugSnapshot, audioHealthy, onStall, sendToWorklet, setWorkletMessageHandler, startAudio } from "./audio"
-
-function generateSeed() {
-    return Math.floor(Math.random() * Math.pow(2, 32))
-}
-
-function formatSeed(seed: number) {
-    return seed.toString(16).padStart(8, "0")
-}
-
-function formatTime(seconds: number) {
-    seconds = Math.floor(seconds)
-    let minutes = Math.floor(seconds / 60)
-    seconds -= minutes * 60
-    const hours = Math.floor(minutes / 60)
-    if (hours === 0) {
-        return `${minutes}:${seconds.toString().padStart(2, "0")}`
-    }
-    minutes -= hours * 60
-    return `${hours}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
-}
+import { audioDebugSnapshot, onStall, sendToWorklet, setWorkletMessageHandler, startAudio } from "./audio"
+import { NO_TITLE, cardURL, extractTitle, generateSeed, parseCardURL } from "./card"
+import { tracer } from "./trace"
+import { Tab } from "./tabs"
+import { Listen } from "./Listen"
+import { Scan } from "./Scan"
+import { Create } from "./Create"
+import { About } from "./About"
 
 initDebug(audioDebugSnapshot)
 
@@ -67,283 +35,6 @@ initDebug(audioDebugSnapshot)
 //     console.log("process:", end - start, "ms", (end - start) / 1000, "frac", 1000 / (end - start), "mult")
 // }
 
-function SeedInput({ seed, setSeed }: any) {
-    const [contents, setContents] = useState("")
-    useEffect(() => {
-        setContents(formatSeed(seed))
-    }, [seed])
-
-    const submit = () => {
-        if (/^[0-9A-Fa-f]+$/.test(contents) && contents.length <= 8) {
-            setSeed(parseInt(contents, 16))
-        } else {
-            setContents(formatSeed(seed))
-        }
-    }
-
-    return <input type="text" value={contents} style={{
-            border: "none",
-            display: "inline-block",
-            fontFamily: "inherit",
-            fontSize: "inherit",
-            padding: "none",
-            width: "4.6em",
-            verticalAlign: "middle",
-            textAlign: "left",
-        }}
-        onChange={e => setContents(e.target.value)}
-        onKeyUp={e => {
-            if (e.key === "Enter") {
-                submit()
-                ;(e.target as HTMLElement).blur()
-            }
-        }}
-        onBlur={submit}
-    />
-}
-
-// TODO: Specify types
-function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, setTracing }: {
-    qrCanvas: RefObject<HTMLCanvasElement>, title: string, size: number, seed: number, setSeed: (s: number) => void, seedLock: boolean,
-    setSeedLock: (l: boolean) => void, state: any, setState: any, time: number, reset: any, error: any, buffer: Uint8Array | null,
-    tracing: boolean, setTracing: (t: boolean) => void,
-}) {
-    const bigIconStyle = { height: "10cqw", verticalAlign: "middle" }
-    const smallIconStyle = { height: "5cqw", flexShrink: 0, verticalAlign: "middle" }
-    const inlineIconStyle = { height: "11cqh", verticalAlign: "bottom" }
-    const DiceIcon = seedLock ? CloseBox : Dice
-    const showMessage = error || (size === 0)
-    // Hacking around unwanted input latency and duplicate events... ugh.
-    // We take some pains here so that reset and play/pause respond as quickly as possible,
-    // so that a score card can be started in sync with others or "played" rhythmically.
-    const events = useRef<any>({})
-    const touchStartReset = () => {
-        events.current.reset = true
-        reset()
-    }
-    const mouseReset = () => {
-        if (events.current.reset) return
-        reset()
-    }
-    const touchStartToggle = () => {
-        dlog("touchstart toggle", state, audioHealthy())
-        if (state !== "playing" && !audioHealthy()) {
-            // Hack within a hack... when play needs to (re)start audio, we need to handle it in
-            // `onMouseDown`: iOS doesn't count touchstart as a user gesture for starting audio.
-            return
-        }
-        events.current.toggle = true
-        togglePlay()
-    }
-    const mouseToggle = () => {
-        dlog("mousedown toggle", "skip=" + !!events.current.toggle)
-        if (events.current.toggle) return
-        togglePlay()
-    }
-
-    // Determine initial playback delay:
-    // if (t === 0 && state === "playing") {
-    //     t = performance.now()
-    // } else if (s === 0 && time > 1) {
-    //     s = performance.now()
-    //     console.log((s - t) / 1000)
-    // }
-
-    const traceCanvas = useRef<HTMLCanvasElement | null>(null)
-    const draw = () => {
-        if (trace && !tracing) trace.logs.length = 0
-        if (!tracing || !traceCanvas.current || !binary) return
-        const canvas = traceCanvas.current
-        const context = canvas.getContext("2d")!
-        // Arrange bits in a square
-        const size = Math.ceil(Math.sqrt(binary.length * 8))
-        canvas.width = size
-        canvas.height = size
-        const image = new ImageData(canvas.width, canvas.height)
-        for (let i = 0; i < size * size; i++) {
-            if (i < binary.length * 8) {
-                const byte = Math.floor(i / 8)
-                const bit = i % 8
-                if ((binary[byte] >> bit) & 1) {
-                    image.data[i*4] = 204
-                    image.data[i*4+1] = 204
-                    image.data[i*4+2] = 255
-                    image.data[i*4+3] = 255
-                }
-            }
-            // Byte version (one pixel per byte, instead of per bit):
-            // if (i < buffer.length) {
-            //     // image.data[i*4] = 204
-            //     // image.data[i*4+1] = 204
-            //     // image.data[i*4+2] = 255
-            //     image.data[i*4+3] = buffer[i]
-            // }
-        }
-        context.putImageData(image, 0, 0)
-        if (trace && state === "playing") {
-            const max = Math.max(...Object.values(trace.logs))
-            trace.logs.forEach((count, id) => {
-                const startByte = trace!.map[id].start.offset
-                const endByte = trace!.map[id].end.offset
-                for (let i = startByte * 8; i < endByte * 8; i++) {
-                    // TODO: fewer calls to `fillRect`
-                    const x = i % canvas.width
-                    const y = Math.floor(i / canvas.width)
-                    context.fillStyle = `rgba(0 255 0 / ${count / max * 40}%)`
-                    context.fillRect(x, y, 1, 1)
-                }
-            })
-        }
-    }
-
-    handleTraceLogs = (traceLogs: number[]) => {
-        if (trace === null || !trace.map[traceLogs.length - 1]) return
-        const oldTraceLogs = trace.logs
-        trace.logs = traceLogs
-        // We use `forEach` because it skips empty slots, unlike other methods.
-        oldTraceLogs.forEach((count, id) => {
-            trace!.logs[id] = Math.max(trace!.logs[id] ?? 0, count * 0.6)
-        })
-        // TODO: Highlight lines of WAT in Create tab.
-        // trace.logs.forEach((count, id) => {
-        //     for (let line = trace!.map[id].start.line; line < trace!.map[id].end.line; line++) {
-        //         newCounts[line] = count
-        //     }
-        // })
-        draw()
-    }
-
-    useEffect(draw, [tracing, binary])
-
-    const togglePlay = () => { setState(state === "playing" ? "paused" : "playing") }
-    const TraceIcon = tracing ? BullseyeArrow : Bullseye
-    return <div>
-        <div style={{ position: "relative" }}>
-            {showMessage && <div style={{ position: "absolute", fontSize: "48px", height: "100%", width: "100%", userSelect: "none" }}>
-                <div style={{ border: "16px solid black", height: "100%", containerType: "size", lineHeight: 1, display: "flex", flexDirection: "column", justifyContent: "space-evenly" }}>
-                    {error ? <>
-                        <div><span style={{ fontSize: "21cqh", verticalAlign: "top" }}>TOO BIG</span> <Subscriptions style={{ height: "21cqh" }} /></div>
-                        <div><span style={{ fontSize: "12.5cqh", verticalAlign: "top" }}>Can't encode!</span> <Downasaur style={{ height: "12.5cqh" }} /></div>
-                        <div><span style={{ fontSize: "11.8cqh", verticalAlign: "top" }}>Shrink binary.</span> <Flatten style={{ height: "12.5cqh" }} /></div>
-                    </> : <>
-                        <div><span style={{ fontSize: "23cqh" }}>No card!</span></div>
-                        <div><span style={{ fontSize: "11cqh" }}>Scan <Camera style={inlineIconStyle} />, create <EditBox style={inlineIconStyle} />, or drag & drop <DragAndDrop style={inlineIconStyle} />.</span></div>
-                    </>}
-                </div>
-            </div>}
-            <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", display: tracing ? "none" : "block", visibility: showMessage ? "hidden" : "inherit", width: "100%" }} width="1" height="1"></canvas>
-            <canvas ref={traceCanvas} style={{ imageRendering: "pixelated", display: tracing ? "block" : "none", visibility: showMessage ? "hidden" : "inherit", width: "100%" }} width="1" height="1"></canvas>
-        </div>
-        <h2 style={{ userSelect: "none", margin: "20px", fontSize: "6cqw" }}>{title} | {size} bytes {/* TODO: add link and perhaps download buttons with icons */}</h2>
-        <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", fontSize: "5cqw" }}>
-            <div style={{ userSelect: "none", display: "flex", alignItems: "center", width: "4em", justifyContent: "right" }}>
-                <Clock style={smallIconStyle} />
-                &nbsp;
-                <span style={{ verticalAlign: "middle", display: "inline-block" }}>{
-                    // sysfont has proportional digits ("1" is narrow, "4" wide); give each digit a
-                    // fixed cell so the colon and clock icon don't jitter while counting.
-                    [...formatTime(time)].map((c, i) => c === ":" ? c :
-                        <span key={i} style={{ display: "inline-block", width: "0.63em", textAlign: "center" }}>{c}</span>)
-                }</span>
-            </div>
-            <button onTouchStart={touchStartReset} onMouseDown={mouseReset} onMouseUp={() => { events.current.reset = false }} style={{ touchAction: "manipulation" }}><Prev style={bigIconStyle} /></button>
-            <button id="start" onTouchStart={touchStartToggle} onMouseDown={mouseToggle} onMouseUp={() => { events.current.toggle = false }}>{state === "playing" ? <Pause style={bigIconStyle} /> : <Play style={bigIconStyle} />}</button>
-            <div style={{ display: "flex", alignItems: "center", userSelect: "none" }}>
-                <button style={{ fontSize: 0 }}><DiceIcon style={smallIconStyle} onClick={() => setSeedLock(!seedLock)} /></button>
-                &nbsp;
-                <SeedInput {...{ seed, setSeed }} />
-            </div>
-            <button style={{ fontSize: 0, marginRight: "-5cqw" }} onClick={() => setTracing(!tracing)}>
-                <TraceIcon style={{ ...smallIconStyle }} />
-            </button>
-        </div>
-    </div>
-}
-
-function Scan({ onScan, tab }: any) {
-    const [error, setError] = useState("")
-    const qrCodeSuccessCallback = (data: string) => {
-        if (!onScan(data)) {
-            setError("Invalid ScoreCard")
-        }
-    }
-    useEffect(() => {
-        if (tab !== 1) {
-            // Reset error message on tab switch
-            setError("")
-        }
-    }, [tab])
-    return tab === 1 && <>
-        <Html5QrcodePlugin
-            fps={10}
-            qrbox={250}
-            disableFlip={false}
-            qrCodeSuccessCallback={qrCodeSuccessCallback}
-        />
-        <div style={{ fontSize: "6cqw", display: "flex", justifyContent: "center", alignItems: "center" }}>
-            {error && <Alert style={{ height: "6cqw" }} />}
-            &nbsp;
-            {error}
-        </div>
-    </>
-}
-
-const About = memo(function About({ setTab }: any) {
-    // TODO: Make this text fill the card on both desktop and mobile...
-    return <div id="about" style={{ textAlign: "left", padding: "0 12px", containerType: "size", height: "100%" }}>
-        <div style={{ fontSize: "4cqw" }}>
-            <span style={{ fontSize: "1.1em" }}>ScoreCard is a player for "score cards": QR codes containing tiny generative music programs.</span> A score card looks like this:
-            <img src={exampleCardUrl} style={{ display: "block", margin: "auto", padding: "12px" }} />
-            Each QR code contains a valid URL (linking to this web app, the score card player) and an entire audio-generating <a href="https://webassembly.org/">WebAssembly</a> program. Because the QR code contains the piece itself, even if the link breaks, the code can still be read and played back by an instance of the ScoreCard player hosted somewhere else, or by a player that runs outside of the browser.
-            <p>This also implies that piece must fit in a QR code, implying an max executable size of just 2,953 bytes (more like 2,900 bytes after encoding it in a URL).</p>
-            <p>To get started, <a href="#" onClick={() => setTab(1)} style={{ textDecoration: "underline" }}>Scan</a> a score card or <a href="#" onClick={() => setTab(2)} style={{ textDecoration: "underline" }}>Create</a> one. For more information, check out the <a href="https://github.com/ijc8/scorecard" style={{ textDecoration: "underline" }}>README</a>.</p>
-            <p style={{ marginBottom: 0 }}>Happy hacking & joyful jamming!<br />- ijc</p>
-        </div>
-    </div>
-})
-
-function Create({ binary, loadBinary, wat, setWAT, tab }: {
-    binary: Uint8Array | null, loadBinary: (b: Uint8Array) => void, wat: string, setWAT: (w: string) => void, tab: number
-}) {
-    const oldBinary = useRef(binary)
-    useEffect(() => {
-        if (tab !== 2 || !binary || binary === oldBinary.current) return
-        oldBinary.current = binary
-        console.log("disassembling")
-        getWabt().then(wabt => {
-            const disassembled = wabt.readWasm(binary, { readDebugNames: true })
-            disassembled.applyNames()
-            setWAT(disassembled.toText({ foldExprs: false, inlineExport: true }))
-        })
-    }, [binary, tab])
-
-    const assemble = async () => {
-        console.log("assembling", wat)
-        console.log("text size", wat.length)
-        const wabt = await getWabt()
-        // TODO: Show errors.
-        const result = wabt.parseWat("main.wasm", wat).toBinary({})
-        console.log(result.log)
-        loadBinary(result.buffer)
-    }
-
-    return <>
-        <textarea style={{ width: "100%", flexGrow: "1" }} value={wat} onChange={e => setWAT(e.target.value)}></textarea><br />
-        <button id="assemble" onClick={assemble}>Assemble!</button><br />
-    </>
-}
-
-const NO_TITLE = "untitled"
-
-interface TraceData {
-    binary: Uint8Array
-    map: TraceMap
-    logs: number[]
-}
-let trace: TraceData | null = null
-
-let handleTraceLogs: undefined | ((l: number[]) => void)
-
 // TODO: Integrate this view into the Create tab (and consider renaming the tab; maybe "Hack"?).
 // const Debug = memo(function Debug({ wat }: { wat: string }) {
 //     const [counts, setCounts] = useState<{ [key: number]: number }>({})
@@ -364,26 +55,6 @@ let handleTraceLogs: undefined | ((l: number[]) => void)
 //     </div>
 // })
 
-function extractTitle(module: WebAssembly.Module) {
-    const instance = new WebAssembly.Instance(module)
-    // Support new, short export name ("d") or legacy name ("title") for old cards.
-    // (In the future, "d" may contain additional metadata such as an artist name or description.)
-    const data = instance.exports.d ?? instance.exports.title
-    if (data === undefined) {
-        return
-    }
-    const startPtr: number = (data as WebAssembly.Global).value
-    // Support new, short export name ("m") or legacy name ("memory") for old cards.
-    const memory = (instance.exports.m ?? instance.exports.memory) as WebAssembly.Memory
-    const mem = memory.buffer
-    const heap = new Uint8Array(mem)
-    let endPtr = startPtr;
-    while (heap[endPtr] != 0 && endPtr < heap.length) endPtr++
-    const title = (new TextDecoder()).decode(new Uint8Array(mem, startPtr, endPtr - startPtr))
-    console.log("Loaded title", title, "from", startPtr, "to", endPtr)
-    return title
-}
-
 function App() {
     const [title, setTitle] = useState(NO_TITLE)
     const [size, setSize] = useState(0)
@@ -397,7 +68,7 @@ function App() {
     const [time, setTime] = useState(0)
     const [error, setError] = useState(false)
     const encoded = new URLSearchParams(window.location.search).get("c")
-    const [tab, setTab] = useState(encoded ? 0 : 3) // TODO: use an enum
+    const [tab, setTab] = useState(encoded ? Tab.Listen : Tab.About)
     const [dragging, setDragging] = useState(false)
     const qrCanvas = useRef<HTMLCanvasElement>(null)
     const [tracing, _setTracing] = useState(false)
@@ -406,7 +77,7 @@ function App() {
         // Instrument Wasm for execution tracing.
         const { binary, map } = await instrumentWasm(originalBinary)
         // TODO: set fixed WAT for tracing (line highlighting) in Create tab
-        trace = { binary, map, logs: [] }
+        tracer.trace = { binary, map, logs: [] }
     }
 
     const loadBinary = async (binary: Uint8Array) => {
@@ -419,9 +90,9 @@ function App() {
         // NOTE: We send the binary here because sending the WebAssembly.Module doesn't work in iOS Safari...
         if (tracing) {
             await setupTracing(binary)
-            sendToWorklet({ cmd: "loadModule", binary: trace!.binary, trace: true })
+            sendToWorklet({ cmd: "loadModule", binary: tracer.trace!.binary, trace: true })
         } else {
-            trace = null
+            tracer.trace = null
             sendToWorklet({ cmd: "loadModule", binary })
         }
         setBinary(binary)
@@ -439,10 +110,7 @@ function App() {
             return
         }
         // Generate QR code
-        const prefix = window.location.origin + window.location.pathname.replace(/\/$/, "") // trim trailing slash
-        const seedParam = seedLock ? `s=${encode(BigInt(seed))}&` : ""
-        console.log(seedLock, seedParam)
-        const url = `${prefix}?${seedParam}c=${encodeBlob(binary)}`
+        const url = cardURL(encodeBlob(binary), seedLock ? seed : undefined)
         console.log(url)
         console.log("URL length:", url.length)
         const canvas = qrCanvas.current!
@@ -459,7 +127,7 @@ function App() {
         window.history.pushState(null, "", DEBUG ? url.replace("?", "?debug&") : url)
         // setLink(url)
         // setDownload(window.URL.createObjectURL(new Blob([buffer])))
-        setTab(0)
+        setTab(Tab.Listen)
         qrContents.current = seedLock ? [binary, seed] : [binary]
     }, [binary, seed, seedLock])
 
@@ -493,10 +161,10 @@ function App() {
         _setTracing(tracing)
         if (!binary) return
         if (tracing) {
-            if (!trace) {
+            if (!tracer.trace) {
                 await setupTracing(binary)
             }
-            sendToWorklet({ cmd: "loadModule", binary: trace!.binary, trace: true })
+            sendToWorklet({ cmd: "loadModule", binary: tracer.trace!.binary, trace: true })
         } else {
             sendToWorklet({ cmd: "loadModule", binary })
         }
@@ -505,27 +173,14 @@ function App() {
 
     const onScan = (data: string) => {
         // Return value indicates whether the string contains a valid ScoreCard URL.
-        // TODO: More validity checks (does the param contain valid base43? do the bytes contain valid wasm?)
-        let url
-        try {
-            url = new URL(data)
-        } catch {
-            return false
-        }
-        const encodedBlob = url.searchParams.get("c")
-        if (!encodedBlob) return false
-
-        const encodedSeed = url.searchParams.get("s")
-        if (encodedSeed) {
-            setSeed(Number(decode(encodedSeed.replace(/ /g, "+"))))
+        const card = parseCardURL(data)
+        if (!card) return false
+        if (card.seed !== null) {
+            setSeed(card.seed)
             setSeedLock(true)
         }
-        if (encodedBlob) {
-            const buffer = decodeBlob(encodedBlob.replace(/ /g, "+"))
-            loadBinary(buffer)
-            return true
-        }
-        return false
+        loadBinary(card.binary)
+        return true
     }
 
     useEffect(() => {
@@ -573,7 +228,7 @@ function App() {
             if (typeof e.data === "number") {
                 setTime(e.data / 44100)
             } else {
-                handleTraceLogs?.(e.data)
+                tracer.handleLogs?.(e.data)
             }
         })
         return () => setWorkletMessageHandler(() => {})

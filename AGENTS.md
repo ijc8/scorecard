@@ -17,8 +17,9 @@ Web app (Vite + React + TypeScript):
 - `npm run build`: typecheck (`tsc`), then `vite build`.
 - `npm run preview`: serve the production build.
 
-There is **no test suite and no lint script** (ESLint is in `devDependencies` but not wired up).
-Verify changes by building and by playing a card in a browser.
+- `npm run lint`: ESLint over `src/`.
+
+There is **no test suite**. Verify changes by building and by playing a card in a browser.
 
 Fastest dev loop: `npm run dev`, then drag a `.wasm` from `examples/` onto the page. Scan, Create
 and drag-and-drop all go through the same `loadBinary` path. To make a card URL from a `.wasm`,
@@ -49,11 +50,14 @@ A scorecard `.wasm` exports:
   exported as `m`.
 
 The player also accepts the legacy names (`process`/`setup`/`title`/`memory`) for old cards. Keep
-that fallback in `extractTitle` (`src/App.tsx`) and in `public/worklet.js`.
+that fallback in `extractTitle` (`src/card.ts`) and in `public/worklet.js`.
 
 ## Architecture
 
-- `src/App.tsx`: the UI (Listen / Scan / Create / About tabs) and most app logic.
+- `src/App.tsx`: the player's state and logic, and the frame around the tabs. Each tab is its own
+  module (`Listen.tsx`, `Scan.tsx`, `Create.tsx`, `About.tsx`; indices in `tabs.ts`). `card.ts` has
+  what belongs to cards themselves (links, seeds, titles); `trace.ts` holds the tracing state that
+  `App` and `Listen` share.
   1. URL load, QR scan, drag-and-drop and Create-tab assembly all call `loadBinary(Uint8Array)`.
   2. The binary goes to the AudioWorklet (`public/worklet.js`), which instantiates it and calls
      `p` per sample. **Send the binary, not a `WebAssembly.Module`**: posting a Module breaks on
