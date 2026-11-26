@@ -81,7 +81,9 @@ function App() {
         tracer.trace = { binary, map, logs: [] }
     }
 
-    const loadBinary = async (binary: Uint8Array) => {
+    // `lockedSeed`: the seed the card's link came with, if any. (Passed along because `seed` and
+    // `seedLock` here still hold what they were before the link was read.)
+    const loadBinary = async (binary: Uint8Array, lockedSeed?: number) => {
         const module = new WebAssembly.Module(binary as BufferSource)
         setSize(binary.length)
         console.log("loaded wasm", module)
@@ -97,7 +99,7 @@ function App() {
             sendToWorklet({ cmd: "loadModule", binary })
         }
         setBinary(binary)
-        reset()
+        reset(lockedSeed)
     }
     const loadBinaryRef = useRef(loadBinary)
     loadBinaryRef.current = loadBinary
@@ -132,9 +134,9 @@ function App() {
         qrContents.current = seedLock ? [binary, seed] : [binary]
     }, [binary, seed, seedLock])
 
-    const reset = () => {
-        let _seed = seed
-        if (!seedLock) {
+    const reset = (lockedSeed?: number) => {
+        let _seed = lockedSeed ?? seed
+        if (lockedSeed === undefined && !seedLock) {
             _seed = generateSeed()
             setSeed(_seed)
         }
@@ -180,7 +182,7 @@ function App() {
             setSeed(card.seed)
             setSeedLock(true)
         }
-        loadBinary(card.binary)
+        loadBinary(card.binary, card.seed ?? undefined)
         return true
     }
 
