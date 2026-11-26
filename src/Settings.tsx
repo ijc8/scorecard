@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { LISTENING_CARDS } from "./card"
 import Volume from "pixelarticons/svg/volume-2.svg?react"
 
 // Settings, kept in localStorage.
@@ -39,7 +40,7 @@ export function SettingsTab({ settings, setSettings, deckSize, hasStarter, fresh
         {toggle("collect", "Collect cards", "Add cards to your deck when you scan them or open their links.")}
         {toggle("motion", "Animations", "Cards that are flicked, dealt and turned over.")}
         {"wakeLock" in navigator && toggle("awake", "Stay awake", "Keep the screen on while a card is playing.")}
-        {toggle("echo", "Echo cancellation", "Stops cards that listen from hearing themselves and howling. Sounds cleaner off, with headphones.")}
+        {LISTENING_CARDS && toggle("echo", "Echo cancellation", "Stops cards that listen from hearing themselves and howling. Sounds cleaner off, with headphones.")}
         {toggle("meter", "Guard against stuck cards", "Counts each card's loops as it plays, and stops a card that never finishes (which, on iPhones and iPads, would leave the page without sound). Slows some cards a little.")}
         <button onClick={async () => { setMeasured("Measuring..."); setMeasured(await measure()) }}>Measure this card's speed</button>
         {measured && <small style={{ marginTop: "-8px" }}>{measured}</small>}

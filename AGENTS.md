@@ -57,7 +57,8 @@ A scorecard `.wasm` exports:
   `(f32) -> f32`, which makes the card an effect: the argument is a sample from the microphone
   (in C: `#define INPUT` before including `deck.h`). The player tells the two apart by the
   exported function's `length`, and only asks for the microphone for cards that take input,
-  while they're playing (`setInputWanted` in `src/audio.ts`).
+  while they're playing (`setInputWanted` in `src/audio.ts`). **Not settled**: only a build made with
+  `VITE_LISTENING_CARDS=1` does this (the demo is); otherwise such a card hears silence.
 - `s`: `(i32) -> ()`, optional setup taking a seed.
 - `d`: optional `i32` global pointing to a zero-terminated UTF-8 title. If present, memory must be
   exported as `m`.
@@ -95,11 +96,15 @@ that fallback in `src/generate.ts` and in `public/worklet.js`.
      `p` per sample. **Send the binary, not a `WebAssembly.Module`**: posting a Module breaks on
      iOS Safari.
   3. The binary is base43-encoded back into the URL and rendered as a QR (`qrcode` lib). The link
-     is `SCHEME://HOST/path#[seed]program`: scheme and host in capitals so they share QR's
-     alphanumeric mode, and the program after `#` so it isn't sent to the server. A locked seed is
-     six base43 digits in front (offset so it never starts with `0`, which every program does).
-     The older `?c=program&s=seed` links, as on printed cards, must keep working (`parseCardURL`); `history.pushState` keeps the address bar in sync, so the
-     page itself is the shareable card.
+     is `https://host/path?c=program`, with `s=seed&` before the `c` for a locked seed: the form
+     on printed cards and on main. `history.pushState` keeps the address bar in sync, so the page
+     itself is the shareable card (and back and forward go through the cards loaded: `popstate`).
+     A newer form, `SCHEME://HOST/path#[seed]program`, is always read (`parseCardURL`) but only
+     drawn by a build made with `VITE_FRAGMENT_LINKS=1`: scheme and host in capitals so they share
+     QR's alphanumeric mode, and the program after `#` so it isn't sent to the server; a locked seed
+     is six base43 digits in front (offset so it never starts with `0`, which every program does).
+     It's held back until it's known how phone cameras treat it (an iPad's dropped the fragment
+     once); it only gains 5 bytes (2,896 against 2,891 at ijc8.me/s).
   4. The title is read by instantiating the module a second time on the main thread.
 - `src/audio.ts`: owns the AudioContext and worklet node, and keeps playback working on iOS.
   Read `docs/IOS-PLAYBACK.md` before touching it. In short: `startAudio()` must run synchronously

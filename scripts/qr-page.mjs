@@ -3,7 +3,7 @@
 //     node scripts/qr-page.mjs https://ijc8.me/s/ "Return True=examples/return-true.wasm" ... > cards.html
 //
 // The links are in the player's current form (see cardURL in src/card.ts): scheme and host in
-// capitals, the program after "#". A card too big for a QR code at that address is reported.
+// the form the player draws: the program after "?c=". A card too big for a QR code at that address is reported.
 import { readFileSync } from "fs"
 import QRCode from "qrcode"
 
@@ -27,7 +27,7 @@ if (!player || !cards.length) {
     process.exit(1)
 }
 const url = new URL(player)
-const base = `${url.origin.toUpperCase()}${url.pathname}#`
+const base = `${url.origin}${url.pathname.replace(/\/$/, "")}?c=`
 const escape = text => text.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`)
 
 let html = `<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width"><title>cards</title>

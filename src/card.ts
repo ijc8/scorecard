@@ -43,7 +43,14 @@ export function cardFace(code: string) {
     return face
 }
 
-// A card's link carries the program after a "#": the base43-encoded binary, with a locked seed (if
+// Two things the player can do aren't settled (see AGENTS.md), so a build only has them if it's
+// asked for, by setting these when building:
+// - VITE_FRAGMENT_LINKS: draw a card's link in the newer form, described below.
+// - VITE_LISTENING_CARDS: let a card whose `p` takes a sample hear the microphone.
+const asked = (name: string) => !!(import.meta as { env?: Record<string, string> }).env?.[name]
+export const FRAGMENT_LINKS = asked("VITE_FRAGMENT_LINKS"), LISTENING_CARDS = asked("VITE_LISTENING_CARDS")
+
+// The newer link carries the program after a "#": the base43-encoded binary, with a locked seed (if
 // any) in front of it. Everything is chosen to pack tightly into a QR code:
 // - The scheme and host are written in capitals. They mean the same either way, but capitals (like
 //   base43's characters) fit QR's compact alphanumeric mode.
@@ -57,11 +64,21 @@ export function cardFragment(encoded: string, seed?: number) {
     return (seed === undefined ? "" : encode(BigInt(seed) + SEED_OFFSET)) + encoded
 }
 
+// The link as it has always been, and as printed cards have it: "?c=<program>", with "s=<seed>&" before the "c" if the seed is locked.
+const cardQuery = (encoded: string, seed?: number) => `${seed === undefined ? "" : `s=${encode(BigInt(seed))}&`}c=${encoded}`
+
 export function cardURL(encoded: string, seed?: number) {
+    if (!FRAGMENT_LINKS) return `${window.location.origin}${window.location.pathname.replace(/\/$/, "")}?${cardQuery(encoded, seed)}`
     return `${window.location.origin.toUpperCase()}${window.location.pathname}#${cardFragment(encoded, seed)}`
 }
 
-// Read a card's link: the current form, or the older "?c=<program>&s=<seed>".
+// The same, for this page's own address bar (`debug`: keep the debugging overlay).
+export function cardAddress(encoded: string, seed: number | undefined, debug: boolean) {
+    if (!FRAGMENT_LINKS) return `${window.location.pathname}?${debug ? "debug&" : ""}${cardQuery(encoded, seed)}`
+    return `${window.location.pathname}${debug ? "?debug" : ""}#${cardFragment(encoded, seed)}`
+}
+
+// Read a card's link, in either form.
 export function parseCardURL(text: string) {
     let url
     try {

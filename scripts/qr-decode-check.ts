@@ -7,7 +7,7 @@ import { Kind, decodeSteps } from "../src/qrDecode"
 let failed = false
 for (const file of process.argv.slice(2)) {
     const code = encodeBlob(new Uint8Array(readFileSync(file)))
-    for (const prefix of ["HTTPS://IJC8.ME/S#", "HTTPS://IJC8.ME/S#3XK9QZ", "HTTP://LOCALHOST:4917/#"]) {
+    for (const prefix of ["https://ijc8.me/s?c=", "https://ijc8.me/s?s=1Z3K9Q&c=", "HTTPS://IJC8.ME/S#", "HTTPS://IJC8.ME/S#3XK9QZ", "HTTP://LOCALHOST:4917/#"]) {
         const url = prefix + code
         try {
             const steps = decodeSteps(url, code.length)

@@ -1,7 +1,7 @@
 import { RefObject, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import { Tab } from "./tabs"
-import { NO_TITLE, cardFragment, cardURL, generateCard, formatTime, formatSeed, generateSeed, parseCardURL } from "./card"
+import { LISTENING_CARDS, NO_TITLE, cardAddress, cardURL, generateCard, formatTime, formatSeed, generateSeed, parseCardURL } from "./card"
 import AudioDevice from "pixelarticons/svg/audio-device.svg?react"
 import { BackHandle, CardBack, Face, Workbench, WorkbenchHandle } from "./Workbench"
 import { Scan } from "./Scan"
@@ -584,7 +584,9 @@ function App() {
             window.alert(e?.message ?? String(e))
             return
         }
-        const { binary: played, listens } = generated
+        const { binary: played } = generated
+        // (Unless this build lets cards listen, one that would hears silence.)
+        const listens = LISTENING_CARDS && generated.listens
         setSize(binary.length)
         console.log("loaded wasm", played === binary ? "" : `(generated: ${played.length} bytes from ${binary.length})`)
         const title = generated.title ?? NO_TITLE
@@ -636,7 +638,10 @@ function App() {
         canvas.style.cssText = style
         // (The state marks this entry as ours, so that reloading the page doesn't count as following a link.)
         try {
-            window.history.pushState({ loaded: true }, "", `${window.location.pathname}${DEBUG ? "?debug" : ""}#${cardFragment(encodeBlob(binary), seedLock ? seed : undefined)}`)
+            // (If the address is this card's already, as after following its link or going back to it, it's only tidied.)
+            const here = parseCardURL(window.location.href), code = encodeBlob(binary)
+            const change = here && encodeBlob(here.binary) === code ? "replaceState" : "pushState"
+            window.history[change]({ loaded: true }, "", cardAddress(code, seedLock ? seed : undefined, DEBUG))
         } catch {
             // Some embeddings don't allow changing the address; the card still plays.
         }
@@ -703,10 +708,11 @@ function App() {
         // Collect the card if we got here by following a link (or scanning with another app),
         // but not if this is just a reload of a card that was loaded some other way.
         onScan(window.location.href, !window.history.state?.loaded)
-        // Following a link to another card from here only changes what's after the "#", which doesn't reload the page.
-        const onHashChange = () => onScanRef.current(window.location.href)
-        window.addEventListener("hashchange", onHashChange)
-        return () => window.removeEventListener("hashchange", onHashChange)
+        // Going back or forward among the cards that have been loaded here doesn't reload the page; nor
+        // does following a link to another card that only differs after a "#".
+        const onPopState = () => onScanRef.current(window.location.href, !window.history.state?.loaded)
+        window.addEventListener("popstate", onPopState)
+        return () => window.removeEventListener("popstate", onPopState)
     }, [])
 
     const openPack = (pack: Pack) => {
