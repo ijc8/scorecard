@@ -1,5 +1,6 @@
 // The pile. The panel is a card, lying on top of a pile of cards like it: the deck. Flick the top
-// card aside and it goes to the bottom of the pile; the next one is under it. Scan, Create, Settings
+// card off to the left and it goes to the bottom of the pile; the next one is under it. Drag to the
+// right, and the card at the bottom is drawn out from the left and laid on top: the same, backwards. Scan, Create, Settings
 // and About are cards too, kept at the back of the pile, each with an index tab that sticks out
 // below; tapping a tab brings its card to the top. (The music cards share a tab: see App.)
 //
@@ -95,13 +96,13 @@ export function throwTop(direction: keyof typeof OFF, change: () => void) {
 }
 
 // A card (whatever `change` makes the top card) is pulled out from under the top card by its tab, and laid on top.
-export function raise(change: () => void) {
+// (Or `out` to one side, as when the bottom card is brought back to the top.)
+export function raise(change: () => void, out = "translate(2%, 80%) rotate(2deg)") {
     const top = pileTop()
     if (!top || !top.animate || motionOff()) return change()
     const ghost = snapshot(top)
     top.parentElement!.append(ghost)
     change()
-    const out = "translate(2%, 80%) rotate(2deg)"
     top.animate([{ transform: "none" }, { transform: out }], { duration: 190, easing: "cubic-bezier(.4, 0, .9, .6)" }).onfinish = () => {
         ghost.style.zIndex = "1"
         top.animate([{ transform: out }, { transform: "none" }], { duration: 230, easing: "cubic-bezier(.2, .8, .3, 1)" }).onfinish = () => ghost.remove()
@@ -128,7 +129,8 @@ export function usePile({ enabled, current, next, go, dismiss }: {
             if (!direction || !enabled) return
             const card = next(direction as 1 | -1)
             if (dismiss) throwTop(direction > 0 ? "left" : "right", dismiss)
-            else if (card) throwTop(direction > 0 ? "left" : "right", () => go(card))
+            else if (card && direction > 0) throwTop("left", () => go(card))
+            else if (card) raise(() => go(card), OFF.left)
         }
         document.addEventListener("keydown", key)
         return () => document.removeEventListener("keydown", key)
@@ -139,8 +141,15 @@ export function usePile({ enabled, current, next, go, dismiss }: {
         document.querySelectorAll(".pile-under.done").forEach(under => under.remove())
     }, [current, dismiss === undefined])
 
+    // Dragging to the right draws the card at the bottom of the pile out and over the top card,
+    // which stays where it is. (Unless the top card is a tabbed one, which is only ever put back.)
+    const pulling = (d: Drag) => d.dx > 0 && !latest.current.dismiss && !!latest.current.next(-1)
     const transform = (d: Drag) => {
         const { next, dismiss } = latest.current
+        if (pulling(d)) {
+            const left = 1 - Math.min(1, d.dx / (d.ghost!.offsetWidth * 0.6))
+            return `translate(${-115 * left}%, ${4 * left}%) rotate(${-10 * left}deg)`
+        }
         // (With nothing to turn up, the card resists.)
         const dx = dismiss || next(d.dx < 0 ? 1 : -1) ? d.dx : d.dx * 0.25
         return `translate(${dx}px, ${Math.abs(dx) * 0.04}px) rotate(${dx / 22}deg)`
@@ -161,7 +170,17 @@ export function usePile({ enabled, current, next, go, dismiss }: {
         const first = d.trail[0], last = d.trail[d.trail.length - 1]
         const speed = last && last.t > first.t ? (last.x - first.x) / (last.t - first.t) * Math.sign(d.dx) : 0
         // A card goes if it's let go far enough out, or thrown.
-        if (commit && (Math.abs(d.dx) > 70 || (speed > 0.5 && Math.abs(d.dx) > 15)) && speed > -0.3 && (dismiss || card)) {
+        const go_ = commit && (Math.abs(d.dx) > 70 || (speed > 0.5 && Math.abs(d.dx) > 15)) && speed > -0.3 && (dismiss || card)
+        if (go_ && pulling(d)) {
+            // The card that was drawn out lands on the pile, and is the top card.
+            const { ghost, under } = d
+            go(card!)
+            redraw(n => n + 1)
+            ghost.animate([{ transform: transform(d) }, { transform: "none" }], { duration: 220 / Math.sqrt(Math.min(Math.max(speed / 0.5, 1), 3)), easing: "cubic-bezier(.2, .8, .3, 1)", fill: "forwards" }).onfinish = () => {
+                ghost.remove()
+                under?.remove()
+            }
+        } else if (go_) {
             d.under?.classList.add("done")
             const under = d.under
             // (In case nothing changes to clear it away.)
@@ -172,7 +191,9 @@ export function usePile({ enabled, current, next, go, dismiss }: {
             redraw(n => n + 1)
         } else {
             const { ghost, under } = d
-            ghost.animate([{ transform: transform(d) }, { transform: "none" }], { duration: 260, easing: "cubic-bezier(.3, 1.5, .5, 1)" }).onfinish = () => {
+            // (A card that was being drawn out goes back where it came from.)
+            const back = pulling(d)
+            ghost.animate([{ transform: transform(d) }, { transform: back ? OFF.left : "none" }], { duration: back ? 180 : 260, easing: back ? "ease-in" : "cubic-bezier(.3, 1.5, .5, 1)" }).onfinish = () => {
                 ghost.remove()
                 under?.remove()
             }
@@ -203,11 +224,22 @@ export function usePile({ enabled, current, next, go, dismiss }: {
                 // (The card's own tab goes with the copy that moves.)
                 top.classList.add("lifted")
             }
-            const direction = d.dx < 0 ? 1 : -1
+            const direction = d.dx <= 0 ? 1 : -1
             if (direction !== d.direction) {
-                d.direction = direction
                 const { next, dismiss } = latest.current
-                dress(d.under!, dismiss ? undefined : next(direction as 1 | -1))
+                if (d.direction !== undefined && !dismiss) {
+                    // (Going the other way after all: the copies swap parts, so make them afresh.)
+                    const under = snapshot(top), ghost = snapshot(top)
+                    under.classList.add("pile-under")
+                    d.under!.replaceWith(under)
+                    d.ghost.replaceWith(ghost)
+                    d.under = under
+                    d.ghost = ghost
+                }
+                d.direction = direction
+                // What moves is the top card, showing the next one under it; or else the last card, coming over the top one.
+                if (pulling(d)) dress(d.ghost, next(-1))
+                else dress(d.under!, dismiss ? undefined : next(direction as 1 | -1))
             }
             d.ghost.style.transform = transform(d)
         },
