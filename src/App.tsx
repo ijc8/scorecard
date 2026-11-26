@@ -47,7 +47,7 @@ import { canPrintDirectly, printCard, saveCardImage } from "./print"
 import Headphone from "pixelarticons/svg/headphone.svg?react"
 import Sliders from "pixelarticons/svg/sliders.svg?react"
 import InfoBox from "pixelarticons/svg/info-box.svg?react"
-import { Pack, addCard, addPack, clearDeck, loadDeck, loadPacks, neighbour, removeCard, savePacks, toggleSeed } from "./deck"
+import { Pack, addCard, addPack, clearDeck, loadDeck, loadPacks, neighbour, noteListening, removeCard, savePacks, toggleSeed } from "./deck"
 import { audioDebugSnapshot, audioHealthy, needTracer, onStall, sendToWorklet, setEchoCancellation, setInputWanted, setWorkletMessageHandler, startAudio } from "./audio"
 
 
@@ -576,6 +576,27 @@ function App() {
     const openDeck = useRef(openSpread).current
     const code = useMemo(() => binary && encodeBlob(binary), [binary])
     const deckCard = deck.find(card => card.code === code)
+    // Keep count, for cards in the deck: performances begun, and time spent listening.
+    const listening = useRef<{ code: string, since: number, started: boolean } | null>(null), lastHeard = useRef("")
+    useEffect(() => {
+        const flush = () => {
+            const l = listening.current
+            if (!l) return
+            listening.current = null
+            setDeck(deck => noteListening(deck, l.code, Math.min((Date.now() - l.since) / 1000, 6 * 3600), l.started))
+        }
+        if (state === "playing" && code) {
+            // (A performance is new if it's from the start, or with another seed than the last.)
+            const performance = `${seed} ${code}`
+            listening.current = { code, since: Date.now(), started: time === 0 || performance !== lastHeard.current }
+            lastHeard.current = performance
+        }
+        window.addEventListener("pagehide", flush)
+        return () => {
+            window.removeEventListener("pagehide", flush)
+            flush()
+        }
+    }, [state === "playing", code, seed])
 
     // `keep` adds the card to the deck. `seed` loads the card with that seed locked in, or (if null)
     // unlocked with a fresh seed; by default the seed lock is left as it is.

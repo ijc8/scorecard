@@ -9,6 +9,9 @@ export interface DeckCard {
     added: number // timestamp (ms)
     seeds: number[]
     description?: string
+    // How often the card has been played from the start, and for how long in all (seconds), on this device.
+    plays?: number
+    heard?: number
 }
 
 // A pack is a named bundle of cards. It sits sealed in the deck until it's opened,
@@ -80,6 +83,12 @@ export function toggleSeed(deck: DeckCard[], code: string, seed: number) {
         ...card,
         seeds: card.seeds.includes(seed) ? card.seeds.filter(s => s !== seed) : [...card.seeds, seed],
     }))
+}
+
+// Note that a card has been listened to for a while (and, with `started`, that this was a new performance).
+export function noteListening(deck: DeckCard[], code: string, seconds: number, started: boolean) {
+    if (!deck.some(card => card.code === code)) return deck
+    return save(deck.map(card => card.code !== code ? card : { ...card, plays: (card.plays ?? 0) + (started ? 1 : 0), heard: (card.heard ?? 0) + seconds }))
 }
 
 // The card that many places along from this one in the deck (the deck's first, if this isn't in it).
