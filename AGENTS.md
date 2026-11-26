@@ -200,6 +200,14 @@ that fallback in `src/generate.ts` and in `public/worklet.js`.
   the Listen tab draws a heatmap over a bit-grid of the binary: green for executed code, blue/red
   for data-segment bytes read/written. Memory outside the data segments (`src/memoryTrace.ts`) is
   drawn in a band under the card. Instrumentation must not change a card's output.
+  Every rewriting (traced, metered or neither: once the tracer module is there, the worklet
+  rewrites every card) also exports the card's state: its memory as `scorecard.memory` and each
+  mutable global as `scorecard.globalN`. So turning tracing or the guard on or off
+  (`{cmd: "instrument", trace, meter}`) doesn't restart a card that's playing: `carryOver` in the
+  worklet instantiates the new rewriting and copies the state across. (Only a card that was started
+  before the tracer arrived, which takes the guard being off, is restarted and run unheard to where
+  it was.) `npx tsx scripts/carry-check.ts <cards>.wasm` checks that a carried-over card plays on
+  sample-for-sample the same.
 - WebAssembly text is assembled by `watr` (`src/assemble.ts`, ~50 KB; it replaced a vendored 1.2 MB
   wabt) and disassembled by `wasmparser`. After touching the tracer or the disassembly, run
   `npx tsx scripts/watr-check.ts <cards>.wasm`: reassembled and instrumented cards must play

@@ -691,14 +691,8 @@ function App() {
         if (!binary) return
         if (tracing || settings.meter) await needTracer()
         if (!tracing) trace = null
-        sendToWorklet({ cmd: "loadModule", binary, trace: tracing, meter: settings.meter })
-        if (state === "stopped" || time === 0) {
-            reset()
-        } else {
-            // The card has to start over for the change to take hold. Keep its seed, so it's the same
-            // performance, and have it run (silently, as fast as it can) back to where it had got to.
-            sendToWorklet({ cmd: "reset", seed, resume: true })
-        }
+        // (A card that's under way carries on from where it is: the worklet copies its state into the traced card, or back.)
+        sendToWorklet({ cmd: "instrument", trace: tracing, meter: settings.meter })
     }
 
     const onScan = (data: string, keep = true) => {
@@ -911,8 +905,7 @@ function App() {
         if (!binary) return
         ;(async () => {
             if (tracing || settings.meter) await needTracer()
-            sendToWorklet({ cmd: "loadModule", binary, trace: tracing, meter: settings.meter })
-            sendToWorklet({ cmd: "reset", seed, resume: true })
+            sendToWorklet({ cmd: "instrument", trace: tracing, meter: settings.meter })
         })()
     }, [settings.meter])
     // How fast is the loaded card, as scanned and guarded? (The worklet times itself making sound nobody hears.)
