@@ -19,10 +19,10 @@ export function motionOff() {
     return document.documentElement.classList.contains("still") || window.matchMedia("(prefers-reduced-motion: reduce)").matches
 }
 
-export function SettingsTab({ settings, setSettings, deckSize, hasStarter, freshStarter, emptyDeck, measure }: {
-    settings: Settings, setSettings: (s: Settings) => void, deckSize: number, hasStarter: boolean, freshStarter: () => void, emptyDeck: () => void,
-    // Times the loaded card, as scanned and guarded, and says how it went.
-    measure: () => Promise<string>,
+export function SettingsTab({ settings, setSettings, measure }: {
+    settings: Settings, setSettings: (s: Settings) => void,
+    // Times the loaded card, as scanned and guarded, and says how it went. (Only offered when debugging.)
+    measure?: () => Promise<string>,
 }) {
     const [measured, setMeasured] = useState("")
     const toggle = (key: "collect" | "motion" | "awake" | "echo" | "meter", label: string, hint: string) =>
@@ -42,10 +42,8 @@ export function SettingsTab({ settings, setSettings, deckSize, hasStarter, fresh
         {"wakeLock" in navigator && toggle("awake", "Stay awake", "Keep the screen on while a card is playing.")}
         {LISTENING_CARDS && toggle("echo", "Echo cancellation", "Stops cards that listen from hearing themselves and howling. Sounds cleaner off, with headphones.")}
         {toggle("meter", "Guard against stuck cards", "Counts each card's loops as it plays, and stops a card that never finishes (which, on iPhones and iPads, would leave the page without sound). Slows some cards a little.")}
-        <button onClick={async () => { setMeasured("Measuring..."); setMeasured(await measure()) }}>Measure this card's speed</button>
+        {measure && <button onClick={async () => { setMeasured("Measuring..."); setMeasured(await measure()) }}>Measure this card's speed</button>}
         {measured && <small style={{ marginTop: "-8px" }}>{measured}</small>}
-        <button disabled={hasStarter} onClick={freshStarter}>Get a fresh starter pack</button>
-        <button disabled={deckSize === 0} onClick={() => window.confirm(`Throw away all ${deckSize} cards in your deck, and their saved seeds?`) && emptyDeck()}>Empty my deck</button>
     </div>
 }
 

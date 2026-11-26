@@ -76,13 +76,15 @@ function SealedPack({ pack, open }: { pack: Pack, open: () => void }) {
 // A card with a tab: `face` is what's on it (drawn small, and not to be used there).
 export interface TabbedCard { index: number, name: string, face: React.ReactNode, Icon: React.FunctionComponent<React.SVGProps<SVGSVGElement>> }
 
-export function Spread({ deck, packs, tabbed, current, pile: pileThen, scroll, pick, pickTab, close, discard, openPack, importPack, exportPack }: {
+export function Spread({ deck, packs, tabbed, current, pile: pileThen, scroll, pick, pickTab, close, discard, openPack, importPack, exportPack, freshStarter, emptyDeck }: {
     deck: DeckCard[], packs: Pack[], tabbed: TabbedCard[], current: string | null,
     // Where the pile is when gathered: the cards are dealt from there, and go back there.
     // (`scroll` is how far down the page was then, which is where it will be again.)
     pile: Place | null, scroll: number,
     pick: (code: string, seed?: number) => void, pickTab: (index: number) => void, close: () => void,
     discard: (code: string) => void, openPack: (pack: Pack) => void, importPack: (file: File) => void, exportPack: () => void,
+    // Puts a new starter pack on the table (if the old one has been opened); throws every card away.
+    freshStarter?: () => void, emptyDeck: () => void,
 }) {
     const table = useRef<HTMLDivElement>(null)
     const gathering = useRef(false)
@@ -194,6 +196,8 @@ export function Spread({ deck, packs, tabbed, current, pile: pileThen, scroll, p
                     e.target.value = ""
                 }} />
             </label>
+            {freshStarter && <button title="Another sealed starter pack" onClick={freshStarter}>Starter pack</button>}
+            {deck.length > 0 && <button title="Throw away every card in your deck" onClick={() => window.confirm(`Throw away all ${deck.length} cards in your deck, and their saved seeds?`) && emptyDeck()}>Empty deck</button>}
         </div>
     </div>
 }

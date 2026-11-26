@@ -231,6 +231,20 @@
     image-rendering: pixelated;
 }
 
+/* The card's score (see Score.tsx), in place of its QR code. */
+.score {
+    background: white;
+    cursor: pointer;
+}
+
+.score-message {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: white;
+}
+
 /* Tracing looks through the QR code to the card's bits. */
 .xray {
     background: white;
@@ -756,6 +770,7 @@
 
 .spread .deck-actions {
     flex-direction: row;
+    flex-wrap: wrap;
     justify-content: center;
 }
 

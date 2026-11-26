@@ -42,6 +42,7 @@ function dress(copy: HTMLElement, card: DeckCard | undefined) {
     // (A music card's tab is the first.)
     copy.querySelectorAll<HTMLElement>(".own-tab > button").forEach(tab => { tab.style.visibility = tab.dataset.tab === "0" ? "visible" : "hidden" })
     copy.querySelector<HTMLElement>(".xray")?.style.setProperty("opacity", "0")
+    copy.querySelectorAll<HTMLElement>(".score, .score-message").forEach(score => { score.style.display = "none" })
     // (Face up, even if the card it was copied from is turned over.)
     copy.querySelectorAll<HTMLElement>(".faces > .side").forEach(side => { side.style.visibility = side.classList.contains("front") ? "inherit" : "hidden" })
     copy.querySelector(".over")?.classList.remove("turned")

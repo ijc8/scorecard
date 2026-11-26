@@ -9,6 +9,7 @@ import { Settings, SettingsTab, loadSettings } from "./Settings"
 import { LoadCard, PACK_FORMAT, parsePack, starterPack } from "./packs"
 import library from "./library.json"
 import { flushSync } from "react-dom"
+import { Score } from "./Score"
 import { raise, throwTop, turn, useDissolve, usePile } from "./Pile"
 import { Place, Spread, placeOf } from "./Spread"
 import { Forward, HeartFull } from "./icons"
@@ -33,6 +34,7 @@ import Camera from "pixelarticons/svg/camera.svg?react"
 import EditBox from "pixelarticons/svg/edit-box.svg?react"
 import DragAndDrop from "pixelarticons/svg/drag-and-drop.svg?react"
 import Bullseye from "pixelarticons/svg/bullseye.svg?react"
+import ScoreIcon from "pixelarticons/svg/analytics.svg?react"
 import BullseyeArrow from "pixelarticons/svg/bullseye-arrow.svg?react"
 import { readQR } from "./qrReader"
 import logoUrl from "./assets/logo.png"
@@ -106,15 +108,15 @@ function SeedInput({ seed, setSeed }: any) {
 }
 
 // TODO: Specify types
-function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, played, tracing, toggleTracing, kept, toggleKept, face, code, loadBinary, lockSeed, description }: {
+function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, played, tracing, toggleTracing, toggleScore, kept, toggleKept, face, code, loadBinary, lockSeed, description }: {
     qrCanvas: RefObject<HTMLCanvasElement>, title: string, listens: boolean, size: number, seed: number, setSeed: (s: number) => void, seedLock: boolean,
     state: any, setState: any, time: number, reset: any, error: any, buffer: Uint8Array | null, played: Uint8Array | null,
-    tracing: boolean, toggleTracing: () => void, face: Face, code: string | null, loadBinary: (b: Uint8Array) => Promise<void>,
+    tracing: boolean, toggleTracing: () => void, toggleScore: () => void, face: Face, code: string | null, loadBinary: (b: Uint8Array) => Promise<void>,
     kept: boolean, toggleKept: () => void, lockSeed: (lock: boolean) => void,
     description?: string,
 }) {
-    // The card's front shows its QR code, or (tracing) its bits.
-    const front = face === "qr" || face === "bits"
+    // The card's front shows its QR code, or (tracing) its bits, or its score.
+    const front = face === "qr" || face === "bits" || face === "score"
     const bigIconStyle = { height: "10cqw", verticalAlign: "middle" }
     const smallIconStyle = { height: "5cqw", flexShrink: 0, verticalAlign: "middle" }
     const inlineIconStyle = { height: "11cqh", verticalAlign: "bottom" }
@@ -305,6 +307,9 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
                     {listens && <span title="This card listens: it plays what the microphone hears, changed"><AudioDevice style={{ height: "6cqw", verticalAlign: "middle" }} /> </span>}
                     <span data-card-size="">{size}</span> bytes {/* TODO: add link and perhaps download buttons with icons */}
                     {/* Beside the size: a look at those bytes at work. */}
+                    {binary && live && <button title="Show the card's score: the music to come, drawn out" style={{ fontSize: 0, lineHeight: 0, border: "none", padding: "0 0 0 6px", verticalAlign: "middle" }} onClick={toggleScore}>
+                        <ScoreIcon style={{ height: "6cqw", verticalAlign: "middle", background: face === "score" ? "black" : undefined, color: face === "score" ? "white" : undefined }} />
+                    </button>}
                     {binary && live && <button title="Show the card at work" style={{ fontSize: 0, lineHeight: 0, border: "none", padding: "0 0 0 6px", verticalAlign: "middle" }} onClick={traceClick}>
                         <TraceIcon style={{ height: "6cqw", verticalAlign: "middle" }} />
                     </button>}
@@ -322,6 +327,7 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
                     {/* Tracing: the card's bits, seen through the QR code. */}
                     <canvas ref={traceCanvas} width="1" height="1" className="xray" style={dissolve}></canvas>
                     <canvas ref={decodeCanvas} width="1" height="1" title="Reading the QR code (tap to skip)" style={{ display: decoding ? "block" : "none" }} onClick={() => setDecoding(false)}></canvas>
+                    <Score binary={binary} seed={seed} time={time} active={face === "score" && !showMessage} seek={target => seekTo(target, time, seed)} />
                 {showMessage && <div style={{ position: "absolute", fontSize: "48px", height: "100%", width: "100%", userSelect: "none" }}>
                     <div style={{ border: "16px solid black", height: "100%", containerType: "size", lineHeight: 1, display: "flex", flexDirection: "column", justifyContent: "space-evenly" }}>
                         {error ? <>
@@ -381,15 +387,19 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
 // The clock. Tap it to go to a time: ahead by skipping, back by starting again (same seed) and
 // skipping to there. Either way the card has to work its way through every sample in between, at
 // up to 64 times real time.
+// Go to a time in the performance (in seconds): on ahead, or back by starting again with the same seed.
+function seekTo(target: number, time: number, seed: number) {
+    if (target >= time) sendToWorklet({ cmd: "skip", samples: Math.round((target - time) * 44100 / 128) * 128 })
+    else sendToWorklet({ cmd: "reset", seed, skip: Math.round(target * 44100 / 128) * 128 })
+}
+
 function Clock({ time, seed, style }: { time: number, seed: number, style: React.CSSProperties }) {
     const [editing, setEditing] = useState<string | null>(null)
     const go = (text: string) => {
         setEditing(null)
         const match = text.trim().match(/^(?:(\d+):)?(\d+(?:\.\d*)?)$/)
         if (!match) return
-        const target = Number(match[1] ?? 0) * 60 + Number(match[2])
-        if (target >= time) sendToWorklet({ cmd: "skip", samples: Math.round((target - time) * 44100 / 128) * 128 })
-        else sendToWorklet({ cmd: "reset", seed, skip: Math.round(target * 44100 / 128) * 128 })
+        seekTo(Number(match[1] ?? 0) * 60 + Number(match[2]), time, seed)
     }
     return <div style={{ userSelect: "none", display: "flex", alignItems: "center", width: "3.8em", flexShrink: 0, whiteSpace: "nowrap", justifyContent: "right" }}>
         <ClockIcon style={style} />
@@ -887,8 +897,12 @@ function App() {
         return () => document.removeEventListener("click", click)
     }, [spread, tab])
 
-    const face: Face = tab === Tab.Create ? "write" : turned ? "back" : tracing ? "bits" : "qr"
-    const toggleTracing = () => setTracing(!tracing)
+    // Is the card's score showing, where its QR code (or its bits) would be?
+    const [score, setScore] = useState(false)
+    const face: Face = tab === Tab.Create ? "write" : turned ? "back" : score ? "score" : tracing ? "bits" : "qr"
+    // (With the score in front of the card's bits, the tracing button brings those back.)
+    const toggleTracing = () => score && tracing ? setScore(false) : (setScore(false), setTracing(!tracing))
+    const toggleScore = () => setScore(!score)
     // Changing the guard takes hold at once (the card carries on from where it was).
     const guarded = useRef(settings.meter)
     useEffect(() => {
@@ -916,14 +930,10 @@ function App() {
         const speed = (r: { samples: number, ms: number }) => r.samples / 44.1 / r.ms
         return `${title}: ${speed(plain).toFixed(0)}x real time as scanned, ${speed(metered).toFixed(0)}x guarded (${((speed(plain) / speed(metered) - 1) * 100).toFixed(0)}% slower).`
     }
-    const settingsProps = {
-        measure,
-        settings, setSettings, deckSize: deck.length, hasStarter: packs.some(pack => pack.id === starterPack.id),
-        freshStarter: () => { setPacks(savePacks([...packs, starterPack])); openSpread() },
-        emptyDeck: () => setDeck(clearDeck()),
-    }
+    const settingsProps = { settings, setSettings, measure: DEBUG ? measure : undefined }
+    const hasStarter = packs.some(pack => pack.id === starterPack.id)
     const tabs = [
-        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, played, tracing, toggleTracing, face, code, loadBinary, kept, toggleKept, lockSeed, description: deckCard?.description ?? library.find(card => card.code === code)?.description }} /> },
+        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, played, tracing, toggleTracing, toggleScore, face, code, loadBinary, kept, toggleKept, lockSeed, description: deckCard?.description ?? library.find(card => card.code === code)?.description }} /> },
         { name: "Scan", Icon: Camera, component: <Scan {...{ onScan, tab }} /> },
         // The workbench is laid out like a music card (and shares its controls), so it's drawn by Listen.
         { name: "Create", Icon: EditBox, component: null },
@@ -942,7 +952,8 @@ function App() {
         <button key={index} data-tab={index} title={index === Tab.Listen && tab === Tab.Listen ? "Spread the pile out" : name} aria-label={name} className={own ? "active" : ""} style={{ visibility: (index === tab) === own ? "visible" : "hidden" }} onClick={() => pickTab(index)}><Icon /></button>)
     return <div id="layout">
     <div id="app" style={{ containerType: "inline-size" }}>
-        {spread && <Spread {...{ deck, packs, openPack, importPack, exportPack, current: tab === Tab.Listen || tab === Tab.Create ? code : null, pile: pilePlace.current, scroll: pileScroll.current }}
+        {spread && <Spread {...{ deck, packs, openPack, importPack, exportPack,
+            freshStarter: hasStarter ? undefined : () => setPacks(savePacks([...packs, starterPack])), emptyDeck: () => setDeck(clearDeck()), current: tab === Tab.Listen || tab === Tab.Create ? code : null, pile: pilePlace.current, scroll: pileScroll.current }}
             tabbed={[
                 { index: Tab.Scan, name: "Scan", Icon: Camera, face: <>
                     <div className="viewfinder"><div></div></div>

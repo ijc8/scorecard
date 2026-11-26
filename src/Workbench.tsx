@@ -232,4 +232,4 @@ export const Workbench = forwardRef<WorkbenchHandle, {
     </div>
 })
 
-export type Face = "qr" | "bits" | "back" | "write"
+export type Face = "qr" | "bits" | "score" | "back" | "write"
