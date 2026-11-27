@@ -49,30 +49,60 @@ export function findDataSegments(binary: Uint8Array) {
 }
 
 const DECAY = 0.6      // per update, matching the execution heatmap
+const LASTING = 8      // updates after which a touch has faded away (0.6^8 is under 2%)
 const BLOCK = 16       // regions are tracked in blocks of this many bytes...
 const MERGE_GAP = 256  // ...and merged when they're this close together
 
+type Kind = "reads" | "writes"
+const KINDS: Kind[] = ["reads", "writes"]
+
+// What the worklet reports of memory, each update, is runs of bytes touched: [start, length, ...].
+// A card with a delay line touches tens of thousands of bytes a second, so nothing here is kept
+// or done per byte, except within the data segments (which are small: they're part of the card).
 export class MemoryTrace {
-    // Byte address -> heat (1 = touched in the latest update, fading after that)
-    reads = new Map<number, number>()
-    writes = new Map<number, number>()
+    // How many updates there have been.
+    private tick = 0
+    // For each data segment, the update at which each of its bytes was last read and written (0: never).
+    private last: { reads: Uint32Array, writes: Uint32Array }[]
+    // The runs touched in the last few updates, oldest first.
+    private recent: { reads: { tick: number, runs: Uint32Array }[], writes: { tick: number, runs: Uint32Array }[] } = { reads: [], writes: [] }
     // Sorted, non-overlapping [start, end) extents of memory touched so far, outside of the data segments.
     // (Data segments are part of the card itself, so they're drawn there instead.)
     regions: [number, number][] = []
 
-    constructor(public data: DataSegment[]) {}
+    constructor(public data: DataSegment[]) {
+        this.last = data.map(segment => ({ reads: new Uint32Array(segment.length), writes: new Uint32Array(segment.length) }))
+    }
 
     update(reads: Uint32Array, writes: Uint32Array) {
-        for (const [heat, fresh] of [[this.reads, reads], [this.writes, writes]] as const) {
-            for (const [address, value] of heat) {
-                if (value < 0.05) heat.delete(address)
-                else heat.set(address, value * DECAY)
-            }
-            for (const address of fresh) {
-                heat.set(address, 1)
-                this.include(address)
-            }
+        this.tick++
+        for (const [kind, runs] of [["reads", reads], ["writes", writes]] as const) {
+            const recent = this.recent[kind]
+            while (recent.length && this.tick - recent[0].tick >= LASTING) recent.shift()
+            if (runs.length) recent.push({ tick: this.tick, runs })
+            for (let i = 0; i < runs.length; i += 2) this.touch(kind, runs[i], runs[i] + runs[i + 1])
         }
+    }
+
+    // Bytes from `start` up to `end` were touched: note it in the data segments they fall in, and
+    // count what's left of them among the regions.
+    private touch(kind: Kind, start: number, end: number) {
+        let from = start
+        // (Data segments come in order of address.)
+        this.data.forEach((segment, index) => {
+            const a = Math.max(start, segment.address), b = Math.min(end, segment.address + segment.length)
+            if (a >= b) return
+            this.last[index][kind].fill(this.tick, a - segment.address, b - segment.address)
+            if (from < a) this.include(from, a)
+            from = Math.max(from, b)
+        })
+        if (from < end) this.include(from, end)
+    }
+
+    // How lately a byte of a data segment has been read or written: 1 in the latest update, fading after that.
+    heat(kind: Kind, segment: DataSegment, byte: number) {
+        const last = this.last[this.data.indexOf(segment)]?.[kind][byte]
+        return last && this.tick - last < LASTING ? DECAY ** (this.tick - last) : 0
     }
 
     inData(address: number) {
@@ -90,21 +120,23 @@ export class MemoryTrace {
         return low < this.regions.length && this.regions[low][0] <= address ? low : -low - 1
     }
 
-    private include(address: number) {
-        let i = this.find(address)
-        if (i >= 0 || this.inData(address)) return
-        i = -i - 1
-        const start = address - address % BLOCK
-        this.regions.splice(i, 0, [start, start + BLOCK])
-        // Merge with neighbors that are close enough.
-        if (i > 0 && start - this.regions[i - 1][1] <= MERGE_GAP) {
-            this.regions[i - 1][1] = start + BLOCK
-            this.regions.splice(i--, 1)
+    // Make the regions cover `start` up to `end`, merging with neighbours that are close enough.
+    private include(start: number, end: number) {
+        const at = this.find(start)
+        // (Nearly always: it's somewhere that has been touched before.)
+        if (at >= 0 && this.regions[at][1] >= end) return
+        start -= start % BLOCK
+        end += (BLOCK - end % BLOCK) % BLOCK
+        // The regions from `first` up to `beyond` are within reach, and become one with this.
+        let first = at >= 0 ? at : -at - 1
+        while (first > 0 && start - this.regions[first - 1][1] <= MERGE_GAP) first--
+        let beyond = first
+        while (beyond < this.regions.length && this.regions[beyond][0] - end <= MERGE_GAP) beyond++
+        if (beyond > first) {
+            start = Math.min(start, this.regions[first][0])
+            end = Math.max(end, this.regions[beyond - 1][1])
         }
-        if (i + 1 < this.regions.length && this.regions[i + 1][0] - this.regions[i][1] <= MERGE_GAP) {
-            this.regions[i][1] = this.regions[i + 1][1]
-            this.regions.splice(i + 1, 1)
-        }
+        this.regions.splice(first, beyond - first, [start, end])
     }
 
     // Squeeze the touched regions into (at most) `cells` cells, with a gap between regions.
@@ -124,12 +156,29 @@ export class MemoryTrace {
             cell += length + GAP
         }
         const result = { reads: new Float32Array(cells), writes: new Float32Array(cells), mapped, bytesPerCell }
-        for (const [heat, out] of [[this.reads, result.reads], [this.writes, result.writes]] as const) {
-            for (const [address, value] of heat) {
-                const i = this.find(address)
-                if (i < 0) continue
-                const cell = starts[i] + Math.floor((address - this.regions[i][0]) / bytesPerCell)
-                if (cell < cells && value > out[cell]) out[cell] = value
+        for (const kind of KINDS) {
+            const out = result[kind]
+            // (Oldest first, so that the latest touch of a cell is the one that shows.)
+            for (const { tick, runs } of this.recent[kind]) {
+                const value = DECAY ** (this.tick - tick)
+                for (let i = 0; i < runs.length; i += 2) {
+                    // A run lies in one region, unless part of it is in a data segment: then in those either side.
+                    let from = runs[i]
+                    const end = from + runs[i + 1]
+                    while (from < end) {
+                        let r = this.find(from)
+                        if (r < 0) {
+                            r = -r - 1
+                            if (r >= this.regions.length || this.regions[r][0] >= end) break
+                            from = this.regions[r][0]
+                        }
+                        const [start, stop] = this.regions[r]
+                        const a = starts[r] + Math.floor((from - start) / bytesPerCell)
+                        const b = starts[r] + Math.floor((Math.min(end, stop) - 1 - start) / bytesPerCell)
+                        for (let c = a; c <= b && c < cells; c++) out[c] = value
+                        from = stop
+                    }
+                }
             }
         }
         return result

@@ -203,7 +203,13 @@ that fallback in `src/generate.ts` and in `public/worklet.js`.
   (`{traced: {binary, map}}`), then posts block counts and touched addresses back, and
   the Listen tab draws a heatmap over a bit-grid of the binary: green for executed code, blue/red
   for data-segment bytes read/written. Memory outside the data segments (`src/memoryTrace.ts`) is
-  drawn in a band under the card. Globals aren't watched themselves: each counts as read
+  drawn in a band under the card. The worklet reports touched memory as runs of bytes, and
+  the page keeps runs and regions, never an entry per byte: a card with a delay line touches tens
+  of thousands of bytes an update (`npx tsx scripts/memory-trace-check.ts <cards>.wasm` runs the
+  real worklet outside a browser and times the page's side; it should be well under a millisecond
+  an update). A traced card itself runs some twenty times slower than a guarded one, because every
+  block and every load and store calls out to the worklet: on this laptop 6 to 18 times real time,
+  so a heavy card may not keep up on a phone. Globals aren't watched themselves: each counts as read
   or written as much as the code that reads or writes it is running (`findGlobalUses`,
   `globalHeat`), and is tinted the same blue and red, in the bits and in the text. Instrumentation must not change a card's output.
   Every rewriting (traced, metered or neither: once the tracer module is there, the worklet

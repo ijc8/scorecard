@@ -61,9 +61,9 @@ function drawHeat(canvas: HTMLCanvasElement | null, lines: Float32Array | null, 
     const width = context.measureText("0").width
     for (const { segment, line, columns } of data) {
         if (!seen(line)) continue
-        for (const [heat, colour] of [[memory.reads, "0 110 255"], [memory.writes, "255 50 0"]] as const) {
+        for (const [kind, colour] of [["reads", "0 110 255"], ["writes", "255 50 0"]] as const) {
             for (let byte = 0; byte + 1 < columns.length; byte++) {
-                const value = heat.get(segment.address + byte)
+                const value = memory.heat(kind, segment, byte)
                 if (!value) continue
                 context.fillStyle = `rgb(${colour} / ${value * 70}%)`
                 context.fillRect(PADDING + columns[byte] * width - scroll.left, PADDING + line * LINE_HEIGHT - scroll.top, (columns[byte + 1] - columns[byte]) * width, LINE_HEIGHT)

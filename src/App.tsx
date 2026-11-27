@@ -258,12 +258,14 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
                 }
             }
             const { memory } = trace
-            for (const [heat, paintHeat] of [[memory.reads, paintRead], [memory.writes, paintWrite]] as const) {
-                for (const [address, value] of heat) {
-                    const segment = memory.inData(address)
-                    if (!segment) continue
-                    const byte = segment.offset + address - segment.address
-                    for (let i = byte * 8; i < byte * 8 + 8; i++) paintHeat(i, value)
+            for (const segment of memory.data) {
+                for (let byte = 0; byte < segment.length; byte++) {
+                    const read = memory.heat("reads", segment, byte), written = memory.heat("writes", segment, byte)
+                    if (!read && !written) continue
+                    for (let i = (segment.offset + byte) * 8; i < (segment.offset + byte + 1) * 8; i++) {
+                        paintRead(i, read)
+                        paintWrite(i, written)
+                    }
                 }
             }
             const band = memory.layout(Math.max(size * size - bandStart, 0))

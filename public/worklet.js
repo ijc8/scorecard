@@ -1,31 +1,47 @@
-// Remembers which bytes of memory have been touched since the last `flush()`.
+// Remembers which bytes of memory have been touched since the last `flush()`, which gives them
+// as runs: [start, length, start, length, ...]. (A card with a delay line touches tens of
+// thousands of bytes between flushes, nearly all of them in a row.)
 // Flags live in pages allocated on demand, so this costs little however large (or sparse) memory is.
 function makeTouchTracker() {
     const pages = []
-    let touched = new Uint32Array(1 << 12)
-    let count = 0
+    // The pages with anything flagged in them (each page's last element says whether it's listed).
+    let dirty = []
     return {
         touch(address, size) {
             // Fast path for hot addresses: if the first byte is already marked, the rest will be too
             // (short of overlapping, differently-aligned accesses, which we can live with missing).
             if (pages[address >>> 12]?.[address & 4095]) return
             for (let a = address; a < address + size; a++) {
-                const page = pages[a >>> 12] ??= new Uint8Array(4096)
-                if (page[a & 4095]) continue
-                page[a & 4095] = 1
-                if (count === touched.length) {
-                    const bigger = new Uint32Array(count * 2)
-                    bigger.set(touched)
-                    touched = bigger
+                const page = pages[a >>> 12] ??= new Uint8Array(4097)
+                if (!page[4096]) {
+                    page[4096] = 1
+                    dirty.push(a >>> 12)
                 }
-                touched[count++] = a
+                page[a & 4095] = 1
             }
         },
         flush() {
-            const out = touched.slice(0, count)
-            for (const a of out) pages[a >>> 12][a & 4095] = 0
-            count = 0
-            return out
+            const runs = []
+            let start = -1, end = -1
+            dirty.sort((a, b) => a - b)
+            for (const index of dirty) {
+                const page = pages[index]
+                for (let i = page.indexOf(1); i >= 0 && i < 4096; i = page.indexOf(1, i + 1)) {
+                    page[i] = 0
+                    const address = index * 4096 + i
+                    if (address === end) {
+                        end++
+                    } else {
+                        if (start >= 0) runs.push(start, end - start)
+                        start = address
+                        end = address + 1
+                    }
+                }
+                page[4096] = 0
+            }
+            if (start >= 0) runs.push(start, end - start)
+            dirty = []
+            return Uint32Array.from(runs)
         },
     }
 }
@@ -211,6 +227,8 @@ class CustomProcessor extends AudioWorkletProcessor {
     }
 
     async setup(seed, skip = 0) {
+        // (Asked to play before any card has arrived: it's set up when it's loaded and reset.)
+        if (!this.module) return
         this.pos = 0
         this.skipping = 0
         let card
