@@ -186,7 +186,9 @@ export function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeed
 
     const traceCanvas = useRef<HTMLCanvasElement | null>(null)
     // The trace view shows the card's bits, lit up as the code they encode runs (green) and as the
-    // globals they encode are read (blue) or written (red).
+    // data and globals they encode are read (blue) or written (red). Below the card is a band for
+    // the rest of memory: everything the card has touched that isn't part of the card itself,
+    // squeezed to fit.
     const draw = () => {
         const trace = tracer.trace
         if (trace && !tracing) trace.logs.length = 0
@@ -194,9 +196,10 @@ export function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeed
         const shown = trace?.binary ?? binary
         const canvas = traceCanvas.current
         const context = canvas.getContext("2d")!
-        // Arrange the bits in a square.
+        // Arrange the bits in the top four-fifths of a square, leaving the rest for memory.
         const bits = shown.length * 8
-        const size = Math.ceil(Math.sqrt(bits))
+        const size = Math.ceil(Math.sqrt(bits / 0.8))
+        const bandStart = (Math.ceil(bits / size) + 1) * size
         canvas.width = size
         canvas.height = size
         const image = new ImageData(size, size)
@@ -228,6 +231,24 @@ export function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeed
                     paintWrite(i, written)
                 }
             }
+            const { memory } = trace
+            for (const segment of memory.data) {
+                for (let byte = 0; byte < segment.length; byte++) {
+                    const read = memory.heat("reads", segment, byte), written = memory.heat("writes", segment, byte)
+                    if (!read && !written) continue
+                    for (let i = (segment.offset + byte) * 8; i < (segment.offset + byte + 1) * 8; i++) {
+                        paintRead(i, read)
+                        paintWrite(i, written)
+                    }
+                }
+            }
+            const band = memory.layout(Math.max(size * size - bandStart, 0))
+            band.mapped.forEach((mapped, cell) => {
+                if (!mapped) return
+                paint(bandStart + cell, 232, 232, 255)
+                paintRead(bandStart + cell, band.reads[cell])
+                paintWrite(bandStart + cell, band.writes[cell])
+            })
         }
         context.putImageData(image, 0, 0)
     }

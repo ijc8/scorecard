@@ -89,14 +89,21 @@ that fallback in `extractTitle` (`src/card.ts`) and in `public/worklet.js`.
   than the pure-JS decoders. `Scan.tsx` decodes the whole camera frame at full resolution, not just
   what the viewfinder shows.
 - `src/wasmTracer.ts`: tracing reassembles the binary with a `scorecard.log(i32)` import at
-  basic-block boundaries. This happens in the worklet, on the card it's about to play: the tracer
+  basic-block boundaries, and with every load/store address passed through
+  `scorecard.read`/`scorecard.write`. This happens in the worklet, on the card it's about to play: the tracer
   is a second worklet module (`src/instrument.worklet.ts`, bundled with watr and wasmparser,
   ~150 KB), added by `needTracer` in `audio.ts` when tracing or the guard is first wanted; `workletPolyfill.ts`
   gives that scope the TextEncoder/TextDecoder it lacks. The worklet tells the page which card it
-  instrumented (`{traced: {binary, map}}`), then posts block counts back, and the Listen tab
-  draws a heatmap over a bit-grid of the binary: green for code that runs, and blue/red on a
-  global's bytes for reading and writing it. Globals aren't watched themselves: a global is read
-  (or written) as much as the code that does so runs (`findGlobalUses`, `globalHeat`).
+  instrumented (`{traced: {binary, map}}`), then posts block counts and touched memory back, and
+  the Listen tab draws a heatmap over a bit-grid of the binary: green for code that runs, blue/red
+  for data (and globals) read and written, with a band underneath for the rest of memory the card
+  has touched. Globals aren't watched themselves: a global is read (or written) as much as the
+  code that does so runs (`findGlobalUses`, `globalHeat`).
+- Touched memory comes from the worklet as runs (`[start, length, ...]`), and
+  `src/memoryTrace.ts` keeps them as runs: a card with a delay line touches tens of thousands of
+  bytes an update, and there are 43 updates a second. `npx tsx scripts/memory-trace-check.ts
+  <cards>.wasm` runs the real worklet and says what each update costs the page. A traced card
+  runs several times slower (it calls out of WebAssembly at every block and memory access).
 - Turning tracing on or off doesn't restart the card. The page fetches the tracer before loading
   any card, so every card the worklet runs is a rewriting (traced, metered, or neither:
   `plainWat`) that exports its memory and mutable globals as `scorecard.memory` and

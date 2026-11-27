@@ -7,6 +7,7 @@ import { initDebug, dlog, DEBUG } from "./debug"
 import { audioDebugSnapshot, needTracer, onStall, sendToWorklet, setWorkletMessageHandler, startAudio } from "./audio"
 import { NO_TITLE, cardURL, extractTitle, generateSeed, parseCardURL } from "./card"
 import { tracer } from "./trace"
+import { MemoryTrace, findDataSegments } from "./memoryTrace"
 import { findGlobalUses } from "./wasmTracer"
 import { readQR } from "./qrReader"
 import { Tab } from "./tabs"
@@ -249,7 +250,9 @@ function App() {
             } else if (e.data.traced) {
                 // The worklet has instrumented the card it's playing: this is that card, and what its counters count.
                 const { binary, map } = e.data.traced
-                tracer.trace = { binary, map, logs: [], globals: findGlobalUses(binary) }
+                tracer.trace = { binary, map, logs: [], memory: new MemoryTrace(findDataSegments(binary)), globals: findGlobalUses(binary) }
+            } else if (e.data.reads) {
+                tracer.trace?.memory.update(e.data.reads, e.data.writes)
             }
         })
         return () => setWorkletMessageHandler(() => {})

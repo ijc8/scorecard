@@ -1,3 +1,51 @@
+// Remembers which bytes of memory have been touched since the last `flush()`, which gives them
+// as runs: [start, length, start, length, ...]. (A card with a delay line touches tens of
+// thousands of bytes between flushes, nearly all of them in a row.)
+// Flags live in pages allocated on demand, so this costs little however large (or sparse) memory is.
+function makeTouchTracker() {
+    const pages = []
+    // The pages with anything flagged in them (each page's last element says whether it's listed).
+    let dirty = []
+    return {
+        touch(address, size) {
+            // Fast path for hot addresses: if the first byte is already marked, the rest will be too
+            // (short of overlapping, differently-aligned accesses, which we can live with missing).
+            if (pages[address >>> 12]?.[address & 4095]) return
+            for (let a = address; a < address + size; a++) {
+                const page = pages[a >>> 12] ??= new Uint8Array(4097)
+                if (!page[4096]) {
+                    page[4096] = 1
+                    dirty.push(a >>> 12)
+                }
+                page[a & 4095] = 1
+            }
+        },
+        flush() {
+            const runs = []
+            let start = -1, end = -1
+            dirty.sort((a, b) => a - b)
+            for (const index of dirty) {
+                const page = pages[index]
+                for (let i = page.indexOf(1); i >= 0 && i < 4096; i = page.indexOf(1, i + 1)) {
+                    page[i] = 0
+                    const address = index * 4096 + i
+                    if (address === end) {
+                        end++
+                    } else {
+                        if (start >= 0) runs.push(start, end - start)
+                        start = address
+                        end = address + 1
+                    }
+                }
+                page[4096] = 0
+            }
+            if (start >= 0) runs.push(start, end - start)
+            dirty = []
+            return Uint32Array.from(runs)
+        },
+    }
+}
+
 // Gas: how many times round its loops a metered card may go in one call from here (a block of
 // sound, or its setup) before it's stopped. Cards use tens of thousands; this is a fraction of a second's work.
 const GAS = 20000000
@@ -66,7 +114,7 @@ class CustomProcessor extends AudioWorkletProcessor {
     }
 
     // The loaded card, instantiated: as it is, or rewritten. With `meter` it has a gas counter, so
-    // that if it never finishes it is stopped; with `trace` it reports what it runs. Once the
+    // that if it never finishes it is stopped; with `trace` it reports what it runs and touches. Once the
     // tracer is here to do the rewriting, every card is rewritten, if only to export its state
     // (`carries`), so that it can be carried over into another rewriting later.
     async load(trace, meter) {
@@ -91,7 +139,13 @@ class CustomProcessor extends AudioWorkletProcessor {
         let imports
         if (trace) {
             const traceLogs = card.traceLogs = []
-            imports = { scorecard: { log(i) { traceLogs[i] = (traceLogs[i] ?? 0) + 1 } } }
+            const reads = card.reads = makeTouchTracker(), writes = card.writes = makeTouchTracker()
+            imports = { scorecard: {
+                log(i) { traceLogs[i] = (traceLogs[i] ?? 0) + 1 },
+                // These pass the address through, so they can sit in front of each load and store.
+                read(address, offset, size) { reads.touch((address >>> 0) + offset, size); return address },
+                write(address, offset, size) { writes.touch((address >>> 0) + offset, size); return address },
+            } }
         }
         card.instance = await WebAssembly.instantiate(module, imports)
         card.gas = meter ? card.instance.exports.gas : null
@@ -135,12 +189,11 @@ class CustomProcessor extends AudioWorkletProcessor {
         this.wasm = card.instance
         this.gas = card.gas
         this.traceLogs = card.traceLogs ?? null
-        if (this.traceLogs) {
-            // (The page is told which card is being traced, and what its counters count.)
-            this.port.postMessage({ traced: { binary: card.binary, map: card.map } })
-            this.port.postMessage(this.traceLogs)
-            this.traceLogs.length = 0
-        }
+        this.reads = card.reads
+        this.writes = card.writes
+        // (The page is told which card is being traced, and what its counters count.)
+        if (this.traceLogs) this.port.postMessage({ traced: { binary: card.binary, map: card.map } })
+        if (this.traceLogs) this.postTrace()
     }
 
     // The card can't go on (it ran out of gas, or failed some other way): stop, and say so.
@@ -235,12 +288,17 @@ class CustomProcessor extends AudioWorkletProcessor {
         return true
     }
 
+    postTrace() {
+        // Memory first: the execution counts that follow trigger a redraw.
+        const reads = this.reads.flush(), writes = this.writes.flush()
+        this.port.postMessage({ reads, writes }, [reads.buffer, writes.buffer])
+        this.port.postMessage(this.traceLogs)
+        this.traceLogs.length = 0
+    }
+
     postPosition() {
         this.port.postMessage(this.pos)
-        if (this.traceLogs) {
-            this.port.postMessage(this.traceLogs)
-            this.traceLogs.length = 0
-        }
+        if (this.traceLogs) this.postTrace()
     }
 }
 
