@@ -93,7 +93,9 @@ function App() {
         // NOTE: We send the binary here because sending the WebAssembly.Module doesn't work in iOS Safari...
         // (When tracing, the worklet instruments the card itself, and says what its counters count.)
         tracer.trace = null
-        if (tracing || GUARD) await needTracer()
+        // (The tracer is fetched whether or not it's wanted yet: with it there, a card that's playing
+        // can be carried over when tracing is switched, instead of being started again.)
+        await needTracer()
         sendToWorklet({ cmd: "loadModule", binary, trace: tracing, meter: GUARD })
         setBinary(binary)
         reset(lockedSeed)
@@ -160,10 +162,10 @@ function App() {
     const setTracing = async (tracing: boolean) => {
         _setTracing(tracing)
         if (!binary) return
-        if (tracing || GUARD) await needTracer()
+        await needTracer()
         if (!tracing) tracer.trace = null
-        sendToWorklet({ cmd: "loadModule", binary, trace: tracing, meter: GUARD })
-        if (state !== "playing") reset()
+        // (A card that's under way carries on from where it is: the worklet copies its state into the traced card, or back.)
+        sendToWorklet({ cmd: "instrument", trace: tracing, meter: GUARD })
     }
 
     const onScan = (data: string) => {

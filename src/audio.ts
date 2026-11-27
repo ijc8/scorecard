@@ -147,6 +147,8 @@ export function startAudio() {
 
 export function sendToWorklet(message: any) {
     if (message.cmd === "loadModule") moduleMessage = message
+    // (A new worklet is to trace and meter the card as the last one was told to.)
+    else if (message.cmd === "instrument" && moduleMessage) moduleMessage = { ...moduleMessage, trace: message.trace, meter: message.meter }
     else if (message.cmd === "reset" || message.cmd === "play") seed = message.seed
     if (message.cmd === "play") {
         wantPlaying = true

@@ -95,6 +95,14 @@ that fallback in `extractTitle` (`src/card.ts`) and in `public/worklet.js`.
   gives that scope the TextEncoder/TextDecoder it lacks. The worklet tells the page which card it
   instrumented (`{traced: {binary, map}}`), then posts block counts back, and the Listen tab
   draws a heatmap over a bit-grid of the binary.
+- Turning tracing on or off doesn't restart the card. The page fetches the tracer before loading
+  any card, so every card the worklet runs is a rewriting (traced, metered, or neither:
+  `plainWat`) that exports its memory and mutable globals as `scorecard.memory` and
+  `scorecard.globalN`. `{cmd: "instrument"}` makes the worklet build the other rewriting, copy that
+  state across and play on (`carryOver` in `public/worklet.js`). If the tracer couldn't be
+  fetched, it falls back to starting again with the same seed and skipping to where it was.
+  `npx tsx scripts/carry-check.ts <cards>.wasm` checks that a carried-over card plays on
+  sample-for-sample the same.
 - WebAssembly text is assembled by `watr` (`src/assemble.ts`, ~50 KB, loaded when first needed)
   and disassembled by `wasmparser`. After touching the tracer or the disassembly, run
   `npx tsx scripts/watr-check.ts <cards>.wasm`: reassembled and instrumented cards must play

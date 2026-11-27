@@ -25,6 +25,11 @@ class CustomProcessor extends AudioWorkletProcessor {
                 this.module = new WebAssembly.Module(e.data.binary)
                 this.trace = e.data.trace
                 this.meter = e.data.meter
+            } else if (e.data.cmd === "instrument") {
+                // Tracing or metering is turned on or off. A card that's under way carries on as it was.
+                this.trace = e.data.trace
+                this.meter = e.data.meter
+                if (this.wasm) this.carryOver()
             } else if (e.data.cmd === "reset") {
                 // (`skip`: start again, then get this many samples in before being heard.)
                 this.setup(e.data.seed, e.data.skip)
@@ -60,23 +65,25 @@ class CustomProcessor extends AudioWorkletProcessor {
         return made
     }
 
-    // The loaded card, instantiated: as it is, or rewritten to be traced or metered. With `meter`
-    // it has a gas counter, so that if it never finishes it is stopped; with `trace` it reports
-    // what it runs.
+    // The loaded card, instantiated: as it is, or rewritten. With `meter` it has a gas counter, so
+    // that if it never finishes it is stopped; with `trace` it reports what it runs. Once the
+    // tracer is here to do the rewriting, every card is rewritten, if only to export its state
+    // (`carries`), so that it can be carried over into another rewriting later.
     async load(trace, meter) {
         const able = !!globalThis.scorecardInstrument
         trace = trace && able
         meter = meter && able
-        const card = { traced: trace }
+        const card = { binary: this.binary }
         let module = this.module
-        if (trace || meter) {
+        if (able) {
             try {
                 const made = this.rewritten(this.binary, trace, meter)
                 module = made.module
                 card.map = made.map
+                card.carries = true
             } catch (error) {
-                // A card the rewriter can't manage is still a card: if it was only to be metered,
-                // it plays as it is, unguarded. (To be traced, it has to be rewritten.)
+                // A card the rewriter can't manage is still a card: unless it was to be traced
+                // (which takes rewriting), it plays as it is, unguarded.
                 if (trace) throw error
                 meter = false
             }
@@ -88,11 +95,57 @@ class CustomProcessor extends AudioWorkletProcessor {
         }
         card.instance = await WebAssembly.instantiate(module, imports)
         card.gas = meter ? card.instance.exports.gas : null
+        // (A metered card gets an allowance for its setup, as for each block of sound.)
+        if (card.gas) card.gas.value = GAS
         return card
+    }
+
+    // The card that's playing goes on as it is, but traced or metered as is now wanted: it's
+    // rewritten afresh, and its state (all of its memory, and its globals) is copied across. If
+    // that can't be done (the card playing wasn't rewritten to export its state, which is so if
+    // the tracer couldn't be fetched), it starts again instead and is run, unheard, to where it was.
+    async carryOver() {
+        const able = !!globalThis.scorecardInstrument, old = this.card, seed = this.seed
+        const again = () => this.setup(seed, this.pos + this.skipping)
+        if (!able || !old?.carries || old.binary !== this.binary) return again()
+        let fresh
+        try {
+            fresh = await this.load(!!this.trace, !!this.meter)
+        } catch (error) {
+            return again()
+        }
+        // (Meanwhile another card may have been set up, or this one carried over already.)
+        if (this.card !== old || !fresh.carries) return this.card === old ? again() : undefined
+        const from = old.instance.exports, to = fresh.instance.exports
+        const memory = from["scorecard.memory"], copy = to["scorecard.memory"]
+        if (memory && copy) {
+            const more = (memory.buffer.byteLength - copy.buffer.byteLength) / 65536
+            if (more > 0) copy.grow(more)
+            new Uint8Array(copy.buffer).set(new Uint8Array(memory.buffer))
+        }
+        for (const name in from) {
+            if (name.startsWith("scorecard.global") && to[name]) to[name].value = from[name].value
+        }
+        this.adopt(fresh)
+    }
+
+    // This card (an instance, set up) is the one that plays from here on.
+    adopt(card) {
+        this.card = card
+        this.wasm = card.instance
+        this.gas = card.gas
+        this.traceLogs = card.traceLogs ?? null
+        if (this.traceLogs) {
+            // (The page is told which card is being traced, and what its counters count.)
+            this.port.postMessage({ traced: { binary: card.binary, map: card.map } })
+            this.port.postMessage(this.traceLogs)
+            this.traceLogs.length = 0
+        }
     }
 
     // The card can't go on (it ran out of gas, or failed some other way): stop, and say so.
     fail(error) {
+        this.card = undefined
         this.wasm = undefined
         this.gas = null
         this.traceLogs = null
@@ -108,8 +161,6 @@ class CustomProcessor extends AudioWorkletProcessor {
         let card
         try {
             card = await this.load(this.trace, this.meter)
-            // (A metered card gets an allowance for its setup, as for each block of sound.)
-            if (card.gas) card.gas.value = GAS
             // Support new, short export name ("s") or legacy name ("setup") for old cards.
             const setup = card.instance.exports.s ?? card.instance.exports.setup
             if (setup) {
@@ -118,16 +169,8 @@ class CustomProcessor extends AudioWorkletProcessor {
         } catch (error) {
             return this.fail(error)
         }
-        this.wasm = card.instance
-        this.gas = card.gas
-        this.traceLogs = card.traceLogs ?? null
-
-        if (this.traceLogs) {
-            // (The page is told which card is being traced, and what its counters count.)
-            this.port.postMessage({ traced: { binary: this.binary, map: card.map } })
-            this.port.postMessage(this.traceLogs)
-            this.traceLogs.length = 0
-        }
+        this.seed = seed
+        this.adopt(card)
         // (Only now, so the card being replaced doesn't do the skipping.)
         this.skipping = skip
     }

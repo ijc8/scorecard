@@ -39,16 +39,39 @@ const GAS_CHECK = [
     "end",
 ]
 
+// Whatever the player rewrites a card for, it also has the card export all of its state: its
+// memory, and every global that can change. With those, a card that's playing can be carried over
+// into another rewriting of itself (traced, say) by copying the state across, and plays on from
+// where it was: see `carryOver` in public/worklet.js.
+export const STATE_PREFIX = "scorecard."
+function stateExports(lines: string[]) {
+    const out: string[] = []
+    for (const line of lines) {
+        const memory = /^ *\(memory (\$\S+)/.exec(line)
+        if (memory) out.push(`(export "${STATE_PREFIX}memory" (memory ${memory[1]}))`)
+        const global = /^ *\(global (\$\S+) \(mut (i32|i64|f32|f64)\)/.exec(line)
+        if (global) out.push(`(export "${STATE_PREFIX}global${out.length}" (global ${global[1]}))`)
+    }
+    return out
+}
+
+// The card's own text with only that added, for a card that's neither traced nor metered.
+export function plainWat(binary: Uint8Array) {
+    const { lines } = disassembleWasm(binary)
+    lines.splice(lines.lastIndexOf(")"), 0, ...stateExports(lines))
+    return lines.join("\n")
+}
+
 // (A function's own locals come first; ours go after them, so as not to renumber any.)
 const endsHeader = (lines: string[], index: number) => /^ *\((func|local) /.test(lines[index]) && !/^ *\(local/.test(lines[index + 1] ?? "")
 
-// The card's own text, with only the gas counter added.
+// The card's own text, with the gas counter added (and its state exported).
 export function meterWat(binary: Uint8Array) {
     const { lines } = disassembleWasm(binary)
     const out: string[] = []
     const end = lines.lastIndexOf(")")
     lines.forEach((line, index) => {
-        if (index === end) out.push(GAS_GLOBAL)
+        if (index === end) out.push(...stateExports(lines), GAS_GLOBAL)
         out.push(line)
         if (endsHeader(lines, index)) out.push(GAS_LOCAL)
         if (/^ *loop\b/.test(line)) out.push(...GAS_CHECK)
@@ -68,6 +91,7 @@ export function instrumentWat(binary: Uint8Array, meter = false) {
     result.lines.forEach(function (s, index) {
         const offset = result.offsets![index]
         // console.log(s, offset)
+        if (index === last) out.push(...stateExports(result.lines))
         if (meter && index === last) out.push(GAS_GLOBAL)
         out.push(s)
         if (meter && /^ *loop\b/.test(s)) out.push(...GAS_CHECK)
