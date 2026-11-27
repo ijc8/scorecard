@@ -145,6 +145,9 @@ function App() {
         sendToWorklet({ cmd: "reset", seed: _seed })
     }
 
+    // The card as it would be printed.
+    const printable = () => ({ url: cardURL(encodeBlob(binary!), seedLock ? seed : undefined), title, size })
+
     // A seed typed in is the performance that's wanted: the card starts again with it.
     // (Leaving the box as it was changes nothing.)
     const chooseSeed = (chosen: number) => {
@@ -276,7 +279,7 @@ function App() {
     const tabs = [
         { name: "Listen", component: <Listen {...{ qrCanvas, title, size, seed, setSeed: chooseSeed, seedLock, setSeedLock, state, setState, time, setTime, reset, error, buffer: binary, tracing, setTracing }} /> },
         { name: "Scan", component: <Scan {...{ onScan, tab }} /> },
-        { name: "Create", component: <Create {...{ binary, loadBinary, wat, setWAT, tab }} /> },
+        { name: "Create", component: <Create {...{ binary, loadBinary, wat, setWAT, tab, printable }} /> },
         { name: "About", component: <About {...{ setTab }} /> },
     ]
 

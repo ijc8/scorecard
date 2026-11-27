@@ -116,6 +116,11 @@ that fallback in `extractTitle` (`src/card.ts`) and in `public/worklet.js`.
   and disassembled by `wasmparser`. After touching the tracer or the disassembly, run
   `npx tsx scripts/watr-check.ts <cards>.wasm`: reassembled and instrumented cards must play
   sample-for-sample the same.
+- `src/print.ts`: a card drawn as it's printed (wordmark, QR code, name and size; 576 dots wide,
+  pure black and white), saved or shared as a picture, or sent to a Bluetooth thermal printer
+  (Phomemo M02 Pro, ESC/POS raster) over Web Serial where the browser has it (desktop Chrome;
+  the printer must be paired first). The buttons are on the Create tab. Root-level `print.py`
+  is the older, standalone way to print.
 - `vite.config.ts` sets `base: "./"`, which the `ijc8.me/s` subpath deployment depends on.
 
 Skipping and seeking happen in the worklet, and a card can only get anywhere by being run: `skip`
