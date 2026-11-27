@@ -255,20 +255,27 @@ export function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeed
             <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", display: tracing ? "none" : "block", visibility: showMessage ? "hidden" : "inherit", width: "100%" }} width="1" height="1"></canvas>
             <canvas ref={traceCanvas} style={{ imageRendering: "pixelated", display: tracing ? "block" : "none", visibility: showMessage ? "hidden" : "inherit", width: "100%" }} width="1" height="1"></canvas>
         </div>
-        <h2 style={{ userSelect: "none", margin: "20px", fontSize: "6cqw" }}>{title} | {size} bytes {/* TODO: add link and perhaps download buttons with icons */}</h2>
-        <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", fontSize: "5cqw" }}>
-            <Clock {...{ time, seed, style: smallIconStyle }} />
-            <button onTouchStart={touchStartReset} onMouseDown={mouseReset} onMouseUp={() => { events.current.reset = false }} style={{ touchAction: "manipulation" }}><Prev style={bigIconStyle} /></button>
-            <button id="start" onTouchStart={touchStartToggle} onMouseDown={mouseToggle} onMouseUp={() => { events.current.toggle = false }}>{state === "playing" ? <Pause style={bigIconStyle} /> : <Play style={bigIconStyle} />}</button>
-            <SkipButton style={{ ...bigIconStyle, height: "8cqw" }} />
-            <div style={{ display: "flex", alignItems: "center", userSelect: "none" }}>
-                <button style={{ fontSize: 0 }}><DiceIcon style={smallIconStyle} onClick={() => setSeedLock(!seedLock)} /></button>
-                &nbsp;
-                <SeedInput {...{ seed, setSeed }} />
-            </div>
-            <button style={{ fontSize: 0, marginRight: "-5cqw" }} onClick={() => setTracing(!tracing)}>
-                <TraceIcon style={{ ...smallIconStyle }} />
+        <h2 style={{ userSelect: "none", margin: "20px", fontSize: "6cqw" }}>
+            {title} | {size} bytes{" "}
+            <button id="trace" title={tracing ? "Stop tracing" : "Trace: show which of the card's bits are running"} style={{ fontSize: 0, border: "none", padding: 0, verticalAlign: "middle" }} onClick={() => setTracing(!tracing)}>
+                <TraceIcon style={{ height: "5cqw" }} />
             </button>
+        </h2>
+        {/* Play sits in the middle column, so it stays in the centre whatever is on either side. */}
+        <div className="play-controls" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto minmax(0, 1fr)", textAlign: "left", alignItems: "center", fontSize: "5cqw" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "right" }}>
+                <Clock {...{ time, seed, style: smallIconStyle }} />
+                <button onTouchStart={touchStartReset} onMouseDown={mouseReset} onMouseUp={() => { events.current.reset = false }} style={{ touchAction: "manipulation" }}><Prev style={bigIconStyle} /></button>
+            </div>
+            <button id="start" onTouchStart={touchStartToggle} onMouseDown={mouseToggle} onMouseUp={() => { events.current.toggle = false }}>{state === "playing" ? <Pause style={bigIconStyle} /> : <Play style={bigIconStyle} />}</button>
+            <div style={{ display: "flex", alignItems: "center" }}>
+                <SkipButton style={{ ...bigIconStyle, height: "8cqw" }} />
+                <div style={{ display: "flex", alignItems: "center", userSelect: "none" }}>
+                    <button style={{ fontSize: 0 }}><DiceIcon style={smallIconStyle} onClick={() => setSeedLock(!seedLock)} /></button>
+                    &nbsp;
+                    <SeedInput {...{ seed, setSeed }} />
+                </div>
+            </div>
         </div>
     </div>
 }

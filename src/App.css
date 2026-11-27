@@ -59,7 +59,7 @@
     padding: 0;
 }
 
-.play-controls > * {
+.play-controls > button, .play-controls > div > * {
     padding: 0 4px;
 }
 
