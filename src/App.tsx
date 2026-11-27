@@ -12,7 +12,8 @@ import { flushSync } from "react-dom"
 import { Score } from "./Score"
 import { raise, throwTop, turn, useDissolve, usePile } from "./Pile"
 import { Place, Spread, placeOf } from "./Spread"
-import { BitsIcon, Forward, HeartFull, QRIcon } from "./icons"
+import { Forward, HeartFull, QRIcon, ScoreIcon } from "./icons"
+import TraceIcon from "pixelarticons/svg/search.svg?react"
 import CodeIcon from "pixelarticons/svg/code.svg?react"
 import { decodeSteps } from "./qrDecode"
 import { playDecode } from "./decodeAnimation"
@@ -34,7 +35,6 @@ import Subscriptions from "pixelarticons/svg/subscriptions.svg?react"
 import Camera from "pixelarticons/svg/camera.svg?react"
 import EditBox from "pixelarticons/svg/edit-box.svg?react"
 import DragAndDrop from "pixelarticons/svg/drag-and-drop.svg?react"
-import ScoreIcon from "pixelarticons/svg/analytics.svg?react"
 import { readQR } from "./qrReader"
 import logoUrl from "./assets/logo.png"
 import exampleCardUrl from "./assets/example-card.png"
@@ -110,7 +110,7 @@ type View = "qr" | "bits" | "score" | "text"
 const FRONT: View[] = ["qr", "bits"]
 const VIEWS: { name: View, title: string, Icon: React.FunctionComponent<React.SVGProps<SVGSVGElement>> }[] = [
     { name: "qr", title: "The card's QR code", Icon: QRIcon },
-    { name: "bits", title: "The card's bits, at work as it plays", Icon: BitsIcon },
+    { name: "bits", title: "The card's bits, at work as it plays", Icon: TraceIcon },
     { name: "score", title: "The card's score: the music to come, drawn out", Icon: ScoreIcon },
     { name: "text", title: "The card's code, as WebAssembly text", Icon: CodeIcon },
 ]
@@ -472,7 +472,7 @@ const About = memo(function About({ setTab, openDeck }: any) {
             <ul style={{ margin: 0, paddingLeft: "1.2em" }}>
                 <li>Flick the top card off to the left for the next one in your deck, or drag to the right for the one before.</li>
                 <li>Tap <Headphone style={inline} /> (or the table) to spread the whole pile out, along with any packs waiting to be opened.</li>
-                <li>The four buttons at a card's corner choose what it shows. <BitsIcon style={inline} /> watches the QR code being read into the card's bits, and the bits at work as they play.</li>
+                <li>The four buttons at a card's corner choose what it shows. <TraceIcon style={inline} /> watches the QR code being read into the card's bits, and the bits at work as they play.</li>
                 <li><ScoreIcon style={inline} /> is the card's score: the music to come, drawn out. Tap it to go to a moment.</li>
                 <li><CodeIcon style={inline} /> turns the card over to read its code. From there you can also print it, or save it as a picture.</li>
                 <li>Tap <Forward style={inline} /> to skip ahead, or hold it to fast-forward. Tap the clock to go to a time.</li>
