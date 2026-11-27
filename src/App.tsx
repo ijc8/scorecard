@@ -148,12 +148,8 @@ function App() {
         dlog("setState", _state)
         if (_state === "playing") {
             startAudio() // must run synchronously inside the user gesture (for iOS)
-            let _seed = seed
-            if (state === "stopped" && !seedLock) {
-                _seed = generateSeed()
-                setSeed(_seed)
-            }
-            sendToWorklet({ cmd: "play", seed: _seed })
+            // (The card was set up, with the seed that's showing, when it was loaded or last reset.)
+            sendToWorklet({ cmd: "play", seed })
         } else if (_state === "paused") {
             sendToWorklet({ cmd: "pause" })
         }
