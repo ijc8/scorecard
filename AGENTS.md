@@ -49,6 +49,16 @@ A scorecard `.wasm` exports:
 - `d`: optional `i32` global pointing to a zero-terminated UTF-8 title. If present, memory must be
   exported as `m`.
 
+**Guard against stuck cards** (gas metering, on unless the URL has `?noguard`; without it, on iOS,
+one card stuck in `p` leaves the page without audio): the worklet rewrites every card it runs
+(`meterWat` in `src/wasmTracer.ts`, through the same second worklet module as tracing). Each
+function counts its passes through loops in a local, and every 64th takes 64 from an exported
+global, `gas`, which the worklet tops up before each block and before setup; a card that runs out
+traps and is stopped (`{failed}`). The card's output must not change: `npx tsx scripts/gas-check.ts
+<cards>.wasm` checks that and measures the cost. A card the rewriter can't handle plays unguarded.
+If a card hangs the audio thread anyway (guard off), `audio.ts` pings the worklet when the clock
+freezes: no answer twice at the same place means the card is stuck, and it isn't loaded again.
+
 The player also accepts the legacy names (`process`/`setup`/`title`/`memory`) for old cards. Keep
 that fallback in `extractTitle` (`src/card.ts`) and in `public/worklet.js`.
 
@@ -81,7 +91,7 @@ that fallback in `extractTitle` (`src/card.ts`) and in `public/worklet.js`.
 - `src/wasmTracer.ts`: tracing reassembles the binary with a `scorecard.log(i32)` import at
   basic-block boundaries. This happens in the worklet, on the card it's about to play: the tracer
   is a second worklet module (`src/instrument.worklet.ts`, bundled with watr and wasmparser,
-  ~150 KB), added by `needTracer` in `audio.ts` when tracing is first wanted; `workletPolyfill.ts`
+  ~150 KB), added by `needTracer` in `audio.ts` when tracing or the guard is first wanted; `workletPolyfill.ts`
   gives that scope the TextEncoder/TextDecoder it lacks. The worklet tells the page which card it
   instrumented (`{traced: {binary, map}}`), then posts block counts back, and the Listen tab
   draws a heatmap over a bit-grid of the binary.

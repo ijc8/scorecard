@@ -16,6 +16,11 @@ import { About } from "./About"
 
 initDebug(audioDebugSnapshot)
 
+// The guard against stuck cards: the worklet gives every card it runs a gas counter (see `meterWat`
+// in wasmTracer.ts), so one that never finishes is stopped instead of taking the audio with it.
+// (`?noguard` plays cards exactly as scanned.)
+const GUARD = !new URLSearchParams(window.location.search).has("noguard")
+
 // function profile(instance: WebAssembly.Instance) {
 //     if (instance.exports.setup) {
 //         const seed = generateSeed()
@@ -76,6 +81,10 @@ function App() {
     // `seedLock` here still hold what they were before the link was read.)
     const loadBinary = async (binary: Uint8Array, lockedSeed?: number) => {
         const module = new WebAssembly.Module(binary as BufferSource)
+        if (!WebAssembly.Module.exports(module).some(e => e.kind === "function" && (e.name === "p" || e.name === "process"))) {
+            window.alert("This card has nothing to play: it has no process function.")
+            return
+        }
         setSize(binary.length)
         console.log("loaded wasm", module)
         setTitle(extractTitle(module) ?? NO_TITLE)
@@ -84,8 +93,8 @@ function App() {
         // NOTE: We send the binary here because sending the WebAssembly.Module doesn't work in iOS Safari...
         // (When tracing, the worklet instruments the card itself, and says what its counters count.)
         tracer.trace = null
-        if (tracing) await needTracer()
-        sendToWorklet({ cmd: "loadModule", binary, trace: tracing })
+        if (tracing || GUARD) await needTracer()
+        sendToWorklet({ cmd: "loadModule", binary, trace: tracing, meter: GUARD })
         setBinary(binary)
         reset(lockedSeed)
     }
@@ -151,9 +160,9 @@ function App() {
     const setTracing = async (tracing: boolean) => {
         _setTracing(tracing)
         if (!binary) return
-        if (tracing) await needTracer()
-        else tracer.trace = null
-        sendToWorklet({ cmd: "loadModule", binary, trace: tracing })
+        if (tracing || GUARD) await needTracer()
+        if (!tracing) tracer.trace = null
+        sendToWorklet({ cmd: "loadModule", binary, trace: tracing, meter: GUARD })
         if (state !== "playing") reset()
     }
 
@@ -225,6 +234,10 @@ function App() {
                 setTime(e.data / 44100)
             } else if (Array.isArray(e.data)) {
                 tracer.handleLogs?.(e.data)
+            } else if (e.data.failed) {
+                // The card was stopped in the worklet: it ran out of gas (see the guard), or broke.
+                _setState("paused")
+                window.alert(`This card was stopped: ${/unreachable/i.test(e.data.failed) ? "it went on too long without finishing" : e.data.failed}.`)
             } else if (e.data.traced) {
                 // The worklet has instrumented the card it's playing: this is that card, and what its counters count.
                 tracer.trace = { ...e.data.traced, logs: [] }
@@ -234,7 +247,10 @@ function App() {
     }, [])
 
     // If the audio clock stalls (iOS), show "paused" so the next Play tap can restart audio.
-    useEffect(() => onStall(() => _setState("paused")), [])
+    useEffect(() => onStall(hung => {
+        _setState("paused")
+        if (hung) window.alert("This card stopped responding, so it has been stopped. Load it again to give it another try.")
+    }), [])
 
     // TODO: "load example" link
     // useEffect(() => {

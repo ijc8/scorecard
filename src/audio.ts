@@ -17,7 +17,8 @@
 import { DEBUG, dlog } from "./debug"
 import instrumenterUrl from "./instrument.worklet.ts?worker&url"
 
-type Listener = () => void
+// (`hung`: the card itself seems to be stuck, and has been taken off the audio thread.)
+type Listener = (hung: boolean) => void
 
 let ctx: AudioContext
 let nodePromise: Promise<AudioWorkletNode>
@@ -26,7 +27,7 @@ let wasInterrupted = false
 // Last loadModule message, re-sent to each new worklet node.
 let moduleMessage: any = null
 let wantPlaying = false
-// The tracer is a second module in the worklet's scope, added only once tracing is wanted (see `needTracer`).
+// The tracer is a second module in the worklet's scope, added only once tracing or metering is wanted (see `needTracer`).
 let tracerWanted = false
 let tracerReady: Promise<unknown> = Promise.resolve()
 let seed = 0
@@ -35,14 +36,22 @@ let onWorkletMessage: (e: MessageEvent) => void = () => {}
 // Last sample of the audio clock, taken by the watchdog.
 let sample = { at: 0, ct: 0, advancing: false }
 let frozenSince: number | null = null
+// Telling a stuck card from a dead context: the audio thread is pinged when the clock freezes. If
+// it doesn't answer, it's busy (a card that never returns) or gone; if that happens again with the
+// same card at the same place, it's the card.
+let lastPong = 0
+let unanswered: { module: any, pos: number } | null = null
+let threadStuck = false
 const stallListeners = new Set<Listener>()
 
 function createContext() {
     const old = ctx
     if (old) {
         old.onstatechange = null
-        old.close().catch(() => {})
+        // (A context whose audio thread is stuck is left alone: closing it would wait on that thread.)
+        if (!threadStuck) old.close().catch(() => {})
     }
+    threadStuck = false
     const c = new AudioContext({ sampleRate: 44100 })
     ctx = c
     wasInterrupted = false
@@ -66,6 +75,10 @@ function createContext() {
         node.connect(c.destination)
         node.port.onmessage = e => {
             if (typeof e.data === "number") lastPos = e.data
+            if (e.data?.pong) {
+                lastPong = performance.now()
+                return
+            }
             onWorkletMessage(e)
         }
         // Bring a replacement node to where the old one was: same binary, same seed.
@@ -148,7 +161,7 @@ export function sendToWorklet(message: any) {
     })
 }
 
-// Resolves once the worklet can instrument cards for tracing (now, and in any context made later).
+// Resolves once the worklet can instrument cards for tracing or metering (now, and in any context made later).
 export function needTracer() {
     if (!tracerWanted) {
         tracerWanted = true
@@ -187,12 +200,20 @@ setInterval(() => {
         frozenSince = null
     } else if (frozenSince === null) {
         frozenSince = now
+        sendToWorklet({ cmd: "ping" })
     } else if (now - frozenSince > 1000) {
-        dlog("stalled", ctx.state)
+        // No answer from the audio thread, twice, with the same card about as far along: the card is stuck.
+        const silent = lastPong < frozenSince
+        threadStuck = silent
+        const hung = silent && unanswered !== null && unanswered.module === moduleMessage && Math.abs(unanswered.pos - lastPos) < 44100
+        unanswered = silent && !hung ? { module: moduleMessage, pos: lastPos } : null
+        dlog("stalled", ctx.state, silent ? "(no answer from the audio thread)" : "", hung ? "(card hung)" : "")
         wasInterrupted = true // don't trust this context again: the next Play rebuilds it
+        // (A card that hung isn't put on the next context.)
+        if (hung) moduleMessage = null
         // Also stop the worklet, in case the context comes back by itself while we show "paused".
         sendToWorklet({ cmd: "pause" })
-        stallListeners.forEach(l => l())
+        stallListeners.forEach(l => l(hung))
     }
 }, 100)
 
