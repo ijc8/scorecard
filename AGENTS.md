@@ -86,8 +86,9 @@ that fallback in `extractTitle` (`src/card.ts`) and in `public/worklet.js`.
   a query string.
 - `src/qrReader.ts`: QR decoding for the Scan tab (live camera frames, photos, dropped images)
   using `zxing-wasm`, loaded lazily. Score cards are very dense codes, and it reads them far better
-  than the pure-JS decoders. `Scan.tsx` decodes the whole camera frame at full resolution, not just
-  what the viewfinder shows.
+  than the pure-JS decoders (`scripts/scanbench` measures this on synthetic camera frames: rerun
+  it before changing decoders). `Scan.tsx` decodes the whole camera frame at full resolution, not
+  just what the viewfinder shows.
 - `src/wasmTracer.ts`: tracing reassembles the binary with a `scorecard.log(i32)` import at
   basic-block boundaries, and with every load/store address passed through
   `scorecard.read`/`scorecard.write`. This happens in the worklet, on the card it's about to play: the tracer
