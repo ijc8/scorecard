@@ -60,19 +60,29 @@ function SeedInput({ seed, setSeed }: any) {
 // Go to a time in the performance (in seconds): ahead by skipping, back by starting again with the
 // same seed and skipping to there. Either way the card has to work its way through every sample in
 // between (unheard), at up to 64 times real time.
-function seekTo(target: number, time: number, seed: number) {
+type SetTime = (time: number | ((time: number) => number)) => void
+
+function seekTo(target: number, time: number, seed: number, setTime: SetTime) {
     if (target >= time) sendToWorklet({ cmd: "skip", samples: Math.round((target - time) * 44100 / 128) * 128 })
     else sendToWorklet({ cmd: "reset", seed, skip: Math.round(target * 44100 / 128) * 128 })
+    showPending(setTime, () => target)
+}
+
+// Before the first Play (or with the audio stopped by the system), the worklet isn't running, so
+// it can't do the skipping or say where it has got to until it is: it will, as soon as Play starts
+// it. Meanwhile the clock shows where the card is going to be, so that the next seek starts from there.
+function showPending(setTime: SetTime, to: (time: number) => number) {
+    if (!audioHealthy()) setTime(to)
 }
 
 // The clock. Tap it to type a time to go to.
-function Clock({ time, seed, style }: { time: number, seed: number, style: React.CSSProperties }) {
+function Clock({ time, seed, setTime, style }: { time: number, seed: number, setTime: SetTime, style: React.CSSProperties }) {
     const [editing, setEditing] = useState<string | null>(null)
     const go = (text: string) => {
         setEditing(null)
         const match = text.trim().match(/^(?:(\d+):)?(\d+(?:\.\d*)?)$/)
         if (!match) return
-        seekTo(Number(match[1] ?? 0) * 60 + Number(match[2]), time, seed)
+        seekTo(Number(match[1] ?? 0) * 60 + Number(match[2]), time, seed, setTime)
     }
     return <div style={{ userSelect: "none", display: "flex", alignItems: "center", width: "3.8em", flexShrink: 0, whiteSpace: "nowrap", justifyContent: "right" }}>
         <ClockIcon style={style} />
@@ -94,10 +104,14 @@ function Clock({ time, seed, style }: { time: number, seed: number, style: React
 const SKIP_SECONDS = 10, FAST_FORWARD = 4, HOLD_MS = 350
 
 // Tap to skip ahead; hold to fast-forward (you hear snatches of the card as it goes by).
-function SkipButton({ style }: { style: React.CSSProperties }) {
+function SkipButton({ setTime, style }: { setTime: SetTime, style: React.CSSProperties }) {
     const hold = useRef<{ timer?: number, fast?: boolean } | null>(null)
     const down = (e: React.PointerEvent) => {
-        e.currentTarget.setPointerCapture(e.pointerId)
+        try {
+            e.currentTarget.setPointerCapture(e.pointerId)
+        } catch {
+            // (Not a pointer that can be captured: it will do without.)
+        }
         const h: { timer?: number, fast?: boolean } = {}
         h.timer = window.setTimeout(() => {
             h.fast = true
@@ -114,6 +128,7 @@ function SkipButton({ style }: { style: React.CSSProperties }) {
             sendToWorklet({ cmd: "speed", value: 1 })
         } else if (!cancelled) {
             sendToWorklet({ cmd: "skip", samples: SKIP_SECONDS * 44100 })
+            showPending(setTime, time => time + SKIP_SECONDS)
         }
     }
     return <button id="skip" title={`Tap: skip ${SKIP_SECONDS} seconds. Hold: fast-forward.`} style={{ touchAction: "none", userSelect: "none", WebkitTouchCallout: "none", paddingLeft: 0 } as React.CSSProperties}
@@ -123,9 +138,9 @@ function SkipButton({ style }: { style: React.CSSProperties }) {
 }
 
 // TODO: Specify types
-export function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, setTracing }: {
+export function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, setTime, reset, error, buffer: binary, tracing, setTracing }: {
     qrCanvas: RefObject<HTMLCanvasElement>, title: string, size: number, seed: number, setSeed: (s: number) => void, seedLock: boolean,
-    setSeedLock: (l: boolean) => void, state: any, setState: any, time: number, reset: any, error: any, buffer: Uint8Array | null,
+    setSeedLock: (l: boolean) => void, state: any, setState: any, time: number, setTime: SetTime, reset: any, error: any, buffer: Uint8Array | null,
     tracing: boolean, setTracing: (t: boolean) => void,
 }) {
     const bigIconStyle = { height: "10cqw", verticalAlign: "middle" }
@@ -273,12 +288,12 @@ export function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeed
         {/* Play sits in the middle column, so it stays in the centre whatever is on either side. */}
         <div className="play-controls" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto minmax(0, 1fr)", textAlign: "left", alignItems: "center", fontSize: "5cqw" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "right" }}>
-                <Clock {...{ time, seed, style: smallIconStyle }} />
+                <Clock {...{ time, seed, setTime, style: smallIconStyle }} />
                 <button onTouchStart={touchStartReset} onMouseDown={mouseReset} onMouseUp={() => { events.current.reset = false }} style={{ touchAction: "manipulation" }}><Prev style={bigIconStyle} /></button>
             </div>
             <button id="start" onTouchStart={touchStartToggle} onMouseDown={mouseToggle} onMouseUp={() => { events.current.toggle = false }}>{state === "playing" ? <Pause style={bigIconStyle} /> : <Play style={bigIconStyle} />}</button>
             <div style={{ display: "flex", alignItems: "center" }}>
-                <SkipButton style={{ ...bigIconStyle, height: "8cqw" }} />
+                <SkipButton setTime={setTime} style={{ ...bigIconStyle, height: "8cqw" }} />
                 <div style={{ display: "flex", alignItems: "center", userSelect: "none" }}>
                     <button style={{ fontSize: 0 }}><DiceIcon style={smallIconStyle} onClick={() => setSeedLock(!seedLock)} /></button>
                     &nbsp;

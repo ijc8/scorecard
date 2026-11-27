@@ -266,7 +266,7 @@ function App() {
     // } , [])
 
     const tabs = [
-        { name: "Listen", component: <Listen {...{ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, reset, error, buffer: binary, tracing, setTracing }} /> },
+        { name: "Listen", component: <Listen {...{ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, setTime, reset, error, buffer: binary, tracing, setTracing }} /> },
         { name: "Scan", component: <Scan {...{ onScan, tab }} /> },
         { name: "Create", component: <Create {...{ binary, loadBinary, wat, setWAT, tab }} /> },
         { name: "About", component: <About {...{ setTab }} /> },

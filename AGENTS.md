@@ -115,7 +115,9 @@ Skipping and seeking happen in the worklet, and a card can only get anywhere by 
 makes samples unheard (at up to 64 times real time, a bounded amount per render quantum),
 fast-forward (`speed`) alternates a 60 ms snatch of the card with a silent jump, and going back is a
 `reset` with the same seed and a `skip` to the time wanted. The forward button is tap to skip 10 s,
-hold to fast-forward; tapping the clock takes a time to go to.
+hold to fast-forward; tapping the clock takes a time to go to. Before the first Play the context
+is suspended, so the worklet can't skip or report its position yet: the page shows the time the
+card will be at (`showPending` in `Listen.tsx`), and the worklet catches up when Play starts it.
 
 Transport buttons handle `touchstart` and `mousedown` separately (with de-duplication) so play and
 reset respond instantly: cards are meant to be started in sync or played rhythmically. Don't
