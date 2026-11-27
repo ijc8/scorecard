@@ -101,6 +101,8 @@ class CustomProcessor extends AudioWorkletProcessor {
     }
 
     async setup(seed, skip = 0) {
+        // (Asked to play before any card has arrived: it's set up when it's loaded and reset.)
+        if (!this.module) return
         this.pos = 0
         this.skipping = 0
         let card
