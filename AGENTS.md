@@ -198,7 +198,7 @@ that fallback in `src/generate.ts` and in `public/worklet.js`.
   `scorecard.read`/`scorecard.write`. This happens in the worklet, on the card it's about to play
   (so a card that generates another is traced as what it generated this time): the tracer is a
   second worklet module (`src/instrument.worklet.ts`, bundled with watr and wasmparser, ~150 KB),
-  added by `needTracer` in `audio.ts` when tracing is first wanted; `workletPolyfill.ts` gives that
+  added by `needTracer` in `audio.ts` before the first card is loaded; `workletPolyfill.ts` gives that
   scope the TextEncoder/TextDecoder it lacks. The worklet tells the page which card it instrumented
   (`{traced: {binary, map}}`), then posts block counts and touched addresses back, and
   the Listen tab draws a heatmap over a bit-grid of the binary: green for executed code, blue/red
@@ -210,9 +210,9 @@ that fallback in `src/generate.ts` and in `public/worklet.js`.
   rewrites every card) also exports the card's state: its memory as `scorecard.memory` and each
   mutable global as `scorecard.globalN`. So turning tracing or the guard on or off
   (`{cmd: "instrument", trace, meter}`) doesn't restart a card that's playing: `carryOver` in the
-  worklet instantiates the new rewriting and copies the state across. (Only a card that was started
-  before the tracer arrived, which takes the guard being off, is restarted and run unheard to where
-  it was.) `npx tsx scripts/carry-check.ts <cards>.wasm` checks that a carried-over card plays on
+  worklet instantiates the new rewriting and copies the state across. (The page fetches the tracer
+  before it loads any card, for this. Only if it couldn't be fetched is a card restarted instead,
+  and run unheard to where it was.) `npx tsx scripts/carry-check.ts <cards>.wasm` checks that a carried-over card plays on
   sample-for-sample the same.
 - WebAssembly text is assembled by `watr` (`src/assemble.ts`, ~50 KB; it replaced a vendored 1.2 MB
   wabt) and disassembled by `wasmparser`. After touching the tracer or the disassembly, run
