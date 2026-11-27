@@ -116,9 +116,9 @@ const VIEWS: { name: View, title: string, Icon: React.FunctionComponent<React.SV
 ]
 
 // TODO: Specify types
-function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, played, tracing, kept, toggleKept, face, code, loadBinary, lockSeed, description }: {
-    qrCanvas: RefObject<HTMLCanvasElement>, title: string, listens: boolean, size: number, seed: number, setSeed: (s: number) => void, seedLock: boolean,
-    state: any, setState: any, time: number, reset: any, error: any, buffer: Uint8Array | null, played: Uint8Array | null,
+function Listen({ qrCanvas, title, listens, size, seed, seedLock, state, setState, time, setTime, reset, error, buffer: binary, played, tracing, kept, toggleKept, face, code, loadBinary, lockSeed, description }: {
+    qrCanvas: RefObject<HTMLCanvasElement>, title: string, listens: boolean, size: number, seed: number, seedLock: boolean,
+    state: any, setState: any, time: number, setTime: SetTime, reset: any, error: any, buffer: Uint8Array | null, played: Uint8Array | null,
     tracing: boolean, face: Face, code: string | null, loadBinary: (b: Uint8Array) => Promise<void>,
     kept: boolean, toggleKept: () => void, lockSeed: (lock: boolean) => void,
     description?: string,
@@ -338,7 +338,7 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
                     {/* Tracing: the card's bits, seen through the QR code. */}
                     <canvas ref={traceCanvas} width="1" height="1" className="xray" style={dissolve}></canvas>
                     <canvas ref={decodeCanvas} width="1" height="1" title="Reading the QR code (tap to skip)" style={{ display: decoding ? "block" : "none" }} onClick={() => setDecoding(false)}></canvas>
-                    <Score binary={binary} seed={seed} time={time} active={face === "score" && !showMessage} seek={target => seekTo(target, time, seed)} />
+                    <Score binary={binary} seed={seed} time={time} active={face === "score" && !showMessage} seek={target => seekTo(target, time, seed, setTime)} />
                 {showMessage && <div style={{ position: "absolute", fontSize: "48px", height: "100%", width: "100%", userSelect: "none" }}>
                     <div style={{ border: "16px solid black", height: "100%", containerType: "size", lineHeight: 1, display: "flex", flexDirection: "column", justifyContent: "space-evenly" }}>
                         {error ? <>
@@ -377,14 +377,14 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
         </div>
         <div className="console">
             <div className="play-controls" style={{ display: "flex", textAlign: "left", justifyContent: "center", alignItems: "center", fontSize: "5cqw" }}>
-                <Clock {...{ time, seed, style: smallIconStyle }} />
+                <Clock {...{ time, seed, setTime, style: smallIconStyle }} />
                 <button onTouchStart={touchStartReset} onMouseDown={mouseReset} onMouseUp={() => { events.current.reset = false }} style={{ touchAction: "manipulation" }}><Prev style={bigIconStyle} /></button>
                 <button id="start" onTouchStart={touchStartToggle} onMouseDown={mouseToggle} onMouseUp={() => { events.current.toggle = false }}>{state === "playing" ? <Pause style={bigIconStyle} /> : <Play style={bigIconStyle} />}</button>
-                <SkipButton style={{ ...bigIconStyle, height: "8cqw" }} />
+                <SkipButton setTime={setTime} style={{ ...bigIconStyle, height: "8cqw" }} />
                 <div style={{ display: "flex", alignItems: "center", userSelect: "none" }}>
                     <button style={{ fontSize: 0 }} title={seedLock ? "Unlock the seed: draw a new one each time" : "Lock this seed: keep it when starting again"} onClick={() => lockSeed(!seedLock)}><DiceIcon style={smallIconStyle} /></button>
                     &nbsp;
-                    <SeedInput {...{ seed, setSeed }} />
+                    <SeedInput seed={seed} setSeed={(typed: number) => { if (typed !== seed) reset(typed) }} />
                 </div>
                 {/* Beside the seed: keep this performance. */}
                 <button style={{ fontSize: 0 }} disabled={!binary} title={kept ? "Forget this performance" : "Keep this performance (its seed is saved with the card)"} onClick={toggleKept}>
@@ -399,18 +399,29 @@ function Listen({ qrCanvas, title, listens, size, seed, setSeed, seedLock, state
 // skipping to there. Either way the card has to work its way through every sample in between, at
 // up to 64 times real time.
 // Go to a time in the performance (in seconds): on ahead, or back by starting again with the same seed.
-function seekTo(target: number, time: number, seed: number) {
+type SetTime = (time: number | ((time: number) => number)) => void
+
+// Before the first Play (or with the audio stopped by the system), the worklet isn't running, so
+// it can't do the skipping or say where it has got to until it is: it will, as soon as Play starts
+// it. Meanwhile the clock shows where the card is going to be, so that the next seek starts from there.
+// (From scorecard-cloud's 18a46eb.)
+function showPending(setTime: SetTime, to: (time: number) => number) {
+    if (!audioHealthy()) setTime(to)
+}
+
+function seekTo(target: number, time: number, seed: number, setTime: SetTime) {
+    showPending(setTime, () => target)
     if (target >= time) sendToWorklet({ cmd: "skip", samples: Math.round((target - time) * 44100 / 128) * 128 })
     else sendToWorklet({ cmd: "reset", seed, skip: Math.round(target * 44100 / 128) * 128 })
 }
 
-function Clock({ time, seed, style }: { time: number, seed: number, style: React.CSSProperties }) {
+function Clock({ time, seed, setTime, style }: { time: number, seed: number, setTime: SetTime, style: React.CSSProperties }) {
     const [editing, setEditing] = useState<string | null>(null)
     const go = (text: string) => {
         setEditing(null)
         const match = text.trim().match(/^(?:(\d+):)?(\d+(?:\.\d*)?)$/)
         if (!match) return
-        seekTo(Number(match[1] ?? 0) * 60 + Number(match[2]), time, seed)
+        seekTo(Number(match[1] ?? 0) * 60 + Number(match[2]), time, seed, setTime)
     }
     return <div style={{ userSelect: "none", display: "flex", alignItems: "center", width: "3.8em", flexShrink: 0, whiteSpace: "nowrap", justifyContent: "right" }}>
         <ClockIcon style={style} />
@@ -432,7 +443,7 @@ function Clock({ time, seed, style }: { time: number, seed: number, style: React
 const SKIP_SECONDS = 10, FAST_FORWARD = 4, HOLD_MS = 350
 
 // Tap to skip ahead; hold to fast-forward (you hear snatches of the card as it goes by).
-function SkipButton({ style }: { style: React.CSSProperties }) {
+function SkipButton({ setTime, style }: { setTime: SetTime, style: React.CSSProperties }) {
     const hold = useRef<{ timer?: number, fast?: boolean } | null>(null)
     const down = (e: React.PointerEvent) => {
         e.currentTarget.setPointerCapture(e.pointerId)
@@ -452,6 +463,7 @@ function SkipButton({ style }: { style: React.CSSProperties }) {
             sendToWorklet({ cmd: "speed", value: 1 })
         } else if (!cancelled) {
             sendToWorklet({ cmd: "skip", samples: SKIP_SECONDS * 44100 })
+            showPending(setTime, time => time + SKIP_SECONDS)
         }
     }
     return <button title={`Tap: skip ${SKIP_SECONDS} seconds. Hold: fast-forward.`} style={{ touchAction: "none", userSelect: "none", WebkitTouchCallout: "none", paddingLeft: 0 } as React.CSSProperties}
@@ -707,12 +719,9 @@ function App() {
         dlog("setState", _state)
         if (_state === "playing") {
             startAudio() // must run synchronously inside the user gesture (for iOS)
-            let _seed = seed
-            if (state === "stopped" && !seedLock) {
-                _seed = generateSeed()
-                setSeed(_seed)
-            }
-            sendToWorklet({ cmd: "play", seed: _seed })
+            // (The card was set up with this seed when it was loaded or last reset: a new one drawn
+            // here would be shown, but not played. From scorecard-cloud's cc4dc22.)
+            sendToWorklet({ cmd: "play", seed })
         } else if (_state === "paused") {
             sendToWorklet({ cmd: "pause" })
         }
@@ -963,7 +972,7 @@ function App() {
     const settingsProps = { settings, setSettings, measure: DEBUG ? measure : undefined }
     const hasStarter = packs.some(pack => pack.id === starterPack.id)
     const tabs = [
-        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, listens, size, seed, setSeed, seedLock, state, setState, time, reset, error, buffer: binary, played, tracing, face, code, loadBinary, kept, toggleKept, lockSeed, description: deckCard?.description ?? library.find(card => card.code === code)?.description }} /> },
+        { name: "Listen", Icon: Headphone, component: <Listen {...{ qrCanvas, title, listens, size, seed, seedLock, state, setState, time, setTime, reset, error, buffer: binary, played, tracing, face, code, loadBinary, kept, toggleKept, lockSeed, description: deckCard?.description ?? library.find(card => card.code === code)?.description }} /> },
         { name: "Scan", Icon: Camera, component: <Scan {...{ onScan, tab }} /> },
         // The workbench is laid out like a music card (and shares its controls), so it's drawn by Listen.
         { name: "Create", Icon: EditBox, component: null },
