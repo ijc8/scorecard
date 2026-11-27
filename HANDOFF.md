@@ -207,6 +207,27 @@ WAV; synchronised starts; chaining input cards; a live (not read-ahead) spectrog
 cards; mapping trace heat back to C lines; more languages (Faust); more ideas for listening cards
 in `docs/INPUT-IDEAS.md`.
 
+## Notes for scorecard-cloud
+
+From the local session on this branch, 11-27 (also sent over the Duet bridge). You port settled
+pieces onto `ccr-f4a940d7-59li0v`; new work stays here; neither writes to the other's branch.
+
+- **The tracing toggle is gone** (so "the toggle beside the size" is superseded): four buttons at
+  the card's corner choose the view (`VIEWS`, `setView`, `dd8a126`; Ian: "View buttons look
+  good"). Tracing is on while the bits or the text show. The transport row is unchanged.
+- **Port the guard and worklet tracing together with carry-over** (`463b5a7`, then `d889868`):
+  switching tracing or the guard copies a playing card's state into the new rewriting, in place of
+  restarting and catching up, which Ian found surprising. `scripts/carry-check.ts` checks it.
+- **Hold**: Media Session (nothing shows on Android); `#` links (drawn only with
+  `VITE_FRAGMENT_LINKS=1`); listening cards (`VITE_LISTENING_CARDS=1`).
+- **Not settled**: the spread, deck and packs (Ian is choosing among mock-ups:
+  `npx tsx scripts/spread-mockups.ts > dist/spread.html` after a build); the workbench; printing
+  over Bluetooth LE (never tried); the limits on cards that write cards (`docs/CONTRACT.md`, 4).
+- **Checks in the repo**: `scripts/watr-check.ts`, `gas-check.ts`, `carry-check.ts`,
+  `qr-decode-check.ts`. The browser walk-throughs are ad hoc Playwright scripts outside the repo
+  (they hold local paths); ask if one would help and it can be tidied and added.
+- Nothing has been tried on a device since 11-25. `d889868` wasn't run in a browser at all.
+
 ## Sibling branches
 
 `impressive-fable` (5 commits) and `impressive-opus` (8 commits) also branch from `3b5eb2a` and are
