@@ -78,9 +78,13 @@ that fallback in `extractTitle` (`src/card.ts`) and in `public/worklet.js`.
   using `zxing-wasm`, loaded lazily. Score cards are very dense codes, and it reads them far better
   than the pure-JS decoders. `Scan.tsx` decodes the whole camera frame at full resolution, not just
   what the viewfinder shows.
-- `src/wasmTracer.ts`: the bullseye toggle reassembles the binary with a `scorecard.log(i32)`
-  import at basic-block boundaries; the worklet posts counts back and the Listen tab draws a
-  heatmap over a bit-grid of the binary.
+- `src/wasmTracer.ts`: tracing reassembles the binary with a `scorecard.log(i32)` import at
+  basic-block boundaries. This happens in the worklet, on the card it's about to play: the tracer
+  is a second worklet module (`src/instrument.worklet.ts`, bundled with watr and wasmparser,
+  ~150 KB), added by `needTracer` in `audio.ts` when tracing is first wanted; `workletPolyfill.ts`
+  gives that scope the TextEncoder/TextDecoder it lacks. The worklet tells the page which card it
+  instrumented (`{traced: {binary, map}}`), then posts block counts back, and the Listen tab
+  draws a heatmap over a bit-grid of the binary.
 - WebAssembly text is assembled by `watr` (`src/assemble.ts`, ~50 KB, loaded when first needed)
   and disassembled by `wasmparser`. After touching the tracer or the disassembly, run
   `npx tsx scripts/watr-check.ts <cards>.wasm`: reassembled and instrumented cards must play

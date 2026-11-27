@@ -14,8 +14,10 @@ class CustomProcessor extends AudioWorkletProcessor {
         // Skipping ahead: samples still to be made (silently) before playing on.
         this.skipping = 0
         this.sincePost = 0
+        this.rewrites = new Map()
         this.port.onmessage = async e => {
             if (e.data.cmd === "loadModule") {
+                this.binary = e.data.binary
                 this.module = new WebAssembly.Module(e.data.binary)
                 this.trace = e.data.trace
             } else if (e.data.cmd === "reset") {
@@ -34,14 +36,34 @@ class CustomProcessor extends AudioWorkletProcessor {
         }
     }
 
+    // The loaded card rewritten for tracing (by the tracer: src/instrument.worklet.ts, added to this
+    // scope when tracing is first wanted), compiled. The last few are kept.
+    rewritten(binary) {
+        let hash = 2166136261
+        for (const byte of binary) hash = Math.imul(hash ^ byte, 16777619)
+        const key = `${binary.length}:${hash >>> 0}`
+        let made = this.rewrites.get(key)
+        if (!made) {
+            const { binary: rewrite, map } = globalThis.scorecardInstrument(binary)
+            made = { map, module: new WebAssembly.Module(rewrite) }
+            if (this.rewrites.size >= 8) this.rewrites.delete(this.rewrites.keys().next().value)
+            this.rewrites.set(key, made)
+        }
+        return made
+    }
+
     async setup(seed, skip = 0) {
         this.pos = 0
         this.skipping = 0
-        // Instantiate WebAssembly module.
-        if (this.trace) {
+        // Instantiate WebAssembly module: as it is, or (to trace it) rewritten to report what it runs.
+        const traced = this.trace && !!globalThis.scorecardInstrument
+        let map
+        if (traced) {
+            const made = this.rewritten(this.binary)
+            map = made.map
             const traceLogs = []
             this.traceLogs = traceLogs
-            this.wasm = await WebAssembly.instantiate(this.module, {
+            this.wasm = await WebAssembly.instantiate(made.module, {
                 scorecard: { log(i) { traceLogs[i] = (traceLogs[i] ?? 0) + 1 } }
             })
         } else {
@@ -55,7 +77,9 @@ class CustomProcessor extends AudioWorkletProcessor {
             setup(seed)
         }
 
-        if (this.trace) {
+        if (traced) {
+            // (The page is told which card is being traced, and what its counters count.)
+            this.port.postMessage({ traced: { binary: this.binary, map } })
             this.port.postMessage(this.traceLogs)
             this.traceLogs.length = 0
         }

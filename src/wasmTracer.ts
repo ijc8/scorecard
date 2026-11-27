@@ -1,6 +1,5 @@
 import * as wasmparser from "wasmparser/dist/esm/WasmParser"
 import * as wasmdis from "wasmparser/dist/esm/WasmDis"
-import { assembleWat } from "./assemble"
 
 export type TraceMap = {
     [key: number]: {
@@ -72,7 +71,3 @@ export function instrumentWat(binary: Uint8Array) {
     return { text: out.join("\n"), map }
 }
 
-export async function instrumentWasm(binary: Uint8Array) {
-    const { text, map } = instrumentWat(binary)
-    return { binary: await assembleWat(text), map }
-}

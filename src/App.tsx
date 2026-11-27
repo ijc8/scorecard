@@ -3,9 +3,8 @@ import './App.css'
 import QRCode from "qrcode"
 import { encodeBlob } from "./base43Encoder"
 import logoUrl from "./assets/logo.png"
-import { instrumentWasm } from "./wasmTracer"
 import { initDebug, dlog, DEBUG } from "./debug"
-import { audioDebugSnapshot, onStall, sendToWorklet, setWorkletMessageHandler, startAudio } from "./audio"
+import { audioDebugSnapshot, needTracer, onStall, sendToWorklet, setWorkletMessageHandler, startAudio } from "./audio"
 import { NO_TITLE, cardURL, extractTitle, generateSeed, parseCardURL } from "./card"
 import { tracer } from "./trace"
 import { readQR } from "./qrReader"
@@ -73,13 +72,6 @@ function App() {
     const qrCanvas = useRef<HTMLCanvasElement>(null)
     const [tracing, _setTracing] = useState(false)
 
-    const setupTracing = async (originalBinary: Uint8Array) => {
-        // Instrument Wasm for execution tracing.
-        const { binary, map } = await instrumentWasm(originalBinary)
-        // TODO: set fixed WAT for tracing (line highlighting) in Create tab
-        tracer.trace = { binary, map, logs: [] }
-    }
-
     // `lockedSeed`: the seed the card's link came with, if any. (Passed along because `seed` and
     // `seedLock` here still hold what they were before the link was read.)
     const loadBinary = async (binary: Uint8Array, lockedSeed?: number) => {
@@ -90,13 +82,10 @@ function App() {
 
         // Send to AudioWorklet
         // NOTE: We send the binary here because sending the WebAssembly.Module doesn't work in iOS Safari...
-        if (tracing) {
-            await setupTracing(binary)
-            sendToWorklet({ cmd: "loadModule", binary: tracer.trace!.binary, trace: true })
-        } else {
-            tracer.trace = null
-            sendToWorklet({ cmd: "loadModule", binary })
-        }
+        // (When tracing, the worklet instruments the card itself, and says what its counters count.)
+        tracer.trace = null
+        if (tracing) await needTracer()
+        sendToWorklet({ cmd: "loadModule", binary, trace: tracing })
         setBinary(binary)
         reset(lockedSeed)
     }
@@ -162,14 +151,9 @@ function App() {
     const setTracing = async (tracing: boolean) => {
         _setTracing(tracing)
         if (!binary) return
-        if (tracing) {
-            if (!tracer.trace) {
-                await setupTracing(binary)
-            }
-            sendToWorklet({ cmd: "loadModule", binary: tracer.trace!.binary, trace: true })
-        } else {
-            sendToWorklet({ cmd: "loadModule", binary })
-        }
+        if (tracing) await needTracer()
+        else tracer.trace = null
+        sendToWorklet({ cmd: "loadModule", binary, trace: tracing })
         if (state !== "playing") reset()
     }
 
@@ -239,8 +223,11 @@ function App() {
         setWorkletMessageHandler(e => {
             if (typeof e.data === "number") {
                 setTime(e.data / 44100)
-            } else {
+            } else if (Array.isArray(e.data)) {
                 tracer.handleLogs?.(e.data)
+            } else if (e.data.traced) {
+                // The worklet has instrumented the card it's playing: this is that card, and what its counters count.
+                tracer.trace = { ...e.data.traced, logs: [] }
             }
         })
         return () => setWorkletMessageHandler(() => {})
