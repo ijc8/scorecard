@@ -146,9 +146,14 @@ reset respond instantly: cards are meant to be started in sync or played rhythmi
 
 ## Examples
 
-`examples/deck.h` is a small C helper layer: oscillators, envelopes, `m2f` (pitch→frequency by
-repeated multiplication, to avoid pulling in `powf`), and a coroutine-style `sleep` macro pair. Its
+`examples/deck.h` is a small C helper layer: oscillators, envelopes, filters and effects, `m2f`
+(pitch→frequency by repeated multiplication, to avoid pulling in `powf`), and a coroutine-style
+`sleep` macro pair. Its
 two `__EMSCRIPTEN__` branches let the same source build as a card or as a native binary for `sox`.
+
+`examples/library/*.c` are eight starter cards written with those helpers (filters, a delay line,
+a plucked string, a soft clipper, a small PRNG); `examples/library/build.sh` builds them all. Each
+card's first line is a `//` comment describing it.
 
 ## Conventions
 
