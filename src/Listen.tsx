@@ -16,7 +16,8 @@ import DragAndDrop from "pixelarticons/svg/drag-and-drop.svg?react"
 import Bullseye from "pixelarticons/svg/bullseye.svg?react"
 import BullseyeArrow from "pixelarticons/svg/bullseye-arrow.svg?react"
 import { formatSeed, formatTime } from "./card"
-import { tracer } from "./trace"
+import { TraceData, tracer } from "./trace"
+import { globalHeat } from "./wasmTracer"
 import { dlog } from "./debug"
 import { audioHealthy, sendToWorklet } from "./audio"
 import { Forward } from "./icons"
@@ -169,51 +170,59 @@ export function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeed
     // }
 
     const traceCanvas = useRef<HTMLCanvasElement | null>(null)
+    // The trace view shows the card's bits, lit up as the code they encode runs (green) and as the
+    // globals they encode are read (blue) or written (red).
     const draw = () => {
         const trace = tracer.trace
         if (trace && !tracing) trace.logs.length = 0
         if (!tracing || !traceCanvas.current || !binary) return
+        const shown = trace?.binary ?? binary
         const canvas = traceCanvas.current
         const context = canvas.getContext("2d")!
-        // Arrange bits in a square
-        const size = Math.ceil(Math.sqrt(binary.length * 8))
+        // Arrange the bits in a square.
+        const bits = shown.length * 8
+        const size = Math.ceil(Math.sqrt(bits))
         canvas.width = size
         canvas.height = size
-        const image = new ImageData(canvas.width, canvas.height)
-        for (let i = 0; i < size * size; i++) {
-            if (i < binary.length * 8) {
-                const byte = Math.floor(i / 8)
-                const bit = i % 8
-                if ((binary[byte] >> bit) & 1) {
-                    image.data[i*4] = 204
-                    image.data[i*4+1] = 204
-                    image.data[i*4+2] = 255
-                    image.data[i*4+3] = 255
-                }
-            }
-            // Byte version (one pixel per byte, instead of per bit):
-            // if (i < buffer.length) {
-            //     // image.data[i*4] = 204
-            //     // image.data[i*4+1] = 204
-            //     // image.data[i*4+2] = 255
-            //     image.data[i*4+3] = buffer[i]
-            // }
+        const image = new ImageData(size, size)
+        const paint = (i: number, r: number, g: number, b: number, alpha = 1) => {
+            // Blend over what's there (on a white background).
+            const p = image.data.subarray(i * 4, i * 4 + 4)
+            const blank = p[3] === 0
+            p[0] = (blank ? 255 : p[0]) * (1 - alpha) + r * alpha
+            p[1] = (blank ? 255 : p[1]) * (1 - alpha) + g * alpha
+            p[2] = (blank ? 255 : p[2]) * (1 - alpha) + b * alpha
+            p[3] = 255
         }
-        context.putImageData(image, 0, 0)
+        const paintRead = (i: number, heat: number) => heat && paint(i, 0, 110, 255, heat * 0.7)
+        const paintWrite = (i: number, heat: number) => heat && paint(i, 255, 50, 0, heat * 0.7)
+        for (let i = 0; i < bits; i++) {
+            if ((shown[i >> 3] >> (i % 8)) & 1) paint(i, 204, 204, 255)
+        }
         if (trace && state === "playing") {
             const max = Math.max(...Object.values(trace.logs))
             trace.logs.forEach((count, id) => {
                 const startByte = trace.map[id].start.offset
                 const endByte = trace.map[id].end.offset
-                for (let i = startByte * 8; i < endByte * 8; i++) {
-                    // TODO: fewer calls to `fillRect`
-                    const x = i % canvas.width
-                    const y = Math.floor(i / canvas.width)
-                    context.fillStyle = `rgba(0 255 0 / ${count / max * 40}%)`
-                    context.fillRect(x, y, 1, 1)
-                }
+                for (let i = startByte * 8; i < endByte * 8; i++) paint(i, 0, 255, 0, count / max * 0.4)
             })
+            // (Globals: read and written as much as the code that reads and writes them runs.)
+            for (const { global, read, written } of globalHeat(trace.globals, lineHeat(trace))) {
+                for (let i = global.start * 8; i < global.end * 8; i++) {
+                    paintRead(i, read)
+                    paintWrite(i, written)
+                }
+            }
         }
+        context.putImageData(image, 0, 0)
+    }
+
+    // How much each line of the traced card's text is running, from 0 to 1.
+    const lineHeat = (trace: TraceData) => {
+        const lines = new Float32Array(trace.map[Object.keys(trace.map).length - 1].end.line + 1)
+        const max = Math.max(...Object.values(trace.logs))
+        trace.logs.forEach((count, id) => lines.fill(count / max, trace.map[id].start.line, trace.map[id].end.line))
+        return lines
     }
 
     tracer.handleLogs = (traceLogs: number[]) => {

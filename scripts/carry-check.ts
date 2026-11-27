@@ -17,7 +17,7 @@ const kinds = {
 type Kind = keyof typeof kinds
 
 function instantiate(binary: Uint8Array) {
-    const imports = { scorecard: { log() {} } }
+    const imports = { scorecard: { log() {}, read: (a: number) => a, write: (a: number) => a } }
     const exports: any = new WebAssembly.Instance(new WebAssembly.Module(binary as BufferSource), imports).exports
     return exports
 }

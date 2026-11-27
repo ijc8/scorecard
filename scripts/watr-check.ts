@@ -1,6 +1,7 @@
 // Checks that watr reassembles what the player feeds it faithfully: each card's own disassembly
-// (as the Create tab shows it), and its instrumented text (for tracing). Both must make the same
-// samples as the card itself.
+// (as the Create tab shows it), and its instrumented text (for tracing). Both must
+// make the same samples as the card itself. (When this replaced wabt, 22 cards also gave wabt's
+// exact trace counts.)
 //     npx tsx scripts/watr-check.ts <card.wasm>...
 import { readFileSync } from "fs"
 import { compile } from "watr"
@@ -10,13 +11,18 @@ const SAMPLES = 44100 * 3
 
 function run(binary: Uint8Array, traced: boolean) {
     const counts: number[] = []
-    const imports = traced ? { scorecard: { log: (i: number) => { counts[i] = (counts[i] ?? 0) + 1 } } } : {}
+    let reads = 0, writes = 0
+    const imports = traced ? { scorecard: {
+        log: (i: number) => { counts[i] = (counts[i] ?? 0) + 1 },
+        read: (a: number) => { reads++; return a },
+        write: (a: number) => { writes++; return a },
+    } } : {}
     const exports: any = new WebAssembly.Instance(new WebAssembly.Module(binary), imports).exports
     ;(exports.s ?? exports.setup)?.(1234)
     const p = exports.p ?? exports.process
     const out = new Float32Array(SAMPLES)
-    for (let i = 0; i < SAMPLES; i++) out[i] = p(0)
-    return { out, counts: counts.join(",") }
+    for (let i = 0; i < SAMPLES; i++) out[i] = p()
+    return { out, counts: counts.join(","), reads, writes }
 }
 
 const same = (a: Float32Array, b: Float32Array) => a.every((x, i) => Object.is(x, b[i]) || (isNaN(x) && isNaN(b[i])))

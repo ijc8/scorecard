@@ -94,7 +94,9 @@ that fallback in `extractTitle` (`src/card.ts`) and in `public/worklet.js`.
   ~150 KB), added by `needTracer` in `audio.ts` when tracing or the guard is first wanted; `workletPolyfill.ts`
   gives that scope the TextEncoder/TextDecoder it lacks. The worklet tells the page which card it
   instrumented (`{traced: {binary, map}}`), then posts block counts back, and the Listen tab
-  draws a heatmap over a bit-grid of the binary.
+  draws a heatmap over a bit-grid of the binary: green for code that runs, and blue/red on a
+  global's bytes for reading and writing it. Globals aren't watched themselves: a global is read
+  (or written) as much as the code that does so runs (`findGlobalUses`, `globalHeat`).
 - Turning tracing on or off doesn't restart the card. The page fetches the tracer before loading
   any card, so every card the worklet runs is a rewriting (traced, metered, or neither:
   `plainWat`) that exports its memory and mutable globals as `scorecard.memory` and

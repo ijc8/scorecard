@@ -38,7 +38,6 @@ const GAS_CHECK = [
     "global.get $gas", "i32.const 0", "i32.le_s", "if", "unreachable", "end",
     "end",
 ]
-
 // Whatever the player rewrites a card for, it also has the card export all of its state: its
 // memory, and every global that can change. With those, a card that's playing can be carried over
 // into another rewriting of itself (traced, say) by copying the state across, and plays on from
@@ -64,23 +63,9 @@ export function plainWat(binary: Uint8Array) {
 
 // (A function's own locals come first; ours go after them, so as not to renumber any.)
 const endsHeader = (lines: string[], index: number) => /^ *\((func|local) /.test(lines[index]) && !/^ *\(local/.test(lines[index + 1] ?? "")
-
-// The card's own text, with the gas counter added (and its state exported).
-export function meterWat(binary: Uint8Array) {
-    const { lines } = disassembleWasm(binary)
-    const out: string[] = []
-    const end = lines.lastIndexOf(")")
-    lines.forEach((line, index) => {
-        if (index === end) out.push(...stateExports(lines), GAS_GLOBAL)
-        out.push(line)
-        if (endsHeader(lines, index)) out.push(GAS_LOCAL)
-        if (/^ *loop\b/.test(line)) out.push(...GAS_CHECK)
-    })
-    return out.join("\n")
-}
-
 // The card's WebAssembly text with calls out to `scorecard.log` added, and where each block of code
-// that's counted lies in the text and in the binary. With `meter`, it's given a gas counter as well.
+// that's counted lies in the text and in the binary. With `meter`, it's given a gas counter as well
+// (see `meterWat`).
 export function instrumentWat(binary: Uint8Array, meter = false) {
     const result = disassembleWasm(binary)
     const last = result.lines.lastIndexOf(")")
@@ -102,18 +87,14 @@ export function instrumentWat(binary: Uint8Array, meter = false) {
         // We generate a map from log IDs to regions of code that must have been executed if we see that ID.
         // This map includes both line numbers (for the text format) and byte offsets (for the binary format).
         if (s.match(/^\(module/)) {
-            const line = '(import "scorecard" "log" (func $log (param i32)))'
-            // console.log("INSERT:", line)
-            out.push(line)
+            out.push('(import "scorecard" "log" (func $log (param i32)))')
         }
         if (s.match(/^ *\(func /)) {
             markers.push({ line: index, offset: result.offsets![index - 1] })
         }
-        if (endsHeader(result.lines, index)) {
+        if (s.match(/^ *\((func|local) /) && !result.lines[index+1]?.match(/^ *\(local/)) {
             if (meter) out.push(GAS_LOCAL)
-            const line = `(call $log (i32.const ${id++}))`
-            // console.log("INSERT:", line)
-            out.push(line)
+            out.push(`(call $log (i32.const ${id++}))`)
         } else if (s.match(/^ *(br_if|if|else|loop|end)/)) {
             const line = `(call $log (i32.const ${id++}))`
             // console.log("INSERT:", line)
@@ -135,3 +116,37 @@ export function instrumentWat(binary: Uint8Array, meter = false) {
     return { text: out.join("\n"), map }
 }
 
+export function meterWat(binary: Uint8Array) {
+    const { lines } = disassembleWasm(binary)
+    const out: string[] = []
+    const end = lines.lastIndexOf(")")
+    lines.forEach((line, index) => {
+        if (index === end) out.push(...stateExports(lines), GAS_GLOBAL)
+        out.push(line)
+        if (endsHeader(lines, index)) out.push(GAS_LOCAL)
+        if (/^ *loop\b/.test(line)) out.push(...GAS_CHECK)
+    })
+    return out.join("\n")
+}
+
+// Where a card's globals are in its text and its bytes, and the lines that read and write each.
+// Tracing doesn't watch globals themselves: a global is being read (or written) as much as the
+// code that reads it is running, which is traced (see `globalHeat`).
+export interface GlobalUse { line: number, start: number, end: number, reads: number[], writes: number[] }
+export function findGlobalUses(binary: Uint8Array) {
+    const { lines, offsets } = disassembleWasm(binary)
+    const globals = new Map<string, GlobalUse>()
+    lines.forEach((text, line) => {
+        const defined = /^ *\(global (\$\S+) /.exec(text)
+        if (defined) globals.set(defined[1], { line, start: offsets![line - 1], end: offsets![line], reads: [], writes: [] })
+        const used = /^ *global\.(get|set) (\$\S+)/.exec(text)
+        if (used) globals.get(used[2])?.[used[1] === "get" ? "reads" : "writes"].push(line)
+    })
+    return [...globals.values()]
+}
+
+// How much each global is being read and written (0 to 1), given how much each line of the text is running.
+export function globalHeat(globals: GlobalUse[], lines: Float32Array) {
+    const most = (uses: number[]) => uses.reduce((heat, line) => Math.max(heat, lines[line] ?? 0), 0)
+    return globals.map(global => ({ global, read: most(global.reads), written: most(global.writes) }))
+}

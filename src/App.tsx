@@ -7,6 +7,7 @@ import { initDebug, dlog, DEBUG } from "./debug"
 import { audioDebugSnapshot, needTracer, onStall, sendToWorklet, setWorkletMessageHandler, startAudio } from "./audio"
 import { NO_TITLE, cardURL, extractTitle, generateSeed, parseCardURL } from "./card"
 import { tracer } from "./trace"
+import { findGlobalUses } from "./wasmTracer"
 import { readQR } from "./qrReader"
 import { Tab } from "./tabs"
 import { Listen } from "./Listen"
@@ -242,7 +243,8 @@ function App() {
                 window.alert(`This card was stopped: ${/unreachable/i.test(e.data.failed) ? "it went on too long without finishing" : e.data.failed}.`)
             } else if (e.data.traced) {
                 // The worklet has instrumented the card it's playing: this is that card, and what its counters count.
-                tracer.trace = { ...e.data.traced, logs: [] }
+                const { binary, map } = e.data.traced
+                tracer.trace = { binary, map, logs: [], globals: findGlobalUses(binary) }
             }
         })
         return () => setWorkletMessageHandler(() => {})
