@@ -144,6 +144,15 @@ function App() {
         sendToWorklet({ cmd: "reset", seed: _seed })
     }
 
+    // A seed typed in is the performance that's wanted: the card starts again with it.
+    // (Leaving the box as it was changes nothing.)
+    const chooseSeed = (chosen: number) => {
+        if (chosen === seed) return
+        setSeed(chosen)
+        setTime(0)
+        sendToWorklet({ cmd: "reset", seed: chosen })
+    }
+
     const setState = (_state: "playing" | "paused") => {
         dlog("setState", _state)
         if (_state === "playing") {
@@ -262,7 +271,7 @@ function App() {
     // } , [])
 
     const tabs = [
-        { name: "Listen", component: <Listen {...{ qrCanvas, title, size, seed, setSeed, seedLock, setSeedLock, state, setState, time, setTime, reset, error, buffer: binary, tracing, setTracing }} /> },
+        { name: "Listen", component: <Listen {...{ qrCanvas, title, size, seed, setSeed: chooseSeed, seedLock, setSeedLock, state, setState, time, setTime, reset, error, buffer: binary, tracing, setTracing }} /> },
         { name: "Scan", component: <Scan {...{ onScan, tab }} /> },
         { name: "Create", component: <Create {...{ binary, loadBinary, wat, setWAT, tab }} /> },
         { name: "About", component: <About {...{ setTab }} /> },
