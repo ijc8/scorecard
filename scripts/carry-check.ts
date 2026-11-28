@@ -9,15 +9,19 @@ import { instrumentWat, meterWat, plainWat } from "../src/wasmTracer"
 
 const BEFORE = 44100 * 2 + 777, AFTER = 44100 * 2, SEED = 1234
 
+// (`size`: how much of its memory is the card's own, for a traced card, which keeps flags above that.)
 const kinds = {
-    plain: (binary: Uint8Array) => compile(plainWat(binary)),
-    metered: (binary: Uint8Array) => compile(meterWat(binary)),
-    traced: (binary: Uint8Array) => compile(instrumentWat(binary, true).text),
+    plain: (binary: Uint8Array) => ({ binary: compile(plainWat(binary)), size: undefined }),
+    metered: (binary: Uint8Array) => ({ binary: compile(meterWat(binary)), size: undefined }),
+    traced: (binary: Uint8Array) => {
+        const { text, shadow } = instrumentWat(binary, true)
+        return { binary: compile(text), size: shadow?.size }
+    },
 }
 type Kind = keyof typeof kinds
 
 function instantiate(binary: Uint8Array) {
-    const imports = { scorecard: { log() {}, read: (a: number) => a, write: (a: number) => a } }
+    const imports = { scorecard: { read: (a: number) => a, write: (a: number) => a } }
     const exports: any = new WebAssembly.Instance(new WebAssembly.Module(binary as BufferSource), imports).exports
     return exports
 }
@@ -42,15 +46,17 @@ for (const path of process.argv.slice(2)) {
         const results: string[] = []
         let state = ""
         for (const [from, to] of [["plain", "traced"], ["traced", "plain"], ["metered", "traced"], ["traced", "metered"]] as [Kind, Kind][]) {
-            const a = instantiate(kinds[from](binary)), b = instantiate(kinds[to](binary))
+            const old = kinds[from](binary), fresh = kinds[to](binary)
+            const a = instantiate(old.binary), b = instantiate(fresh.binary)
             if (a.gas) a.gas.value = 1e9
             ;(a.s ?? a.setup)?.(SEED)
             play(a, BEFORE)
             const memory = a["scorecard.memory"], copy = b["scorecard.memory"]
             if (memory) {
-                const more = (memory.buffer.byteLength - copy.buffer.byteLength) / 65536
+                const size = old.size ?? memory.buffer.byteLength
+                const more = (size - (fresh.size ?? copy.buffer.byteLength)) / 65536
                 if (more > 0) copy.grow(more)
-                new Uint8Array(copy.buffer).set(new Uint8Array(memory.buffer))
+                new Uint8Array(copy.buffer).set(new Uint8Array(memory.buffer, 0, size))
             }
             const globals = Object.keys(a).filter(key => key.startsWith("scorecard.global"))
             for (const key of globals) b[key].value = a[key].value

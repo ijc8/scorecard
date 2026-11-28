@@ -193,9 +193,12 @@ that fallback in `src/generate.ts` and in `public/worklet.js`.
 - `src/qrReader.ts`: QR decoding for the Scan tab (live camera frames, photos, dropped images)
   using `zxing-wasm`, loaded lazily. It was picked with `scripts/scanbench` because score cards are
   very dense codes; rerun that benchmark before changing decoders.
-- `src/wasmTracer.ts`: tracing reassembles the binary with a `scorecard.log(i32)`
-  import at basic-block boundaries, and with every load/store address passed through
-  `scorecard.read`/`scorecard.write`. This happens in the worklet, on the card it's about to play
+- `src/wasmTracer.ts` (design in `docs/TRACING.md`): tracing reassembles the binary so that the card
+  keeps its own account: a counter in an exported global (`scorecard.blockN`) at each basic-block
+  boundary, and flags for every byte read or written in a "shadow" above the card's own memory,
+  which is declared three times the size (a card that uses `memory.size` or `memory.grow` instead
+  passes every load/store address through imported `scorecard.read`/`scorecard.write`). The worklet
+  reads and clears these at each update. This happens in the worklet, on the card it's about to play
   (so a card that generates another is traced as what it generated this time): the tracer is a
   second worklet module (`src/instrument.worklet.ts`, bundled with watr and wasmparser, ~150 KB),
   added by `needTracer` in `audio.ts` before the first card is loaded; `workletPolyfill.ts` gives that
@@ -207,9 +210,9 @@ that fallback in `src/generate.ts` and in `public/worklet.js`.
   the page keeps runs and regions, never an entry per byte: a card with a delay line touches tens
   of thousands of bytes an update (`npx tsx scripts/memory-trace-check.ts <cards>.wasm` runs the
   real worklet outside a browser and times the page's side; it should be well under a millisecond
-  an update). A traced card itself runs some twenty times slower than a guarded one, because every
-  block and every load and store calls out to the worklet: on this laptop 6 to 18 times real time,
-  so a heavy card may not keep up on a phone. Globals aren't watched themselves: each counts as read
+  an update). A traced card runs within about two times of a guarded one (it called out to the
+  worklet for every block, load and store until 11-27, and was twenty times slower); after touching
+  the tracer, run `npx tsx scripts/trace-check.ts <cards>.wasm`. Globals aren't watched themselves: each counts as read
   or written as much as the code that reads or writes it is running (`findGlobalUses`,
   `globalHeat`), and is tinted the same blue and red, in the bits and in the text. Instrumentation must not change a card's output.
   Every rewriting (traced, metered or neither: once the tracer module is there, the worklet
