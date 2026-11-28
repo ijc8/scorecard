@@ -13,14 +13,22 @@ import Subscriptions from "pixelarticons/svg/subscriptions.svg?react"
 import Camera from "pixelarticons/svg/camera.svg?react"
 import EditBox from "pixelarticons/svg/edit-box.svg?react"
 import DragAndDrop from "pixelarticons/svg/drag-and-drop.svg?react"
-import Bullseye from "pixelarticons/svg/bullseye.svg?react"
-import BullseyeArrow from "pixelarticons/svg/bullseye-arrow.svg?react"
+import TraceIcon from "pixelarticons/svg/search.svg?react"
 import { formatSeed, formatTime } from "./card"
 import { TraceData, tracer } from "./trace"
 import { globalHeat } from "./wasmTracer"
 import { dlog } from "./debug"
 import { audioHealthy, sendToWorklet } from "./audio"
-import { Forward } from "./icons"
+import { Forward, QRIcon, ScoreIcon } from "./icons"
+import { Score } from "./Score"
+
+// What the card shows where its QR code is: that, its bits at work (traced), or its score.
+type View = "qr" | "bits" | "score"
+const VIEWS: { name: View, title: string, Icon: React.FunctionComponent<React.SVGProps<SVGSVGElement>> }[] = [
+    { name: "qr", title: "The card's QR code", Icon: QRIcon },
+    { name: "bits", title: "The card's bits, at work as it plays", Icon: TraceIcon },
+    { name: "score", title: "The card's score: the music to come, drawn out", Icon: ScoreIcon },
+]
 
 function SeedInput({ seed, setSeed }: any) {
     const [contents, setContents] = useState("")
@@ -282,7 +290,13 @@ export function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeed
     useEffect(draw, [tracing, binary])
 
     const togglePlay = () => { setState(state === "playing" ? "paused" : "playing") }
-    const TraceIcon = tracing ? BullseyeArrow : Bullseye
+    // (The card is traced while its bits show, and not otherwise.)
+    const [scored, setScored] = useState(false)
+    const view: View = tracing ? "bits" : scored ? "score" : "qr"
+    const setView = (name: View) => {
+        setScored(name === "score")
+        if ((name === "bits") !== tracing) setTracing(name === "bits")
+    }
     return <div>
         <div style={{ position: "relative" }}>
             {showMessage && <div style={{ position: "absolute", fontSize: "48px", height: "100%", width: "100%", userSelect: "none" }}>
@@ -297,14 +311,15 @@ export function Listen({ qrCanvas, title, size, seed, setSeed, seedLock, setSeed
                     </>}
                 </div>
             </div>}
-            <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", display: tracing ? "none" : "block", visibility: showMessage ? "hidden" : "inherit", width: "100%" }} width="1" height="1"></canvas>
+            <canvas ref={qrCanvas} style={{ imageRendering: "pixelated", display: view === "qr" ? "block" : "none", visibility: showMessage ? "hidden" : "inherit", width: "100%" }} width="1" height="1"></canvas>
             <canvas ref={traceCanvas} style={{ imageRendering: "pixelated", display: tracing ? "block" : "none", visibility: showMessage ? "hidden" : "inherit", width: "100%" }} width="1" height="1"></canvas>
+            <Score binary={binary} seed={seed} time={time} active={view === "score" && !showMessage} seek={target => seekTo(target, time, seed, setTime)} />
         </div>
         <h2 style={{ userSelect: "none", margin: "20px", fontSize: "6cqw" }}>
             {title} | {size} bytes{" "}
-            <button id="trace" title={tracing ? "Stop tracing" : "Trace: show which of the card's bits are running"} style={{ fontSize: 0, border: "none", padding: 0, verticalAlign: "middle" }} onClick={() => setTracing(!tracing)}>
-                <TraceIcon style={{ height: "5cqw" }} />
-            </button>
+            <span className="views">
+                {VIEWS.map(({ name, title, Icon }) => <button key={name} className={name === view ? "on" : ""} title={title} aria-pressed={name === view} onClick={() => setView(name)}><Icon /></button>)}
+            </span>
         </h2>
         {/* Play sits in the middle column, so it stays in the centre whatever is on either side. */}
         <div className="play-controls" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto minmax(0, 1fr)", textAlign: "left", alignItems: "center", fontSize: "5cqw" }}>

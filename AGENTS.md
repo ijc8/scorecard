@@ -126,6 +126,16 @@ that fallback in `extractTitle` (`src/card.ts`) and in `public/worklet.js`.
   (Phomemo M02 Pro, ESC/POS raster) over Web Serial where the browser has it (desktop Chrome;
   the printer must be paired first). The buttons are on the Create tab. Root-level `print.py`
   is the older, standalone way to print.
+- Three buttons beside the card's size choose what's shown where the QR code is (`VIEWS` in
+  `Listen.tsx`): the QR code, the card's bits (the trace view: the card is traced while this
+  shows, and not otherwise), or its score.
+- `src/Score.tsx`: the card's score, a spectrogram of the performance (this card, this seed) going
+  by: 128 columns of about a tenth of a second (twelve seconds across), 128 bands of pitch from
+  40 Hz to 14 kHz, dithered to black and white. A line a third of the way across marks now: to its
+  left what has been heard, to its right what's coming. Tapping goes to that moment (`seekTo`, as
+  the clock does). `src/score.worker.ts` runs the card ahead in silence and is kept about five
+  seconds past the right-hand edge; it's abandoned if nothing comes for 5 s when there's work to
+  do, the guard against a stuck card.
 - `vite.config.ts` sets `base: "./"`, which the `ijc8.me/s` subpath deployment depends on.
 
 Skipping and seeking happen in the worklet, and a card can only get anywhere by being run: `skip`

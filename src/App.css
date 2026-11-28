@@ -126,3 +126,42 @@
 .photo-button > input {
     display: none;
 }
+
+/* The card's score (see Score.tsx), in place of its QR code. */
+.score {
+    width: 100%;
+    image-rendering: pixelated;
+    background: white;
+    cursor: pointer;
+}
+
+.score-message {
+    padding: 20px;
+}
+
+/* Beside the card's size: buttons for what it shows (its QR code, bits or score). */
+.views {
+    display: inline-flex;
+    gap: 1px;
+    vertical-align: middle;
+}
+
+.views > button {
+    width: 6.4cqw;
+    height: 6.4cqw;
+    padding: 0.7cqw;
+    border: none;
+    border-radius: 0;
+    background: none;
+    font-size: 0;
+    cursor: pointer;
+}
+
+.views > button > svg {
+    height: 5cqw;
+}
+
+.views > button.on {
+    background: black;
+    color: white;
+}
