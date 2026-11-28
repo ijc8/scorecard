@@ -32,13 +32,17 @@ const VIEWS: { name: View, title: string, Icon: React.FunctionComponent<React.SV
 
 function SeedInput({ seed, setSeed }: any) {
     const [contents, setContents] = useState("")
+    // (Enter submits and then takes the focus away, which submits again: once is enough.)
+    const submitted = useRef(seed)
     useEffect(() => {
         setContents(formatSeed(seed))
+        submitted.current = seed
     }, [seed])
 
     const submit = () => {
         if (/^[0-9A-Fa-f]+$/.test(contents) && contents.length <= 8) {
-            setSeed(parseInt(contents, 16))
+            const typed = parseInt(contents, 16)
+            if (typed !== submitted.current) setSeed(submitted.current = typed)
         } else {
             setContents(formatSeed(seed))
         }
