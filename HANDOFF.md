@@ -228,6 +228,28 @@ pieces onto `ccr-f4a940d7-59li0v`; new work stays here; neither writes to the ot
   (they hold local paths); ask if one would help and it can be tidied and added.
 - Nothing has been tried on a device since 11-25. `d889868` wasn't run in a browser at all.
 
+## Merge prep, from 11-28
+
+The cloud session stopped at `a2c676e` (main + 18). From the night of 11-27/28 the local session
+works on both branches: this one, and `ccr-f4a940d7-59li0v` in a second checkout
+(`~/GT/scorecard/sc-merge-prep`). Added there, each its own commit, in order of settledness:
+
+- `d1aa044` the tracer rework (below), with `scripts/trace-check.ts` and `docs/TRACING.md`;
+- `57e500d` the score view, and three buttons beside the size (QR code, bits, score) in place of
+  the tracing toggle. No fourth button: in main's look the card's text is already on the Create tab;
+- `a9fd0d2` a typed seed restarts the card once.
+
+Not ported, on purpose: cards that write cards (the limits are Ian's open question), the pile,
+spread, deck and packs, the workbench, listening cards, `#` links, lock-screen controls, Bluetooth
+LE printing. The merge-prep build is served beside the demo at `/rc/` (the kit's `pages.sh` copies
+its `dist/` there).
+
+**The tracer rework** (`69a408c` here): a traced card keeps its own account, block counters in
+exported globals and flags for touched memory above its own memory, in place of calling out for
+every block, load and store. Design and trade-offs in `docs/TRACING.md`. The impressive-fable acid
+card that sticks at 0.84 s is that branch's own `cards/acid.c` (`while (note--)` with a negative
+note), not the starter pack's acid drip, which plays.
+
 ## Sibling branches
 
 `impressive-fable` (5 commits) and `impressive-opus` (8 commits) also branch from `3b5eb2a` and are
