@@ -46,6 +46,36 @@ function makeTouchTracker() {
     }
 }
 
+// The same, for a card that keeps its own account of the memory it touches (see `shadowFor` in
+// src/wasmTracer.ts): a flag for each byte at `flags` in its memory, and one at `pages` for each
+// 4096 bytes with any flags set. Gives the runs of bytes flagged, and clears them.
+function flushShadow(memory, shadow, flags, pages) {
+    const bytes = new Uint8Array(memory.buffer)
+    const dirty = bytes.subarray(pages, pages + shadow.pages)
+    const runs = []
+    let start = -1, end = -1
+    for (let index = dirty.indexOf(1); index >= 0; index = dirty.indexOf(1, index + 1)) {
+        dirty[index] = 0
+        // (An access that starts in this page may run up to 7 bytes into the next.)
+        const base = index * 4096, page = bytes.subarray(flags + base, flags + Math.min(base + 4103, shadow.size))
+        for (let from = page.indexOf(1); from >= 0; ) {
+            let to = page.indexOf(0, from)
+            if (to < 0) to = page.length
+            page.fill(0, from, to)
+            if (base + from === end) {
+                end = base + to
+            } else {
+                if (start >= 0) runs.push(start, end - start)
+                start = base + from
+                end = base + to
+            }
+            from = page.indexOf(1, to)
+        }
+    }
+    if (start >= 0) runs.push(start, end - start)
+    return Uint32Array.from(runs)
+}
+
 // Gas: how many times round its loops a metered card may go in one call from here (a block of
 // sound, or its setup) before it's stopped. Cards use tens of thousands; this is a fraction of a second's work.
 const GAS = 20000000
@@ -105,8 +135,8 @@ class CustomProcessor extends AudioWorkletProcessor {
         const key = `${trace}${meter}${binary.length}:${hash >>> 0}`
         let made = this.rewrites.get(key)
         if (!made) {
-            const { binary: rewrite, map } = globalThis.scorecardInstrument(binary, trace, meter)
-            made = { map, module: new WebAssembly.Module(rewrite) }
+            const { binary: rewrite, ...account } = globalThis.scorecardInstrument(binary, trace, meter)
+            made = { ...account, module: new WebAssembly.Module(rewrite) }
             if (this.rewrites.size >= 8) this.rewrites.delete(this.rewrites.keys().next().value)
             this.rewrites.set(key, made)
         }
@@ -128,6 +158,8 @@ class CustomProcessor extends AudioWorkletProcessor {
                 const made = this.rewritten(this.binary, trace, meter)
                 module = made.module
                 card.map = made.map
+                card.shadow = made.shadow
+                card.blocks = made.blocks
                 card.carries = true
             } catch (error) {
                 // A card the rewriter can't manage is still a card: unless it was to be traced
@@ -136,18 +168,20 @@ class CustomProcessor extends AudioWorkletProcessor {
                 meter = false
             }
         }
+        card.traced = trace
         let imports
-        if (trace) {
-            const traceLogs = card.traceLogs = []
+        if (trace && !card.shadow) {
+            // A traced card that can't flag the memory it touches itself calls out instead.
             const reads = card.reads = makeTouchTracker(), writes = card.writes = makeTouchTracker()
             imports = { scorecard: {
-                log(i) { traceLogs[i] = (traceLogs[i] ?? 0) + 1 },
                 // These pass the address through, so they can sit in front of each load and store.
                 read(address, offset, size) { reads.touch((address >>> 0) + offset, size); return address },
                 write(address, offset, size) { writes.touch((address >>> 0) + offset, size); return address },
             } }
         }
         card.instance = await WebAssembly.instantiate(module, imports)
+        // (A traced card counts the times each block of its code runs in a global of its own.)
+        if (trace) card.counters = Array.from({ length: card.blocks }, (_, i) => card.instance.exports["scorecard.block" + i])
         card.gas = meter ? card.instance.exports.gas : null
         // (A metered card gets an allowance for its setup, as for each block of sound.)
         if (card.gas) card.gas.value = GAS
@@ -173,9 +207,11 @@ class CustomProcessor extends AudioWorkletProcessor {
         const from = old.instance.exports, to = fresh.instance.exports
         const memory = from["scorecard.memory"], copy = to["scorecard.memory"]
         if (memory && copy) {
-            const more = (memory.buffer.byteLength - copy.buffer.byteLength) / 65536
+            // (Only the card's own memory: a traced card has its account of itself above that.)
+            const size = old.shadow?.size ?? memory.buffer.byteLength
+            const more = (size - (fresh.shadow?.size ?? copy.buffer.byteLength)) / 65536
             if (more > 0) copy.grow(more)
-            new Uint8Array(copy.buffer).set(new Uint8Array(memory.buffer))
+            new Uint8Array(copy.buffer).set(new Uint8Array(memory.buffer, 0, size))
         }
         for (const name in from) {
             if (name.startsWith("scorecard.global") && to[name]) to[name].value = from[name].value
@@ -188,12 +224,9 @@ class CustomProcessor extends AudioWorkletProcessor {
         this.card = card
         this.wasm = card.instance
         this.gas = card.gas
-        this.traceLogs = card.traceLogs ?? null
-        this.reads = card.reads
-        this.writes = card.writes
         // (The page is told which card is being traced, and what its counters count.)
-        if (this.traceLogs) this.port.postMessage({ traced: { binary: card.binary, map: card.map } })
-        if (this.traceLogs) this.postTrace()
+        if (card.traced) this.port.postMessage({ traced: { binary: card.binary, map: card.map } })
+        if (card.traced) this.postTrace()
     }
 
     // The card can't go on (it ran out of gas, or failed some other way): stop, and say so.
@@ -201,7 +234,6 @@ class CustomProcessor extends AudioWorkletProcessor {
         this.card = undefined
         this.wasm = undefined
         this.gas = null
-        this.traceLogs = null
         this.playing = false
         this.port.postMessage({ failed: String(error?.message ?? error) })
     }
@@ -290,15 +322,25 @@ class CustomProcessor extends AudioWorkletProcessor {
 
     postTrace() {
         // Memory first: the execution counts that follow trigger a redraw.
-        const reads = this.reads.flush(), writes = this.writes.flush()
+        const card = this.card, shadow = card.shadow, memory = shadow && card.instance.exports["scorecard.memory"]
+        const reads = shadow ? flushShadow(memory, shadow, shadow.read, shadow.readPages) : card.reads.flush()
+        const writes = shadow ? flushShadow(memory, shadow, shadow.written, shadow.writtenPages) : card.writes.flush()
         this.port.postMessage({ reads, writes }, [reads.buffer, writes.buffer])
-        this.port.postMessage(this.traceLogs)
-        this.traceLogs.length = 0
+        // How many times each block has run since last time (a sparse array, as long as the last that has).
+        const counts = []
+        card.counters.forEach((counter, i) => {
+            const n = counter.value
+            if (n) {
+                counts[i] = n
+                counter.value = 0
+            }
+        })
+        this.port.postMessage(counts)
     }
 
     postPosition() {
         this.port.postMessage(this.pos)
-        if (this.traceLogs) this.postTrace()
+        if (this.card?.traced) this.postTrace()
     }
 }
 

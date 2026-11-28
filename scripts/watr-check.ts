@@ -10,19 +10,15 @@ import { disassembleWasm, instrumentWat } from "../src/wasmTracer"
 const SAMPLES = 44100 * 3
 
 function run(binary: Uint8Array, traced: boolean) {
-    const counts: number[] = []
-    let reads = 0, writes = 0
-    const imports = traced ? { scorecard: {
-        log: (i: number) => { counts[i] = (counts[i] ?? 0) + 1 },
-        read: (a: number) => { reads++; return a },
-        write: (a: number) => { writes++; return a },
-    } } : {}
+    const imports = { scorecard: { read: (a: number) => a, write: (a: number) => a } }
     const exports: any = new WebAssembly.Instance(new WebAssembly.Module(binary), imports).exports
     ;(exports.s ?? exports.setup)?.(1234)
     const p = exports.p ?? exports.process
     const out = new Float32Array(SAMPLES)
     for (let i = 0; i < SAMPLES; i++) out[i] = p()
-    return { out, counts: counts.join(","), reads, writes }
+    // (A traced card counts the times each block of its code has run, in globals.)
+    const counts = Object.keys(exports).filter(key => key.startsWith("scorecard.block")).map(key => exports[key].value)
+    return { out, counts: traced ? counts.join(",") : "" }
 }
 
 const same = (a: Float32Array, b: Float32Array) => a.every((x, i) => Object.is(x, b[i]) || (isNaN(x) && isNaN(b[i])))
@@ -38,7 +34,7 @@ for (const path of process.argv.slice(2)) {
         const plain = same(run(viaWatr, false).out, original.out)
         const { text: traced } = instrumentWat(binary)
         const tWatr = run(compile(traced), true)
-        const tracedOK = same(tWatr.out, original.out) && tWatr.counts.length > 0
+        const tracedOK = same(tWatr.out, original.out) && /[1-9]/.test(tWatr.counts)
         const ok = plain && tracedOK
         if (!ok) failures++
         console.log(`${ok ? "ok  " : "FAIL"} ${name}: plain ${plain ? "same" : "DIFFERENT"}, traced ${tracedOK ? "same" : "DIFFERENT"} (sizes: original ${binary.length}, reassembled ${viaWatr.length})`)

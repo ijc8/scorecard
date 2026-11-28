@@ -13,8 +13,8 @@ g.AudioWorkletProcessor = class { port = { postMessage: (m: any) => posted.push(
 g.registerProcessor = (_: string, c: any) => { Proc = c }
 g.scorecardInstrument = (binary: Uint8Array, trace: boolean, meter: boolean) => {
     if (!trace) return { binary: compile(meter ? meterWat(binary) : plainWat(binary)) }
-    const { text, map } = instrumentWat(binary, meter)
-    return { binary: compile(text), map }
+    const { text, ...account } = instrumentWat(binary, meter)
+    return { binary: compile(text), ...account }
 }
 let posted: any[] = []
 const main = async () => {
